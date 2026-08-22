@@ -36,12 +36,48 @@ npm run typecheck            # tsc --noEmit
 | Clients | `/clients`, `/clients/[id]` | Client register with search; detail view lists the client's policies and life plans. |
 | Grouping Client | `/grouping-client` | Group accounts and their members. |
 | Client Planning | `/client-planning` | Life and medical plans held alongside the general book. |
-| Insurance | `/insurance/motor`, `/insurance/non-motor` | Policy registers with status, principal, agent and free-text filters. |
+| Insurance | `/insurance/motor`, `/insurance/non-motor` | Policy registers: principal chips, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |
+| Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. See below. |
+| Create / edit policy | `/insurance/[cls]/new`, `/insurance/[cls]/[id]/edit` | Key a policy in or correct one. |
+| Quotations, Reconcile, Renewals, Employee Benefits | `/insurance/…` | Open quotations, receivable-vs-payable position, expiring cover, group schemes. |
 | Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page. |
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
 | Setting | `/setting/global`, `/setting/renewal`, `/setting/notifications` | Commission rates, e-Invoice particulars, insurance companies, renewal reminders, scheduled broadcasts. |
 | User Guide / Contact Us | `/user-guide`, `/contact-us` | Module reference and support details. |
+
+## Reading policy documents
+
+`Upload PDF` on either register takes the PDF the insurer issued — schedule, cover note or
+certificate — reads it, fills in the form, and lets you confirm before anything is saved.
+
+It runs in two passes:
+
+1. **Pattern rules** (always, offline, free). The PDF is re-laid-out by text position so each
+   visual row becomes one line, then bilingual English/Bahasa Malaysia label patterns pull out
+   the fields. Every value is validated — a plate has to look like a plate, a premium has to be
+   a plausible amount, `gross + tax + stamp` has to equal the total — and anything that fails is
+   discarded rather than shown. A wrong value that survives review is worse than a blank one.
+2. **The model** (when `ANTHROPIC_API_KEY` is set). Insurers that print labels and values in
+   separate columns, and scanned documents with no text layer at all, defeat pattern matching.
+   The same document goes to Claude — as text when there is a text layer, as a PDF `document`
+   block when there is not — and the two readings are merged: agreement raises confidence,
+   only-one-has-it fills the gap, and **disagreement is surfaced for you rather than settled
+   silently**.
+
+The review screen labels every field with where its value came from — `confirmed` (both passes
+agree), `read`, `read by model`, `calculated` (derived from the other premium figures),
+`check this` (low confidence or a disagreement), `not found`. Duplicate policy numbers are
+flagged, and an insured who is already on file is matched to the existing client rather than
+duplicated.
+
+Without credentials the upload still works; layouts the rules do not cover simply arrive with
+more blanks to fill in. Configure the model pass with:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
+export SIMSUITE_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
+```
 
 ## How the money adds up
 
@@ -95,6 +131,9 @@ src/
   the dashboard uses the real current date and the 30-day windows move with it.
 - `SIMSUITE_SECRET` signs the session cookie and should be set to a real secret outside of
   local development. `SIMSUITE_DB` overrides the database path.
+- Uploads are capped at 15 MB, enforced in the browser and again in the server action. Next.js
+  caps Server Action bodies at 1 MB by default, so `serverActions.bodySizeLimit` is raised to
+  match — lower it and larger PDFs fail before the action can report anything useful.
 - Passwords are hashed with scrypt. This is a demo application, not a production system —
   it has no rate limiting, audit trail, or multi-tenant hardening beyond scoping every query
   to the signed-in user's organisation.

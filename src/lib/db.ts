@@ -141,7 +141,27 @@ CREATE TABLE IF NOT EXISTS policy (
   commission_rate REAL NOT NULL DEFAULT 0,
   commission_amt  REAL NOT NULL DEFAULT 0,
   excess          REAL NOT NULL DEFAULT 0,
+  referral_fee    REAL NOT NULL DEFAULT 0,
+  agent_commission REAL NOT NULL DEFAULT 0,
+  uploaded_at     TEXT,
+  source_file     TEXT,
   remarks         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS policy_document (
+  id            TEXT PRIMARY KEY,
+  org_id        TEXT NOT NULL REFERENCES organisation(id),
+  policy_id     TEXT REFERENCES policy(id) ON DELETE SET NULL,
+  filename      TEXT NOT NULL,
+  byte_size     INTEGER NOT NULL DEFAULT 0,
+  page_count    INTEGER NOT NULL DEFAULT 0,
+  principal_detected TEXT,
+  used_claude   INTEGER NOT NULL DEFAULT 0,
+  field_count   INTEGER NOT NULL DEFAULT 0,
+  warnings      TEXT,
+  extracted_json TEXT,
+  uploaded_by   TEXT,
+  uploaded_at   TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS motor_detail (
@@ -256,6 +276,25 @@ CREATE INDEX IF NOT EXISTS idx_payment_policy ON payment(policy_id);
 CREATE INDEX IF NOT EXISTS idx_client_org     ON client(org_id);
 `;
 
+/**
+ * CREATE TABLE IF NOT EXISTS leaves existing tables alone, so columns added
+ * after a database was first created have to be applied by hand.
+ */
+function migrate(db: Database.Database) {
+  const columns = new Set(
+    (db.prepare('PRAGMA table_info(policy)').all() as { name: string }[]).map((c) => c.name),
+  );
+  const added: [string, string][] = [
+    ['referral_fee', 'REAL NOT NULL DEFAULT 0'],
+    ['agent_commission', 'REAL NOT NULL DEFAULT 0'],
+    ['uploaded_at', 'TEXT'],
+    ['source_file', 'TEXT'],
+  ];
+  for (const [name, decl] of added) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE policy ADD COLUMN ${name} ${decl}`);
+  }
+}
+
 let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -264,6 +303,8 @@ export function getDb(): Database.Database {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const db = new Database(DB_PATH);
   db.exec(SCHEMA);
+
+  migrate(db);
 
   const seeded = db.prepare('SELECT COUNT(*) AS n FROM organisation').get() as { n: number };
   if (seeded.n === 0) {

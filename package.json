@@ -12,10 +12,13 @@
     "db:reset": "rm -f data/simsuite.db data/simsuite.db-wal data/simsuite.db-shm"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "better-sqlite3": "^11.8.1",
     "next": "15.1.6",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "unpdf": "^0.12.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

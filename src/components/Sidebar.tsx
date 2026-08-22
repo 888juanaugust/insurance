@@ -28,8 +28,12 @@ const ITEMS: Item[] = [
     label: 'Insurance',
     icon: IconShield,
     children: [
+      { href: '/insurance/quotations', label: 'Quotations' },
       { href: '/insurance/motor', label: 'General Motor' },
       { href: '/insurance/non-motor', label: 'General Non-Motor' },
+      { href: '/insurance/reconcile', label: 'Reconcile' },
+      { href: '/insurance/renewals', label: 'Renewals' },
+      { href: '/insurance/employee-benefits', label: 'Employee Benefits' },
     ],
   },
   { href: '/reports', label: 'Reports', icon: IconReports },
@@ -98,7 +102,7 @@ export default function Sidebar({ logout }: { logout: () => Promise<void> }) {
                         key={c.href}
                         href={c.href}
                         className={`block rounded px-3 py-[7px] text-[13px] ${
-                          pathname === c.href
+                          pathname === c.href || pathname.startsWith(c.href + '/')
                             ? 'font-semibold text-accent'
                             : 'text-ink-soft hover:bg-[#f6f7f9]'
                         }`}

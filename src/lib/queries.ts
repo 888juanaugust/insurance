@@ -496,3 +496,362 @@ export function orgUsage(orgId: string) {
     clients: clients.v, agents: agents.v, users: users.v,
   };
 }
+
+/* ------------------------------------------------------- policy write path */
+
+export type PolicyInput = {
+  org_id: string;
+  client_id: string;
+  principal_id: string;
+  sub_agent_id: string | null;
+  policy_no: string;
+  cover_note_no: string | null;
+  class: 'motor' | 'non_motor';
+  product: string;
+  type_of_cover: string;
+  status: string;
+  case_type: string;
+  effective_date: string;
+  expiry_date: string;
+  issue_date: string;
+  sum_insured: number;
+  basic_premium: number;
+  ncd_pct: number;
+  ncd_amount: number;
+  extra_premium: number;
+  gross_premium: number;
+  service_tax: number;
+  stamp_duty: number;
+  total_premium: number;
+  commission_rate: number;
+  commission_amt: number;
+  agent_commission: number;
+  referral_fee: number;
+  excess: number;
+  remarks: string | null;
+  source_file: string | null;
+  motor?: {
+    vehicle_no: string; make_model: string; body_type: string | null; engine_no: string;
+    chassis_no: string; engine_cc: string; year_make: string; seating: number;
+    hire_purchase: string | null; windscreen_si: number; named_drivers: string | null;
+    extensions: string | null; rtd_code: string | null;
+  };
+  nonMotor?: {
+    risk_type: string; risk_address: string; occupancy: string;
+    period_desc: string; benefits: string;
+  };
+};
+
+function newId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Create a policy plus its class detail and the two payment records. */
+export function createPolicy(input: PolicyInput, opts: { uploadedAt?: string } = {}): string {
+  const db = getDb();
+  const id = newId('pol');
+  const dueToPrincipal = Math.round((input.total_premium - input.commission_amt) * 100) / 100;
+  const created = today();
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO policy (
+         id, org_id, client_id, principal_id, sub_agent_id, policy_no, cover_note_no,
+         class, product, type_of_cover, status, case_type, effective_date, expiry_date,
+         issue_date, created_date, sum_insured, basic_premium, ncd_pct, ncd_amount,
+         extra_premium, gross_premium, service_tax, stamp_duty, total_premium,
+         commission_rate, commission_amt, excess, referral_fee, agent_commission,
+         uploaded_at, source_file, remarks
+       ) VALUES (
+         @id, @org_id, @client_id, @principal_id, @sub_agent_id, @policy_no, @cover_note_no,
+         @class, @product, @type_of_cover, @status, @case_type, @effective_date, @expiry_date,
+         @issue_date, @created_date, @sum_insured, @basic_premium, @ncd_pct, @ncd_amount,
+         @extra_premium, @gross_premium, @service_tax, @stamp_duty, @total_premium,
+         @commission_rate, @commission_amt, @excess, @referral_fee, @agent_commission,
+         @uploaded_at, @source_file, @remarks
+       )`,
+    ).run({
+      ...input,
+      id,
+      created_date: created,
+      uploaded_at: opts.uploadedAt ?? created,
+    });
+
+    if (input.class === 'motor' && input.motor) {
+      db.prepare(
+        `INSERT INTO motor_detail (policy_id, vehicle_no, make_model, body_type, engine_no,
+           chassis_no, engine_cc, year_make, seating, hire_purchase, windscreen_si,
+           named_drivers, extensions, rtd_code)
+         VALUES (@policy_id, @vehicle_no, @make_model, @body_type, @engine_no, @chassis_no,
+           @engine_cc, @year_make, @seating, @hire_purchase, @windscreen_si, @named_drivers,
+           @extensions, @rtd_code)`,
+      ).run({ policy_id: id, ...input.motor });
+    }
+
+    if (input.class === 'non_motor' && input.nonMotor) {
+      db.prepare(
+        `INSERT INTO non_motor_detail (policy_id, risk_type, risk_address, occupancy, period_desc, benefits)
+         VALUES (@policy_id, @risk_type, @risk_address, @occupancy, @period_desc, @benefits)`,
+      ).run({ policy_id: id, ...input.nonMotor });
+    }
+
+    const payment = db.prepare(
+      `INSERT INTO payment (id, policy_id, kind, amount, paid_amount, due_date, paid_date, method, reference, status)
+       VALUES (@id, @policy_id, @kind, @amount, 0, @due_date, NULL, NULL, NULL, 'outstanding')`,
+    );
+    payment.run({ id: `${id}-pay-c`, policy_id: id, kind: 'client', amount: input.total_premium, due_date: input.effective_date });
+    payment.run({ id: `${id}-pay-p`, policy_id: id, kind: 'principal', amount: dueToPrincipal, due_date: input.effective_date });
+
+    db.prepare(
+      `INSERT INTO commission (id, policy_id, sub_agent_id, gross_amount, override_amt, net_amount, status)
+       VALUES (@id, @policy_id, @sub_agent_id, @gross, 0, @gross, 'pending')`,
+    ).run({ id: `${id}-comm`, policy_id: id, sub_agent_id: input.sub_agent_id, gross: input.agent_commission });
+  });
+
+  tx();
+  return id;
+}
+
+export function updatePolicy(id: string, orgId: string, input: PolicyInput) {
+  const db = getDb();
+  const owned = db.prepare('SELECT id FROM policy WHERE id = ? AND org_id = ?').get(id, orgId);
+  if (!owned) return false;
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE policy SET client_id=@client_id, principal_id=@principal_id, sub_agent_id=@sub_agent_id,
+         policy_no=@policy_no, cover_note_no=@cover_note_no, product=@product,
+         type_of_cover=@type_of_cover, status=@status, case_type=@case_type,
+         effective_date=@effective_date, expiry_date=@expiry_date, issue_date=@issue_date,
+         sum_insured=@sum_insured, basic_premium=@basic_premium, ncd_pct=@ncd_pct,
+         ncd_amount=@ncd_amount, extra_premium=@extra_premium, gross_premium=@gross_premium,
+         service_tax=@service_tax, stamp_duty=@stamp_duty, total_premium=@total_premium,
+         commission_rate=@commission_rate, commission_amt=@commission_amt, excess=@excess,
+         referral_fee=@referral_fee, agent_commission=@agent_commission, remarks=@remarks
+       WHERE id=@id`,
+    ).run({ ...input, id });
+
+    if (input.class === 'motor' && input.motor) {
+      db.prepare(
+        `UPDATE motor_detail SET vehicle_no=@vehicle_no, make_model=@make_model, body_type=@body_type,
+           engine_no=@engine_no, chassis_no=@chassis_no, engine_cc=@engine_cc, year_make=@year_make,
+           seating=@seating, hire_purchase=@hire_purchase, windscreen_si=@windscreen_si,
+           named_drivers=@named_drivers WHERE policy_id=@policy_id`,
+      ).run({ policy_id: id, ...input.motor });
+    }
+
+    // Keep the client-side amount in step with a corrected premium.
+    db.prepare(
+      `UPDATE payment SET amount = @amount WHERE policy_id = @id AND kind = 'client' AND status != 'paid'`,
+    ).run({ id, amount: input.total_premium });
+  });
+
+  tx();
+  return true;
+}
+
+export function deletePolicy(id: string, orgId: string): boolean {
+  const db = getDb();
+  const info = db.prepare('DELETE FROM policy WHERE id = ? AND org_id = ?').run(id, orgId);
+  return info.changes > 0;
+}
+
+/** Mark every outstanding payment of a kind as settled, for the given policies. */
+export function bulkMarkPaid(policyIds: string[], orgId: string, kind: 'client' | 'principal'): number {
+  if (policyIds.length === 0) return 0;
+  const db = getDb();
+  const placeholders = policyIds.map(() => '?').join(',');
+  const info = db
+    .prepare(
+      `UPDATE payment SET paid_amount = amount, status = 'paid', paid_date = ?
+        WHERE kind = ? AND status != 'paid'
+          AND policy_id IN (
+            SELECT id FROM policy WHERE org_id = ? AND id IN (${placeholders})
+          )`,
+    )
+    .run(today(), kind, orgId, ...policyIds);
+  return info.changes;
+}
+
+export function recordUpload(row: {
+  org_id: string; policy_id: string | null; filename: string; byte_size: number;
+  page_count: number; principal_detected: string | null; used_claude: number;
+  field_count: number; warnings: string; extracted_json: string; uploaded_by: string;
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO policy_document (id, org_id, policy_id, filename, byte_size, page_count,
+         principal_detected, used_claude, field_count, warnings, extracted_json, uploaded_by, uploaded_at)
+       VALUES (@id, @org_id, @policy_id, @filename, @byte_size, @page_count, @principal_detected,
+         @used_claude, @field_count, @warnings, @extracted_json, @uploaded_by, @uploaded_at)`,
+    )
+    .run({ ...row, id: newId('doc'), uploaded_at: today() });
+}
+
+export function listUploads(orgId: string, limit = 30) {
+  return getDb()
+    .prepare(
+      `SELECT d.*, p.policy_no FROM policy_document d
+       LEFT JOIN policy p ON p.id = d.policy_id
+       WHERE d.org_id = ? ORDER BY d.uploaded_at DESC, d.id DESC LIMIT ?`,
+    )
+    .all(orgId, limit) as Array<Record<string, any>>;
+}
+
+/** Find an existing client by name or identification, for upload matching. */
+export function findClientByIdentity(orgId: string, name: string | null, nric: string | null) {
+  const db = getDb();
+  if (nric) {
+    const byId = db
+      .prepare(
+        `SELECT * FROM client WHERE org_id = ?
+          AND (replace(COALESCE(nric,''),'-','') = ? OR replace(COALESCE(business_reg,''),'-','') = ?)`,
+      )
+      .get(orgId, nric.replace(/-/g, ''), nric.replace(/-/g, '')) as Record<string, any> | undefined;
+    if (byId) return byId;
+  }
+  if (name) {
+    return db
+      .prepare('SELECT * FROM client WHERE org_id = ? AND upper(name) = upper(?)')
+      .get(orgId, name.trim()) as Record<string, any> | undefined;
+  }
+  return undefined;
+}
+
+export function createClientFromPolicy(orgId: string, name: string, nric: string | null, address: string | null, occupation: string | null): string {
+  const id = newId('cl');
+  const isCompany = /\b(SDN|BHD|BERHAD|ENTERPRISE|TRADING|HOLDINGS?|GROUP|LTD|PLT)\b/i.test(name);
+  getDb()
+    .prepare(
+      `INSERT INTO client (id, org_id, group_id, name, client_type, nric, business_reg, email, phone,
+         address1, address2, postcode, city, state, country, dob, occupation, portal_enabled, created_at)
+       VALUES (@id, @org_id, NULL, @name, @client_type, @nric, @business_reg, NULL, NULL,
+         @address1, NULL, NULL, NULL, NULL, 'MALAYSIA', NULL, @occupation, 0, @created_at)`,
+    )
+    .run({
+      id, org_id: orgId, name: name.trim(),
+      client_type: isCompany ? 'company' : 'individual',
+      nric: isCompany ? null : nric,
+      business_reg: isCompany ? nric : null,
+      address1: address, occupation, created_at: today(),
+    });
+  return id;
+}
+
+export function findPolicyByNumber(orgId: string, policyNo: string) {
+  return getDb()
+    .prepare('SELECT id, policy_no FROM policy WHERE org_id = ? AND upper(policy_no) = upper(?)')
+    .get(orgId, policyNo) as { id: string; policy_no: string } | undefined;
+}
+
+export function findPrincipalByName(short: string | null) {
+  if (!short) return undefined;
+  return getDb()
+    .prepare('SELECT * FROM principal WHERE upper(short_name) = upper(?) OR upper(name) LIKE upper(?)')
+    .get(short, `%${short}%`) as Record<string, any> | undefined;
+}
+
+/* ------------------------------------------------ register (screenshot view) */
+
+export type RegisterFilters = {
+  cls: string;
+  principal?: string;   // principal short name, '' = all
+  agent?: string;
+  dateField?: 'uploaded_at' | 'issue_date' | 'effective_date';
+  from?: string;
+  to?: string;
+  vehicle?: string;
+  insured?: string;
+  nric?: string;
+  status?: string;
+  sort?: string;
+  dir?: 'asc' | 'desc';
+};
+
+const SORTABLE: Record<string, string> = {
+  issue_date: 'p.issue_date',
+  policy_no: 'p.policy_no',
+  principal: 'pr.short_name',
+  vehicle_no: 'm.vehicle_no',
+  insured: 'c.name',
+  nric: 'ident',
+  sum_insured: 'p.sum_insured',
+  gross_premium: 'p.gross_premium',
+  service_tax: 'p.service_tax',
+  stamp_duty: 'p.stamp_duty',
+  total_premium: 'p.total_premium',
+  referral_fee: 'p.referral_fee',
+  commission_amt: 'p.commission_amt',
+  agent_commission: 'p.agent_commission',
+};
+
+export function listRegister(orgId: string, f: RegisterFilters) {
+  const dateCol =
+    f.dateField === 'issue_date' ? 'p.issue_date'
+    : f.dateField === 'effective_date' ? 'p.effective_date'
+    : 'COALESCE(p.uploaded_at, p.created_date)';
+
+  const sortCol = SORTABLE[f.sort ?? ''] ?? 'p.issue_date';
+  const dir = f.dir === 'asc' ? 'ASC' : 'DESC';
+
+  const rows = getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.cover_note_no, p.class, p.product, p.type_of_cover, p.status,
+              p.issue_date, p.effective_date, p.expiry_date, p.created_date, p.uploaded_at,
+              p.sum_insured, p.gross_premium, p.service_tax, p.stamp_duty, p.total_premium,
+              p.commission_amt, p.agent_commission, p.referral_fee, p.source_file,
+              c.name AS insured, c.id AS client_id,
+              COALESCE(NULLIF(c.nric,''), c.business_reg, '') AS ident,
+              pr.short_name AS principal, s.name AS agent_name,
+              m.vehicle_no, m.make_model,
+              cp.status AS client_paid, pp.status AS principal_paid
+         FROM policy p
+         JOIN client c     ON c.id  = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN sub_agent s    ON s.id = p.sub_agent_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+         LEFT JOIN payment cp ON cp.policy_id = p.id AND cp.kind = 'client'
+         LEFT JOIN payment pp ON pp.policy_id = p.id AND pp.kind = 'principal'
+        WHERE p.org_id = @org
+          AND (@cls = '' OR p.class = @cls)
+          AND (@principal = '' OR pr.short_name = @principal)
+          AND (@agent = '' OR p.sub_agent_id = @agent)
+          AND (@status = '' OR p.status = @status)
+          AND (@from = '' OR ${dateCol} >= @from)
+          AND (@to = '' OR ${dateCol} <= @to)
+          AND (@vehicle = '' OR upper(COALESCE(m.vehicle_no,'')) LIKE upper(@vehicleLike))
+          AND (@insured = '' OR upper(c.name) LIKE upper(@insuredLike))
+          AND (@nric = '' OR replace(COALESCE(c.nric,''),'-','') LIKE replace(@nricLike,'-','')
+               OR upper(COALESCE(c.business_reg,'')) LIKE upper(@nricLike))
+        ORDER BY ${sortCol} ${dir}, p.policy_no`,
+    )
+    .all({
+      org: orgId,
+      cls: f.cls ?? '',
+      principal: f.principal ?? '',
+      agent: f.agent ?? '',
+      status: f.status ?? '',
+      from: f.from ?? '',
+      to: f.to ?? '',
+      vehicle: f.vehicle ?? '',
+      vehicleLike: `%${f.vehicle ?? ''}%`,
+      insured: f.insured ?? '',
+      insuredLike: `%${f.insured ?? ''}%`,
+      nric: f.nric ?? '',
+      nricLike: `%${f.nric ?? ''}%`,
+    }) as Array<Record<string, any>>;
+
+  return rows;
+}
+
+/** Principals that actually carry business, for the filter chips. */
+export function principalChipCounts(orgId: string, cls: string) {
+  return getDb()
+    .prepare(
+      `SELECT pr.short_name, COUNT(p.id) AS n
+         FROM principal pr
+         LEFT JOIN policy p ON p.principal_id = pr.id AND p.org_id = ? AND (? = '' OR p.class = ?)
+        GROUP BY pr.id ORDER BY pr.short_name`,
+    )
+    .all(orgId, cls, cls) as Array<{ short_name: string; n: number }>;
+}

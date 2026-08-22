@@ -188,6 +188,8 @@ type PolicySeed = {
   gross?: number; tax?: number; stamp?: number;
   excess?: number;
   ncd?: number;
+  referralFee?: number;
+  sourceFile?: string;
   motor?: {
     vehicleNo: string; makeModel: string; bodyType?: string; engineNo: string; chassisNo: string;
     cc: string; year: string; seating: number; hp?: string; windscreen?: number;
@@ -245,7 +247,7 @@ const POLICIES: PolicySeed[] = [
   { id: 'pol-kg-l0031', org: 'org-exe', client: 'cl-moomoo', principal: 'pr-sompo', agent: 'sa-exe-04',
     policyNo: '2026-KG-L0031', coverNote: 'CN-KGL0031', cls: 'non_motor', product: 'Fire & Perils', cover: 'Fire — Industrial All Risks',
     status: 'active', caseType: 'renewal', created: '2026-03-20', effective: '2026-04-01', expiry: '2027-03-31', issue: '2026-03-20',
-    sumInsured: 2400000, total: 3180.00, excess: 5000,
+    sumInsured: 2400000, total: 3180.00, excess: 5000, referralFee: 120.00,
     nonMotor: { riskType: 'Industrial All Risks', riskAddress: 'Lot 5-3, Jalan Perindustrian Balakong 8, 43300 Seri Kembangan, Selangor', occupancy: 'Security services office and equipment store', periodDesc: '12 months', benefits: 'Building RM1,600,000; Machinery & equipment RM600,000; Stock RM200,000' },
     clientDue: '2026-07-15', principalDue: '2026-07-25' },
 
@@ -267,7 +269,7 @@ const POLICIES: PolicySeed[] = [
   { id: 'pol-pg97408527', org: 'org-exe', client: 'cl-leong', principal: 'pr-msig', agent: 'sa-exe-03',
     policyNo: 'PG-97408527-MPC', coverNote: 'CN-PG97408527', cls: 'non_motor', product: 'Medical Card', cover: 'Hospitalisation & Surgical',
     status: 'active', caseType: 'new', created: '2026-08-01', effective: '2026-08-10', expiry: '2027-08-09', issue: '2026-08-01',
-    sumInsured: 150000, total: 1450.00, excess: 0,
+    sumInsured: 150000, total: 1450.00, excess: 0, referralFee: 45.00,
     nonMotor: { riskType: 'Medical & Health', riskAddress: 'No 77, Jalan Bandar Tasik Selatan 4, 57000 Kuala Lumpur', occupancy: 'Individual medical card — Plan 200', periodDesc: '12 months', benefits: 'Annual limit RM150,000; Room & board RM200/day; Lifetime limit RM1,500,000' },
     clientDue: '2026-08-11', principalDue: '2026-08-25' },
 
@@ -393,7 +395,7 @@ const POLICIES: PolicySeed[] = [
     principalDue: '2026-05-30', principalPaid: '2026-08-08' },
 
   /* --- BS Agency: the four scanned policy documents -------------------- */
-  { id: 'pol-wqk100', org: 'org-bs', client: 'cl-bolton', principal: 'pr-liberty', agent: 'sa-bs-01',
+  { id: 'pol-wqk100', sourceFile: 'WQK100POLICY.pdf', org: 'org-bs', client: 'cl-bolton', principal: 'pr-liberty', agent: 'sa-bs-01',
     policyNo: 'Y0029038', coverNote: 'JME1063847 01-C2', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
     status: 'active', caseType: 'renewal', created: '2025-06-20', effective: '2025-06-20', expiry: '2026-06-19', issue: '2025-06-20',
     sumInsured: 47000, basic: 1533.31, ncd: 55, ncdAmt: 843.32, extra: 1072.45, gross: 1762.44, tax: 141.00, stamp: 10.00, total: 1913.44, excess: 0,
@@ -410,7 +412,7 @@ const POLICIES: PolicySeed[] = [
     principalDue: '2025-07-05', principalPaid: '2025-07-03',
     remarks: 'Liberty auto365 Comprehensive Plus. Agent account A02100-00.' },
 
-  { id: 'pol-dds7898', org: 'org-bs', client: 'cl-surendran', principal: 'pr-lonpac', agent: 'sa-bs-01',
+  { id: 'pol-dds7898', sourceFile: 'DDS7898POLICY.pdf', org: 'org-bs', client: 'cl-surendran', principal: 'pr-lonpac', agent: 'sa-bs-01',
     policyNo: 'A6179198-0', coverNote: 'A6179198-0', cls: 'motor', product: 'Private Car Secure & E-Assist', cover: 'Comprehensive — Smart Driver (Plan 1)',
     status: 'active', caseType: 'renewal', created: '2025-06-12', effective: '2025-06-17', expiry: '2026-06-16', issue: '2025-06-12',
     sumInsured: 145000, total: 2383.41, ncd: 55, excess: 400,
@@ -420,7 +422,7 @@ const POLICIES: PolicySeed[] = [
     principalDue: '2025-07-01', principalPaid: '2025-06-30',
     remarks: 'Renewal of policy N/24/VZ96/022298/SBN. Compulsory excess RM400.' },
 
-  { id: 'pol-mdw9185', org: 'org-bs', client: 'cl-hoo', principal: 'pr-allianz', agent: 'sa-bs-01',
+  { id: 'pol-mdw9185', sourceFile: 'MDW9185POLICY.pdf', org: 'org-bs', client: 'cl-hoo', principal: 'pr-allianz', agent: 'sa-bs-01',
     policyNo: 'AESN0766516', coverNote: 'AESN0766516', cls: 'motor', product: 'Private Car Excluding Goods', cover: 'Comprehensive (Agreed Value)',
     status: 'active', caseType: 'new', created: '2025-09-09', effective: '2025-09-18', expiry: '2026-09-17', issue: '2025-09-09',
     sumInsured: 100000, basic: 2674.38, ncd: 25, ncdAmt: 668.60, extra: 119.00, gross: 2124.79, tax: 169.98, stamp: 10.00, total: 2304.77, excess: 0,
@@ -433,7 +435,7 @@ const POLICIES: PolicySeed[] = [
     principalDue: '2025-10-01', principalPaid: '2025-09-29',
     remarks: 'Amount payable rounded to RM2,304.75. Agent code SN50301-01.' },
 
-  { id: 'pol-ncf9240', org: 'org-bs', client: 'cl-limhong', principal: 'pr-liberty', agent: 'sa-bs-01',
+  { id: 'pol-ncf9240', sourceFile: 'NCF9240POLICY.pdf', org: 'org-bs', client: 'cl-limhong', principal: 'pr-liberty', agent: 'sa-bs-01',
     policyNo: 'JME1499237', coverNote: 'JME1499237 01-C2', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
     status: 'active', caseType: 'renewal', created: '2025-09-19', effective: '2025-09-28', expiry: '2026-09-27', issue: '2025-09-19',
     sumInsured: 10000, basic: 759.16, ncd: 55, ncdAmt: 417.54, extra: 83.00, gross: 424.62, tax: 33.97, stamp: 10.00, total: 468.59, excess: 0,
@@ -535,6 +537,16 @@ export function seed(db: Database) {
     const commRate = (p.cls === 'motor' ? principal.motor_rate : principal.non_motor_rate) as number;
     const commAmt = round2(gross * (commRate / 100));
 
+    const subAgentSeed = SUB_AGENTS.find((s) => s.id === p.agent);
+    const subRateSeed = subAgentSeed
+      ? ((p.cls === 'motor' ? subAgentSeed.motor_rate : subAgentSeed.non_motor_rate) as number)
+      : 0;
+    const agentCommission = round2(
+      gross * (subRateSeed / 100) + gross * (((subAgentSeed?.override_rate as number) ?? 0) / 100),
+    );
+    // Referral fees are the exception rather than the rule — most cases carry none.
+    const referralFee = p.referralFee ?? 0;
+
     policyRows.push({
       id: p.id, org_id: p.org, client_id: p.client, principal_id: p.principal,
       sub_agent_id: p.agent ?? null, policy_no: p.policyNo, cover_note_no: p.coverNote ?? null,
@@ -543,7 +555,8 @@ export function seed(db: Database) {
       sum_insured: p.sumInsured, basic_premium: basic, ncd_pct: ncdPct, ncd_amount: ncdAmt,
       extra_premium: extra, gross_premium: gross, service_tax: tax, stamp_duty: stamp,
       total_premium: total, commission_rate: commRate, commission_amt: commAmt,
-      excess: p.excess ?? 0, remarks: p.remarks ?? null,
+      excess: p.excess ?? 0, referral_fee: referralFee, agent_commission: agentCommission,
+      uploaded_at: p.created, source_file: p.sourceFile ?? null, remarks: p.remarks ?? null,
     });
 
     if (p.motor) {
@@ -586,12 +599,8 @@ export function seed(db: Database) {
 
     // Sub agent share of the agency commission; nothing has been paid out yet
     // for EXE Cheras, which is why "commission received YTD" reads RM 0.00.
-    const subAgent = SUB_AGENTS.find((s) => s.id === p.agent);
-    const subRate = subAgent
-      ? ((p.cls === 'motor' ? subAgent.motor_rate : subAgent.non_motor_rate) as number)
-      : 0;
-    const subGross = round2(gross * (subRate / 100));
-    const override = round2(gross * (((subAgent?.override_rate as number) ?? 0) / 100));
+    const subGross = round2(gross * (subRateSeed / 100));
+    const override = round2(gross * (((subAgentSeed?.override_rate as number) ?? 0) / 100));
     const isBs = p.org === 'org-bs';
     commissionRows.push({
       id: `${p.id}-comm`, policy_id: p.id, sub_agent_id: p.agent ?? null,
