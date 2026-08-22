@@ -28,22 +28,29 @@ npm run typecheck            # tsc --noEmit
 
 ## What is in it
 
+Routes and field lists follow a teardown of the live staging app, so paths match
+(`/team`, `/client-groups`, `/insurance/general-motor`, `/settings`) rather than being
+invented.
+
 | Module | Route | Notes |
 | --- | --- | --- |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
-| Sub Agents | `/sub-agents` | Commission structure per agent plus bank and TIN details for self-billed e-Invoice. |
+| Sub Agents | `/team` | Commission structure per agent plus bank and TIN details for self-billed e-Invoice. |
 | Organisation | `/organisation` | Company particulars, subscription terms and quota usage. |
 | Clients | `/clients`, `/clients/[id]` | Client register with search; detail view lists the client's policies and life plans. |
-| Grouping Client | `/grouping-client` | Group accounts and their members. |
+| Grouping Client | `/client-groups` | Group accounts and their members. |
 | Client Planning | `/client-planning` | Life and medical plans held alongside the general book. |
-| Insurance | `/insurance/motor`, `/insurance/non-motor` | Policy registers: principal chips, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |
+| Insurance | `/insurance/general-motor`, `/insurance/non-motor` | Policy registers, 25 columns: principal chips (20 insurers), 15 class-of-business tabs on non-motor, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |
 | Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. See below. |
 | Create / edit policy | `/insurance/[cls]/new`, `/insurance/[cls]/[id]/edit` | Key a policy in or correct one. |
 | Quotations, Reconcile, Renewals, Employee Benefits | `/insurance/…` | Open quotations, receivable-vs-payable position, expiring cover, group schemes. |
 | Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page. |
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
-| Setting | `/setting/global`, `/setting/renewal`, `/setting/notifications` | Commission rates, e-Invoice particulars, insurance companies, renewal reminders, scheduled broadcasts. |
+| Setting | `/settings` | Per-user e-Invoice billing identity and password change, as on the live app. Organisation-wide settings (commission rates, insurance companies, renewal reminders, scheduled broadcasts) sit under `/settings/global`, `/settings/renewal` and `/settings/notifications`. |
+| Quotations | `/insurance/quotations` | Quote pipeline: drafts, sent, accepted, rejected, converted. |
+| Renewals | `/insurance/renewals` | Inbox, expiring and history, with create-quotation / process / reject. |
+| Documents | `/documents/loc/[id]`, `/documents/receipt/[id]` | Letter of collection and receipt, laid out for printing to PDF. |
 | User Guide / Contact Us | `/user-guide`, `/contact-us` | Module reference and support details. |
 
 ## Reading policy documents
@@ -125,6 +132,18 @@ src/
     format.ts       currency and date helpers
 ```
 
+## Divergences from the live app
+
+- **Employee Benefits** is served from `/insurance/endorsement` to match the live route, but
+  the live build renders the Renewals screen there — a wiring bug noted in the teardown. This
+  clone implements the module rather than reproducing the bug.
+- **Reports** is a set of four browsable reports here; the live app is a generator that takes a
+  report type and a date range. The captured session never opened the type list, so the options
+  are unknown.
+- **Reconcile** was never opened during capture, so its contents are a reasonable
+  reading of the payment state the registers already track, not a copy.
+- LOC and receipt documents render as print-ready pages rather than generated PDF files.
+
 ## Notes
 
 - Set `SIMSUITE_TODAY=2026-08-22` to pin "today" so the seeded figures stay put; otherwise
@@ -134,6 +153,10 @@ src/
 - Uploads are capped at 15 MB, enforced in the browser and again in the server action. Next.js
   caps Server Action bodies at 1 MB by default, so `serverActions.bodySizeLimit` is raised to
   match — lower it and larger PDFs fail before the action can report anything useful.
+- A submit button's `name`/`value` is **not** carried into a Server Action's FormData from a
+  server component — only from a client component, where React encodes the submitter itself.
+  Forms in server components therefore pass the operation as a hidden input, one form per
+  action. Getting this wrong fails silently: the POST returns 200 and nothing happens.
 - Passwords are hashed with scrypt. This is a demo application, not a production system —
   it has no rate limiting, audit trail, or multi-tenant hardening beyond scoping every query
   to the signed-in user's organisation.

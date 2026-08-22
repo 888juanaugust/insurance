@@ -68,6 +68,50 @@ export default async function OrganisationPage() {
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="panel">
           <div className="panel-head">
+            Invoice company info
+            <Help text="Printed as the letterhead on letters of collection, receipts and e-Invoices." />
+          </div>
+          <dl className="grid gap-5 px-6 py-5 sm:grid-cols-2">
+            <Field label="Company name" value={org.name} />
+            <Field label="Former name" value={org.former_name} />
+            <Field label="Logo URL" value={org.logo_url} />
+            <Field label="Website" value={org.website} />
+            <Field label="Phone" value={org.phone} />
+            <Field label="Phone 2" value={org.phone2} />
+            <Field label="Email" value={org.email} />
+            <Field label="Email 2" value={org.email2} />
+            <Field label="BRN" value={org.ssm_no} />
+            <Field label="SST" value={org.sst_no} />
+          </dl>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            Bank account
+            <Help text="Where clients remit premium, shown on the letter of collection." />
+          </div>
+          <dl className="grid gap-5 px-6 py-5 sm:grid-cols-2">
+            <Field label="Bank name" value={org.bank_name} />
+            <Field label="Account name" value={org.bank_account_name} />
+            <Field label="Account number" value={org.bank_account_number} />
+            <Field label="Remark 1" value={org.remark1} />
+            <Field label="Remark 2" value={org.remark2} />
+          </dl>
+
+          <div className="border-t border-line px-6 py-5">
+            <p className="sec-label mb-3">Document numbering</p>
+            <dl className="grid gap-5 sm:grid-cols-2">
+              <Field label="Letter of collection prefix" value={org.loc_prefix} />
+              <Field label="POS prefix" value={org.pos_prefix} />
+              <Field label="Invoice template" value={org.invoice_template} />
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="panel">
+          <div className="panel-head">
             Subscription
             <Help text="Standard package terms as set out in Schedule 2 of the onboarding pack." />
           </div>

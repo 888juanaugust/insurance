@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import { getClient, listClientPolicies, listLifePlans } from '@/lib/queries';
-import { money, longDate, classLabel } from '@/lib/format';
+import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { Crumb, StatusBadge } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -91,7 +91,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <tr key={p.id}>
                   <td>
                     <Link
-                      href={`/insurance/${p.class === 'motor' ? 'motor' : 'non-motor'}/${p.id}`}
+                      href={policyHref(p.class, p.id)}
                       className="link-red"
                     >
                       {p.policy_no}

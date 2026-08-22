@@ -18,6 +18,6 @@ export function policyFormOptions(orgId: string) {
 }
 
 export const CLASS_BY_SLUG: Record<string, 'motor' | 'non_motor'> = {
-  motor: 'motor',
+  'general-motor': 'motor',
   'non-motor': 'non_motor',
 };

@@ -1,5 +1,6 @@
 import type { Database } from 'better-sqlite3';
 import { hashPassword } from './auth';
+import { inferClassOfBusiness } from './classes';
 
 type Row = Record<string, string | number | null>;
 
@@ -45,6 +46,19 @@ const ORGS: Row[] = [
     policy_quota: 350,
     storage_gb: 20,
     named_users: 2,
+    logo_url: '',
+    phone2: '03-9133 8821',
+    email2: 'accounts@exeagency.my',
+    website: 'www.exeagency.my',
+    former_name: '',
+    bank_name: 'Maybank Berhad',
+    bank_account_name: 'EXE CHERAS AGENCY SDN BHD',
+    bank_account_number: '5142 8890 1123',
+    remark1: 'Please quote the policy number on every payment.',
+    remark2: 'Cover is subject to premium being received within the credit term.',
+    loc_prefix: 'LOC',
+    pos_prefix: 'POS',
+    invoice_template: 'Classic — Policy Summary / Amount Due',
   },
   {
     id: 'org-bs',
@@ -71,6 +85,19 @@ const ORGS: Row[] = [
     policy_quota: 350,
     storage_gb: 20,
     named_users: 2,
+    logo_url: '',
+    phone2: '',
+    email2: '',
+    website: '',
+    former_name: '',
+    bank_name: 'Maybank Berhad',
+    bank_account_name: 'BS AGENCY SDN BHD',
+    bank_account_number: '5642 7654 0010',
+    remark1: 'Please quote the policy number on every payment.',
+    remark2: '',
+    loc_prefix: 'LOC',
+    pos_prefix: 'POS',
+    invoice_template: 'Classic — Policy Summary / Amount Due',
   },
 ];
 
@@ -79,16 +106,26 @@ const ORGS: Row[] = [
  * ------------------------------------------------------------------ */
 
 const PRINCIPALS: Row[] = [
-  { id: 'pr-lonpac',  name: 'Lonpac Insurance Bhd',                                short_name: 'LONPAC',        code: 'N15989SBN-5', motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Support Desk', phone: '03-2262 8688', status: 'active' },
-  { id: 'pr-tokio',   name: 'Tokio Marine Insurans (Malaysia) Berhad',             short_name: 'TOKIO',         code: 'TM-882014',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '03-2059 6188', status: 'active' },
-  { id: 'pr-msig',    name: 'MSIG Insurance (Malaysia) Bhd',                       short_name: 'MSIG',          code: 'MS-4471200',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Broker Services',     phone: '03-2050 8228', status: 'active' },
-  { id: 'pr-sompo',   name: 'Berjaya Sompo Insurance Berhad',                      short_name: 'BERJAYA SOMPO', code: 'BS-770145',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Channel',      phone: '03-2117 6688', status: 'active' },
-  { id: 'pr-rhb',     name: 'RHB Insurance Berhad',                                short_name: 'RHB',           code: 'RHB-201338',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Admin',        phone: '03-2180 3000', status: 'active' },
-  { id: 'pr-allianz', name: 'Allianz General Insurance Company (Malaysia) Berhad', short_name: 'ALLIANZ',       code: 'SN50301-01',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Operations',   phone: '03-2264 0700', status: 'active' },
-  { id: 'pr-generali',name: 'Generali Insurance Malaysia Berhad',                  short_name: 'GENERALI',      code: 'GN-660921',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Care',         phone: '03-2170 8282', status: 'active' },
-  { id: 'pr-liberty', name: 'Liberty General Insurance Berhad',                    short_name: 'LIBERTY',       code: 'A02100-00',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Kurnia Agency Desk',  phone: '1800 88 3833', status: 'active' },
-  { id: 'pr-etiqa',   name: 'Etiqa General Insurance Berhad',                      short_name: 'ETIQA',         code: 'ET-330512',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Support',      phone: '1300 13 8888', status: 'active' },
-  { id: 'pr-zurich',  name: 'Zurich General Insurance Malaysia Berhad',            short_name: 'ZURICH',        code: 'ZR-119803',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '1300 88 6222', status: 'active' },
+  { id: 'pr-aia',      name: 'AIA Bhd',                                            short_name: 'AIA',                    code: 'AIA-770213',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '1300 88 1899', status: 'active' },
+  { id: 'pr-aig',      name: 'AIG Malaysia Insurance Berhad',                       short_name: 'AIG',                    code: 'AIG-455012',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Services',     phone: '1800 88 8811', status: 'active' },
+  { id: 'pr-allianz',  name: 'Allianz General Insurance Company (Malaysia) Berhad', short_name: 'ALLIANZ',                code: 'SN50301-01',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Operations',   phone: '03-2264 0700', status: 'active' },
+  { id: 'pr-sompo',    name: 'Berjaya Sompo Insurance Berhad',                      short_name: 'BERJAYA SOMPO',          code: 'BS-770145',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Channel',      phone: '03-2117 6688', status: 'active' },
+  { id: 'pr-chubb',    name: 'Chubb Insurance Malaysia Berhad',                     short_name: 'CHUBB',                  code: 'CHB-220981',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Desk',         phone: '03-2058 3000', status: 'active' },
+  { id: 'pr-etiqa',    name: 'Etiqa General Takaful Berhad',                        short_name: 'ETIQA GENERAL TAKAFUL',  code: 'ET-330512',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Support',      phone: '1300 13 8888', status: 'active' },
+  { id: 'pr-generali', name: 'Generali Insurance Malaysia Berhad',                  short_name: 'GENERALI',               code: 'GN-660921',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Care',         phone: '03-2170 8282', status: 'active' },
+  { id: 'pr-geg',      name: 'Great Eastern General Insurance (Malaysia) Berhad',   short_name: 'GREAT EASTERN GENERAL',  code: 'GEG-118220',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '1300 13 0088', status: 'active' },
+  { id: 'pr-liberty',  name: 'Liberty General Insurance Berhad',                    short_name: 'LIBERTY',                code: 'A02100-00',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Kurnia Agency Desk',  phone: '1800 88 3833', status: 'active' },
+  { id: 'pr-lonpac',   name: 'Lonpac Insurance Bhd',                                short_name: 'LONPAC',                 code: 'N15989SBN-5', motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Support Desk', phone: '03-2262 8688', status: 'active' },
+  { id: 'pr-msig',     name: 'MSIG Insurance (Malaysia) Bhd',                       short_name: 'MSIG',                   code: 'MS-4471200',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Broker Services',     phone: '03-2050 8228', status: 'active' },
+  { id: 'pr-po',       name: 'Pacific & Orient Insurance Co. Berhad',               short_name: 'P&O',                    code: 'PO-990312',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Channel',      phone: '03-2170 3000', status: 'active' },
+  { id: 'pr-pacific',  name: 'The Pacific Insurance Berhad',                        short_name: 'PACIFIC',                code: 'PAC-660120',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Services',     phone: '03-2633 8999', status: 'active' },
+  { id: 'pr-progress', name: 'Progressive Insurance Bhd',                           short_name: 'PROGRESSIVE',            code: 'PRG-441002',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Desk',         phone: '03-7876 8888', status: 'active' },
+  { id: 'pr-qbe',      name: 'QBE Insurance (Malaysia) Berhad',                     short_name: 'QBE',                    code: 'QBE-118845',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Support',      phone: '03-2117 6000', status: 'active' },
+  { id: 'pr-rhb',      name: 'RHB Insurance Berhad',                                short_name: 'RHB',                    code: 'RHB-201338',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Admin',        phone: '03-2180 3000', status: 'active' },
+  { id: 'pr-ikhlas',   name: 'Takaful Ikhlas General Berhad',                       short_name: 'TAKAFUL IKHLAS',         code: 'TI-550231',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '03-2723 9999', status: 'active' },
+  { id: 'pr-tokio',    name: 'Tokio Marine Insurans (Malaysia) Berhad',             short_name: 'TOKIO',                  code: 'TM-882014',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '03-2059 6188', status: 'active' },
+  { id: 'pr-tune',     name: 'Tune Insurance Malaysia Berhad',                      short_name: 'TUNE',                   code: 'TUN-330984',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Care',         phone: '03-2117 5800', status: 'active' },
+  { id: 'pr-zurich',   name: 'Zurich General Insurance Malaysia Berhad',            short_name: 'ZURICH',                 code: 'ZR-119803',   motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '1300 88 6222', status: 'active' },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -189,13 +226,14 @@ type PolicySeed = {
   excess?: number;
   ncd?: number;
   referralFee?: number;
+  consultantCommission?: number;
   sourceFile?: string;
   motor?: {
     vehicleNo: string; makeModel: string; bodyType?: string; engineNo: string; chassisNo: string;
     cc: string; year: string; seating: number; hp?: string; windscreen?: number;
     drivers?: string; extensions?: string; rtd?: string;
   };
-  nonMotor?: { riskType: string; riskAddress: string; occupancy: string; periodDesc: string; benefits: string };
+  nonMotor?: { riskType: string; riskAddress: string; occupancy: string; periodDesc: string; benefits: string; classOfBusiness?: string };
   exts?: Ext[];
   /** Client-side settlement */
   clientDue: string; clientPaid?: string; clientMethod?: string; clientRef?: string;
@@ -239,7 +277,7 @@ const POLICIES: PolicySeed[] = [
   { id: 'pol-vb909032e3', org: 'org-exe', client: 'cl-look', principal: 'pr-generali', agent: 'sa-exe-03',
     policyNo: 'VB909032E3', coverNote: 'CN-VB909032E3', cls: 'motor', product: 'Private Car', cover: 'Comprehensive',
     status: 'active', caseType: 'new', created: '2026-03-03', effective: '2026-03-10', expiry: '2027-03-09', issue: '2026-03-03',
-    sumInsured: 88000, total: 2164.30, ncd: 25, excess: 0,
+    sumInsured: 88000, total: 2164.30, ncd: 25, excess: 0, consultantCommission: 64.93,
     motor: { vehicleNo: 'VBB 9032', makeModel: 'MAZDA CX-5 2.0G', bodyType: '5D SUV', engineNo: 'PEVPS221144', chassisNo: 'JM0KF4W600100223', cc: '1998', year: '2022', seating: 5, hp: 'MAYBANK BERHAD', windscreen: 3000, drivers: 'ANY AUTHORISED DRIVER', rtd: '08' },
     exts: [{ name: 'Windscreen Damage', si: 3000, premium: 450 }, { name: 'Special Perils / Convulsions of Nature', premium: 202.4 }],
     clientDue: '2026-07-12', principalDue: '2026-07-20' },
@@ -304,7 +342,7 @@ const POLICIES: PolicySeed[] = [
   { id: 'pol-kgz0137577', org: 'org-exe', client: 'cl-okbb', principal: 'pr-sompo', agent: 'sa-exe-04',
     policyNo: 'KG_Z0137577', coverNote: 'CN-KGZ0137577', cls: 'non_motor', product: 'Fire Consequential Loss', cover: 'Fire — Consequential Loss',
     status: 'active', caseType: 'renewal', created: '2026-05-02', effective: '2026-05-15', expiry: '2027-05-14', issue: '2026-05-02',
-    sumInsured: 1800000, total: 2050.00, excess: 2500,
+    sumInsured: 1800000, total: 2050.00, excess: 2500, consultantCommission: 94.44,
     nonMotor: { riskType: 'Consequential Loss (Fire)', riskAddress: 'No 3, Jalan Teknologi 3/5, Taman Sains Selangor, Kota Damansara', occupancy: 'Food manufacturing plant', periodDesc: '12 months — indemnity period 12 months', benefits: 'Gross profit RM1,800,000; Auditors fees RM25,000' },
     clientDue: '2026-07-26', principalDue: '2026-08-05' },
 
@@ -475,6 +513,26 @@ const RENEWAL_SETTINGS: Row[] = [
   { id: 'rs-04', org_id: 'org-bs',  days_before: 45, channel: 'email',    template: 'Dear {client_name}, your policy {policy_no} expires on {expiry_date}.', enabled: 1 },
 ];
 
+const QUOTATIONS: Row[] = [
+  { id: 'qt-01', org_id: 'org-exe', client_id: 'cl-quote',  principal_id: 'pr-allianz', policy_id: null, quote_no: 'QT-2026-0041', class: 'motor',     product: 'Private Car',       status: 'sent',      total_payable: 988.40,  valid_until: '2026-09-05', created_at: '2026-08-06', updated_at: '2026-08-06', note: 'Awaiting client confirmation and KYC.' },
+  { id: 'qt-02', org_id: 'org-exe', client_id: 'cl-wong',   principal_id: 'pr-lonpac',  policy_id: 'pol-a6817996', quote_no: 'QT-2026-0038', class: 'motor', product: 'Private Car', status: 'converted', total_payable: 1913.44, valid_until: '2026-08-25', created_at: '2026-08-12', updated_at: '2026-08-20', note: 'Converted to policy A6817996-9.' },
+  { id: 'qt-03', org_id: 'org-exe', client_id: 'cl-cheah',  principal_id: 'pr-tokio',   policy_id: null, quote_no: 'QT-2026-0044', class: 'motor',     product: 'Private Car',       status: 'draft',     total_payable: 842.00,  valid_until: '2026-09-12', created_at: '2026-08-19', updated_at: '2026-08-19', note: 'Pending sum insured confirmation.' },
+  { id: 'qt-04', org_id: 'org-exe', client_id: 'cl-okbb',   principal_id: 'pr-msig',    policy_id: null, quote_no: 'QT-2026-0035', class: 'non_motor', product: 'Fire & Perils',     status: 'accepted',  total_payable: 4120.00, valid_until: '2026-09-01', created_at: '2026-08-02', updated_at: '2026-08-15', note: 'Client accepted — awaiting cover note from principal.' },
+  { id: 'qt-05', org_id: 'org-exe', client_id: 'cl-simch',  principal_id: 'pr-qbe',     policy_id: null, quote_no: 'QT-2026-0029', class: 'non_motor', product: 'Personal Accident', status: 'rejected',  total_payable: 615.00,  valid_until: '2026-07-20', created_at: '2026-07-04', updated_at: '2026-07-22', note: 'Client renewed with the incumbent insurer.' },
+  { id: 'qt-06', org_id: 'org-exe', client_id: 'cl-moomoo', principal_id: 'pr-zurich',  policy_id: null, quote_no: 'QT-2026-0046', class: 'non_motor', product: 'Liability',         status: 'sent',      total_payable: 2280.00, valid_until: '2026-09-18', created_at: '2026-08-21', updated_at: '2026-08-21', note: 'Public liability for the Balakong site.' },
+  { id: 'qt-07', org_id: 'org-exe', client_id: 'cl-tey',    principal_id: 'pr-sompo',   policy_id: null, quote_no: 'QT-2026-0042', class: 'motor',     product: 'Commercial Vehicle', status: 'draft',    total_payable: 1180.00, valid_until: '2026-09-08', created_at: '2026-08-14', updated_at: '2026-08-16', note: null },
+  { id: 'qt-08', org_id: 'org-bs',  client_id: 'cl-hoo',    principal_id: 'pr-allianz', policy_id: null, quote_no: 'QT-BS-0012',   class: 'motor',     product: 'Private Car',       status: 'sent',      total_payable: 2410.00, valid_until: '2026-10-01', created_at: '2026-08-18', updated_at: '2026-08-18', note: 'Renewal quotation for MDW9185.' },
+];
+
+const RENEWAL_REQUESTS: Row[] = [
+  { id: 'rr-01', org_id: 'org-exe', policy_id: 'pol-kgz0137577',   status: 'inbox',      source: 'Home',           requested_at: '2026-08-19', note: 'Client asked to review sum insured before renewing.' },
+  { id: 'rr-02', org_id: 'org-exe', policy_id: 'pol-xa082816',     status: 'inbox',      source: 'Client portal',  requested_at: '2026-08-17', note: null },
+  { id: 'rr-03', org_id: 'org-exe', policy_id: 'pol-v6621188',     status: 'processing', source: 'Agent',          requested_at: '2026-08-11', note: 'Quotation requested from Tokio.' },
+  { id: 'rr-04', org_id: 'org-exe', policy_id: 'pol-t6088190',     status: 'completed',  source: 'Scheduler',      requested_at: '2026-07-02', note: 'Renewed on 2 May 2026.' },
+  { id: 'rr-05', org_id: 'org-exe', policy_id: 'pol-g7710244',     status: 'rejected',   source: 'Home',           requested_at: '2026-06-28', note: 'Client sold the motorcycle.' },
+  { id: 'rr-06', org_id: 'org-bs',  policy_id: 'pol-mdw9185',      status: 'inbox',      source: 'Scheduler',      requested_at: '2026-08-18', note: 'Expires 17 Sep 2026.' },
+];
+
 /* ------------------------------------------------------------------ *
  * Seed
  * ------------------------------------------------------------------ */
@@ -509,6 +567,7 @@ export function seed(db: Database) {
 
   const principalById = new Map(PRINCIPALS.map((p) => [p.id as string, p]));
 
+  let locSeq = 1;
   const policyRows: Row[] = [];
   const motorRows: Row[] = [];
   const nonMotorRows: Row[] = [];
@@ -546,6 +605,11 @@ export function seed(db: Database) {
     );
     // Referral fees are the exception rather than the rule — most cases carry none.
     const referralFee = p.referralFee ?? 0;
+    // Where a salaried consultant closed the case, part of the agency's
+    // commission is theirs rather than the servicing agent's.
+    const consultantCommission = p.consultantCommission ?? 0;
+    // Letter of collection, issued when premium is billed to the client.
+    const locNo = p.clientPaid ? null : `LOC${String(locSeq++).padStart(5, '0')}`;
 
     policyRows.push({
       id: p.id, org_id: p.org, client_id: p.client, principal_id: p.principal,
@@ -556,6 +620,7 @@ export function seed(db: Database) {
       extra_premium: extra, gross_premium: gross, service_tax: tax, stamp_duty: stamp,
       total_premium: total, commission_rate: commRate, commission_amt: commAmt,
       excess: p.excess ?? 0, referral_fee: referralFee, agent_commission: agentCommission,
+      consultant_commission: consultantCommission, loc_no: locNo,
       uploaded_at: p.created, source_file: p.sourceFile ?? null, remarks: p.remarks ?? null,
     });
 
@@ -572,8 +637,13 @@ export function seed(db: Database) {
 
     if (p.nonMotor) {
       nonMotorRows.push({
-        policy_id: p.id, risk_type: p.nonMotor.riskType, risk_address: p.nonMotor.riskAddress,
-        occupancy: p.nonMotor.occupancy, period_desc: p.nonMotor.periodDesc, benefits: p.nonMotor.benefits,
+        policy_id: p.id, risk_type: p.nonMotor.riskType,
+        class_of_business:
+          p.nonMotor.classOfBusiness ??
+          inferClassOfBusiness(`${p.product} ${p.cover} ${p.nonMotor.riskType}`) ??
+          'Property',
+        risk_address: p.nonMotor.riskAddress, occupancy: p.nonMotor.occupancy,
+        period_desc: p.nonMotor.periodDesc, benefits: p.nonMotor.benefits,
       });
     }
 
@@ -620,6 +690,8 @@ export function seed(db: Database) {
   insertAll(db, 'life_plan', LIFE_PLANS);
   insertAll(db, 'notification', NOTIFICATIONS);
   insertAll(db, 'renewal_setting', RENEWAL_SETTINGS);
+  insertAll(db, 'quotation', QUOTATIONS);
+  insertAll(db, 'renewal_request', RENEWAL_REQUESTS);
 
   const rates: Row[] = [];
   for (const org of ORGS) {

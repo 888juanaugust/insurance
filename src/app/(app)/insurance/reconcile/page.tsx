@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import { listOutstanding } from '@/lib/queries';
-import { money, longDate, classLabel } from '@/lib/format';
+import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { PageHeader, Help } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,7 @@ export default async function ReconcilePage() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>
-                  <Link href={`/insurance/${r.class === 'motor' ? 'motor' : 'non-motor'}/${r.id}`} className="link-red">
+                  <Link href={policyHref(r.class, r.id)} className="link-red">
                     {r.policy_no}
                   </Link>
                 </td>

@@ -42,3 +42,13 @@ export function classLabel(cls: string): string {
 export function titleCase(s: string): string {
   return s.replace(/(^|[\s_-])(\w)/g, (_, p, c) => (p === '_' || p === '-' ? ' ' : p) + c.toUpperCase());
 }
+
+/** URL slug for a class of business, matching the live route names. */
+export function classSlug(cls: string): string {
+  return cls === 'non_motor' ? 'non-motor' : 'general-motor';
+}
+
+/** Link to a policy register, or to one policy within it. */
+export function policyHref(cls: string, id?: string): string {
+  return `/insurance/${classSlug(cls)}${id ? `/${id}` : ''}`;
+}

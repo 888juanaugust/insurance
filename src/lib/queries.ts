@@ -9,6 +9,10 @@ export type Org = {
   address1: string; address2: string; postcode: string; city: string; state: string; country: string;
   kick_start_date: string; plan_name: string; plan_price: number; plan_sst_pct: number;
   policy_quota: number; storage_gb: number; named_users: number;
+  logo_url: string; phone2: string; email2: string; website: string; former_name: string;
+  bank_name: string; bank_account_name: string; bank_account_number: string;
+  remark1: string; remark2: string; loc_prefix: string; pos_prefix: string;
+  invoice_template: string;
 };
 
 export type PolicyRow = {
@@ -764,6 +768,8 @@ export type RegisterFilters = {
   insured?: string;
   nric?: string;
   status?: string;
+  /** Non-motor class of business tab. */
+  cob?: string;
   sort?: string;
   dir?: 'asc' | 'desc';
 };
@@ -783,6 +789,13 @@ const SORTABLE: Record<string, string> = {
   referral_fee: 'p.referral_fee',
   commission_amt: 'p.commission_amt',
   agent_commission: 'p.agent_commission',
+  consultant_commission: 'p.consultant_commission',
+  nett_amount: 'nett_amount',
+  principal_nett_amount: 'principal_nett_amount',
+  effective_date: 'p.effective_date',
+  expiry_date: 'p.expiry_date',
+  status: 'p.status',
+  uploaded_at: 'uploaded_at',
 };
 
 export function listRegister(orgId: string, f: RegisterFilters) {
@@ -799,17 +812,23 @@ export function listRegister(orgId: string, f: RegisterFilters) {
       `SELECT p.id, p.policy_no, p.cover_note_no, p.class, p.product, p.type_of_cover, p.status,
               p.issue_date, p.effective_date, p.expiry_date, p.created_date, p.uploaded_at,
               p.sum_insured, p.gross_premium, p.service_tax, p.stamp_duty, p.total_premium,
-              p.commission_amt, p.agent_commission, p.referral_fee, p.source_file,
+              p.commission_amt, p.agent_commission, p.consultant_commission,
+              p.referral_fee, p.loc_no, p.source_file,
+              -- What the agency keeps once every share is paid away, and what
+              -- it owes the principal after retaining its commission.
+              ROUND(p.commission_amt - p.agent_commission - p.consultant_commission - p.referral_fee, 2) AS nett_amount,
+              ROUND(p.total_premium - p.commission_amt, 2) AS principal_nett_amount,
               c.name AS insured, c.id AS client_id,
               COALESCE(NULLIF(c.nric,''), c.business_reg, '') AS ident,
               pr.short_name AS principal, s.name AS agent_name,
-              m.vehicle_no, m.make_model,
+              m.vehicle_no, m.make_model, nm.class_of_business,
               cp.status AS client_paid, pp.status AS principal_paid
          FROM policy p
          JOIN client c     ON c.id  = p.client_id
          JOIN principal pr ON pr.id = p.principal_id
          LEFT JOIN sub_agent s    ON s.id = p.sub_agent_id
          LEFT JOIN motor_detail m ON m.policy_id = p.id
+         LEFT JOIN non_motor_detail nm ON nm.policy_id = p.id
          LEFT JOIN payment cp ON cp.policy_id = p.id AND cp.kind = 'client'
          LEFT JOIN payment pp ON pp.policy_id = p.id AND pp.kind = 'principal'
         WHERE p.org_id = @org
@@ -817,6 +836,7 @@ export function listRegister(orgId: string, f: RegisterFilters) {
           AND (@principal = '' OR pr.short_name = @principal)
           AND (@agent = '' OR p.sub_agent_id = @agent)
           AND (@status = '' OR p.status = @status)
+          AND (@cob = '' OR nm.class_of_business = @cob)
           AND (@from = '' OR ${dateCol} >= @from)
           AND (@to = '' OR ${dateCol} <= @to)
           AND (@vehicle = '' OR upper(COALESCE(m.vehicle_no,'')) LIKE upper(@vehicleLike))
@@ -831,6 +851,7 @@ export function listRegister(orgId: string, f: RegisterFilters) {
       principal: f.principal ?? '',
       agent: f.agent ?? '',
       status: f.status ?? '',
+      cob: f.cob ?? '',
       from: f.from ?? '',
       to: f.to ?? '',
       vehicle: f.vehicle ?? '',
@@ -854,4 +875,234 @@ export function principalChipCounts(orgId: string, cls: string) {
         GROUP BY pr.id ORDER BY pr.short_name`,
     )
     .all(orgId, cls, cls) as Array<{ short_name: string; n: number }>;
+}
+
+
+/** Policy counts per non-motor class, for the register tabs. */
+export function classOfBusinessCounts(orgId: string) {
+  const rows = getDb()
+    .prepare(
+      `SELECT nm.class_of_business AS cob, COUNT(*) AS n
+         FROM policy p JOIN non_motor_detail nm ON nm.policy_id = p.id
+        WHERE p.org_id = ? GROUP BY nm.class_of_business`,
+    )
+    .all(orgId) as Array<{ cob: string; n: number }>;
+  return new Map(rows.map((r) => [r.cob, r.n]));
+}
+
+/* ------------------------------------------------------------- quotations */
+
+export const QUOTE_TABS = ['draft', 'sent', 'accepted', 'rejected', 'converted'] as const;
+
+export function listQuotations(orgId: string, status = '') {
+  return getDb()
+    .prepare(
+      `SELECT q.*, c.name AS client_name, pr.short_name AS principal
+         FROM quotation q
+         JOIN client c     ON c.id  = q.client_id
+         JOIN principal pr ON pr.id = q.principal_id
+        WHERE q.org_id = @org AND (@st = '' OR q.status = @st)
+        ORDER BY q.updated_at DESC, q.quote_no`,
+    )
+    .all({ org: orgId, st: status }) as Array<Record<string, any>>;
+}
+
+export function quotationCounts(orgId: string) {
+  const rows = getDb()
+    .prepare('SELECT status, COUNT(*) n FROM quotation WHERE org_id = ? GROUP BY status')
+    .all(orgId) as Array<{ status: string; n: number }>;
+  return new Map(rows.map((r) => [r.status, r.n]));
+}
+
+/* --------------------------------------------------------------- renewals */
+
+export function listRenewalRequests(orgId: string, tab: 'inbox' | 'expiring' | 'history') {
+  const db = getDb();
+
+  if (tab === 'expiring') {
+    return renewalsDue(orgId, 60).map((r) => ({
+      id: r.id, policy_id: r.id, policy_no: r.policy_no, client_name: r.insured,
+      principal: r.principal, requested_at: null, source: 'Expiry watch',
+      note: `Expires in ${r.days_left} days`, status: 'expiring', class: r.class,
+    }));
+  }
+
+  const statuses = tab === 'inbox' ? "('inbox','processing')" : "('completed','rejected')";
+  return db
+    .prepare(
+      `SELECT rr.*, p.policy_no, p.class, c.name AS client_name, pr.short_name AS principal
+         FROM renewal_request rr
+         JOIN policy p     ON p.id  = rr.policy_id
+         JOIN client c     ON c.id  = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+        WHERE rr.org_id = ? AND rr.status IN ${statuses}
+        ORDER BY rr.requested_at DESC`,
+    )
+    .all(orgId) as Array<Record<string, any>>;
+}
+
+export function renewalCounts(orgId: string) {
+  const db = getDb();
+  const inbox = db
+    .prepare("SELECT COUNT(*) v FROM renewal_request WHERE org_id = ? AND status IN ('inbox','processing')")
+    .get(orgId) as { v: number };
+  const history = db
+    .prepare("SELECT COUNT(*) v FROM renewal_request WHERE org_id = ? AND status IN ('completed','rejected')")
+    .get(orgId) as { v: number };
+  return { inbox: inbox.v, expiring: renewalsDue(orgId, 60).length, history: history.v };
+}
+
+export function setRenewalStatus(id: string, orgId: string, status: string) {
+  getDb()
+    .prepare('UPDATE renewal_request SET status = ? WHERE id = ? AND org_id = ?')
+    .run(status, id, orgId);
+}
+
+export function requestRenewal(orgId: string, policyId: string, source = 'Home') {
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT id FROM renewal_request WHERE org_id = ? AND policy_id = ? AND status IN ('inbox','processing')")
+    .get(orgId, policyId);
+  if (existing) return false;
+  db.prepare(
+    `INSERT INTO renewal_request (id, org_id, policy_id, status, source, requested_at, note)
+     VALUES (@id, @org, @policy, 'inbox', @source, @at, NULL)`,
+  ).run({ id: `rr-${Date.now().toString(36)}`, org: orgId, policy: policyId, source, at: today() });
+  return true;
+}
+
+/* ------------------------------------------------- accounting: monthly runs */
+
+export function commissionByAgent(orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT s.id, s.name, s.agent_code, s.einvoice_tin, s.self_billed,
+              COUNT(cm.id) AS policies,
+              COALESCE(SUM(cm.net_amount),0) AS total_amount,
+              COALESCE(SUM(CASE WHEN cm.status='paid'     THEN cm.net_amount ELSE 0 END),0) AS paid,
+              COALESCE(SUM(CASE WHEN cm.status='approved' THEN cm.net_amount ELSE 0 END),0) AS scheduled,
+              COALESCE(SUM(CASE WHEN cm.status='pending'  THEN cm.net_amount ELSE 0 END),0) AS pending,
+              MAX(cm.approved_date) AS last_generated
+         FROM sub_agent s
+         LEFT JOIN commission cm ON cm.sub_agent_id = s.id
+         LEFT JOIN policy p ON p.id = cm.policy_id AND p.org_id = @org
+        WHERE s.org_id = @org
+        GROUP BY s.id ORDER BY total_amount DESC`,
+    )
+    .all({ org: orgId }) as Array<Record<string, any>>;
+}
+
+export function bulkSetCommissionStatus(orgId: string, from: string, to: string): number {
+  const t = today();
+  const info = getDb()
+    .prepare(
+      `UPDATE commission SET status = @to,
+              approved_date = CASE WHEN @to IN ('approved','paid') THEN COALESCE(approved_date, @t) ELSE NULL END,
+              payout_date   = CASE WHEN @to = 'paid' THEN @t ELSE payout_date END
+        WHERE status = @from
+          AND policy_id IN (SELECT id FROM policy WHERE org_id = @org)`,
+    )
+    .run({ org: orgId, from, to, t });
+  return info.changes;
+}
+
+/* --------------------------------------------- per-user e-Invoice billing */
+
+export function getBillingProfile(userId: string) {
+  return getDb()
+    .prepare('SELECT * FROM billing_profile WHERE user_id = ?')
+    .get(userId) as Record<string, any> | undefined;
+}
+
+export function saveBillingProfile(userId: string, fields: Record<string, string>) {
+  const db = getDb();
+  const cols = [
+    'name', 'person_name', 'tin_number', 'brn', 'nric_number', 'state', 'city',
+    'postal_code', 'address_line0', 'address_line1', 'address_line2', 'country',
+    'email', 'contact', 'sst_registration_number',
+  ];
+  const row: Record<string, string> = { user_id: userId };
+  for (const c of cols) row[c] = fields[c] ?? '';
+
+  const exists = db.prepare('SELECT user_id FROM billing_profile WHERE user_id = ?').get(userId);
+  if (exists) {
+    db.prepare(
+      `UPDATE billing_profile SET ${cols.map((c) => `${c} = @${c}`).join(', ')} WHERE user_id = @user_id`,
+    ).run(row);
+  } else {
+    db.prepare(
+      `INSERT INTO billing_profile (user_id, ${cols.join(', ')})
+       VALUES (@user_id, ${cols.map((c) => '@' + c).join(', ')})`,
+    ).run(row);
+  }
+}
+
+export function changePassword(userId: string, hash: string) {
+  getDb().prepare('UPDATE app_user SET password_hash = ? WHERE id = ?').run(hash, userId);
+}
+
+export function getUserPasswordHash(userId: string): string | undefined {
+  const row = getDb().prepare('SELECT password_hash FROM app_user WHERE id = ?').get(userId) as
+    | { password_hash: string }
+    | undefined;
+  return row?.password_hash;
+}
+
+/* ------------------------------------------------------- home: production */
+
+/** Cases, premium and the full commission split, by month of creation. */
+export function productionSummary(orgId: string, year: string, agentId = '') {
+  const rows = getDb()
+    .prepare(
+      `SELECT substr(p.created_date,1,7) AS period, p.class,
+              COUNT(*) AS cases,
+              COALESCE(SUM(p.gross_premium),0)         AS gross_premium,
+              COALESCE(SUM(p.total_premium),0)         AS total_premium,
+              COALESCE(SUM(p.commission_amt),0)        AS total_commission,
+              COALESCE(SUM(p.agent_commission),0)      AS agent_commission,
+              COALESCE(SUM(p.consultant_commission),0) AS consultant_commission
+         FROM policy p
+        WHERE p.org_id = @org AND substr(p.created_date,1,4) = @yr
+          ${agentId ? 'AND p.sub_agent_id = @agent' : ''}
+        GROUP BY period, p.class ORDER BY period DESC`,
+    )
+    .all({ org: orgId, yr: year, agent: agentId }) as Array<Record<string, any>>;
+
+  const byPeriod = new Map<string, Record<string, number | string>>();
+  for (const r of rows) {
+    const acc = byPeriod.get(r.period) ?? {
+      period: r.period, motorCases: 0, nonMotorCases: 0, motorPremium: 0, nonMotorPremium: 0,
+      totalPremium: 0, grossPremium: 0, totalCommission: 0, agentCommission: 0, consultantCommission: 0,
+    };
+    if (r.class === 'motor') {
+      acc.motorCases = (acc.motorCases as number) + r.cases;
+      acc.motorPremium = (acc.motorPremium as number) + r.total_premium;
+    } else {
+      acc.nonMotorCases = (acc.nonMotorCases as number) + r.cases;
+      acc.nonMotorPremium = (acc.nonMotorPremium as number) + r.total_premium;
+    }
+    acc.totalPremium = (acc.totalPremium as number) + r.total_premium;
+    acc.grossPremium = (acc.grossPremium as number) + r.gross_premium;
+    acc.totalCommission = (acc.totalCommission as number) + r.total_commission;
+    acc.agentCommission = (acc.agentCommission as number) + r.agent_commission;
+    acc.consultantCommission = (acc.consultantCommission as number) + r.consultant_commission;
+    byPeriod.set(r.period, acc);
+  }
+  return [...byPeriod.values()];
+}
+
+/** Motor policies with their statutory compliance dates, for the tracker. */
+export function motorCompliance(orgId: string, limit = 12) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.class, p.expiry_date, m.vehicle_no, m.make_model, c.name AS insured,
+              p.effective_date,
+              CAST(julianday(p.expiry_date) - julianday(@t) AS INTEGER) AS days_left
+         FROM policy p
+         JOIN motor_detail m ON m.policy_id = p.id
+         JOIN client c ON c.id = p.client_id
+        WHERE p.org_id = @org AND p.status = 'active'
+        ORDER BY days_left LIMIT @lim`,
+    )
+    .all({ org: orgId, t: today(), lim: limit }) as Array<Record<string, any>>;
 }

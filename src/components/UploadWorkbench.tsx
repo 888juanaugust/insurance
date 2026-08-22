@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { uploadPolicyAction, type UploadState } from '@/lib/policy-actions';
 import PolicyForm, { type Option } from './PolicyForm';
 import type { FieldKey } from '@/lib/extract';
+import { classSlug } from '@/lib/format';
 
 type Props = {
   cls: 'motor' | 'non_motor';
@@ -79,7 +80,7 @@ export default function UploadWorkbench({ cls, clients, principals, agents, clau
           <button type="submit" disabled={pending || Boolean(sizeError)} className="btn btn-primary disabled:opacity-60">
             {pending ? 'Reading the document…' : 'Read document'}
           </button>
-          <Link href={`/insurance/${cls === 'motor' ? 'motor' : 'non-motor'}/new`} className="btn btn-ghost">
+          <Link href={`/insurance/${classSlug(cls)}/new`} className="btn btn-ghost">
             Key it in instead
           </Link>
         </div>
@@ -167,7 +168,7 @@ function Review({
             {needsAttention > 0 && (
               <span className="badge badge-amber">{needsAttention} to confirm</span>
             )}
-            <Link href={`/insurance/${cls === 'motor' ? 'motor' : 'non-motor'}/upload`} className="btn btn-ghost">
+            <Link href={`/insurance/${classSlug(cls)}/upload`} className="btn btn-ghost">
               Upload another
             </Link>
           </div>
@@ -176,7 +177,7 @@ function Review({
         {state.duplicateOf && (
           <p className="mt-4 rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-2.5 text-[13px] text-[#b32b21]">
             Policy <strong>{state.duplicateOf.policy_no}</strong> is already on file.{' '}
-            <Link href={`/insurance/${cls === 'motor' ? 'motor' : 'non-motor'}/${state.duplicateOf.id}`} className="underline">
+            <Link href={`/insurance/${classSlug(cls)}/${state.duplicateOf.id}`} className="underline">
               Open the existing record
             </Link>
             , or tick the confirmation at the bottom to save this one as well.

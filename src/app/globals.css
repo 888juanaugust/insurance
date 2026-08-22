@@ -181,4 +181,23 @@ body {
   .scroll-y {
     overflow-y: auto;
   }
+
+  /* ------------------------------------------------------------- print */
+
+  @media print {
+    aside,
+    header {
+      display: none !important;
+    }
+
+    main {
+      overflow: visible !important;
+      padding: 0 !important;
+      background: #fff !important;
+    }
+
+    .panel {
+      border: 0 !important;
+    }
+  }
 }

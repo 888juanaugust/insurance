@@ -34,7 +34,20 @@ CREATE TABLE IF NOT EXISTS organisation (
   plan_sst_pct   REAL,
   policy_quota   INTEGER,
   storage_gb     INTEGER,
-  named_users    INTEGER
+  named_users    INTEGER,
+  logo_url       TEXT,
+  phone2         TEXT,
+  email2         TEXT,
+  website        TEXT,
+  former_name    TEXT,
+  bank_name      TEXT,
+  bank_account_name TEXT,
+  bank_account_number TEXT,
+  remark1        TEXT,
+  remark2        TEXT,
+  loc_prefix     TEXT,
+  pos_prefix     TEXT,
+  invoice_template TEXT
 );
 
 CREATE TABLE IF NOT EXISTS app_user (
@@ -143,6 +156,8 @@ CREATE TABLE IF NOT EXISTS policy (
   excess          REAL NOT NULL DEFAULT 0,
   referral_fee    REAL NOT NULL DEFAULT 0,
   agent_commission REAL NOT NULL DEFAULT 0,
+  consultant_commission REAL NOT NULL DEFAULT 0,
+  loc_no          TEXT,
   uploaded_at     TEXT,
   source_file     TEXT,
   remarks         TEXT
@@ -184,6 +199,7 @@ CREATE TABLE IF NOT EXISTS motor_detail (
 CREATE TABLE IF NOT EXISTS non_motor_detail (
   policy_id     TEXT PRIMARY KEY REFERENCES policy(id) ON DELETE CASCADE,
   risk_type     TEXT,
+  class_of_business TEXT,
   risk_address  TEXT,
   occupancy     TEXT,
   period_desc   TEXT,
@@ -196,6 +212,52 @@ CREATE TABLE IF NOT EXISTS policy_extension (
   name       TEXT NOT NULL,
   sum_insured REAL DEFAULT 0,
   premium    REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS billing_profile (
+  user_id                 TEXT PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,
+  name                    TEXT,
+  person_name             TEXT,
+  tin_number              TEXT,
+  brn                     TEXT,
+  nric_number             TEXT,
+  state                   TEXT,
+  city                    TEXT,
+  postal_code             TEXT,
+  address_line0           TEXT,
+  address_line1           TEXT,
+  address_line2           TEXT,
+  country                 TEXT,
+  email                   TEXT,
+  contact                 TEXT,
+  sst_registration_number TEXT
+);
+
+CREATE TABLE IF NOT EXISTS quotation (
+  id           TEXT PRIMARY KEY,
+  org_id       TEXT NOT NULL REFERENCES organisation(id),
+  client_id    TEXT NOT NULL REFERENCES client(id),
+  principal_id TEXT NOT NULL REFERENCES principal(id),
+  policy_id    TEXT REFERENCES policy(id) ON DELETE SET NULL,
+  quote_no     TEXT NOT NULL,
+  class        TEXT NOT NULL,          -- motor | non_motor
+  product      TEXT,
+  status       TEXT NOT NULL,          -- draft | sent | accepted | rejected | converted
+  total_payable REAL NOT NULL DEFAULT 0,
+  valid_until  TEXT,
+  created_at   TEXT,
+  updated_at   TEXT,
+  note         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS renewal_request (
+  id           TEXT PRIMARY KEY,
+  org_id       TEXT NOT NULL REFERENCES organisation(id),
+  policy_id    TEXT NOT NULL REFERENCES policy(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL,          -- inbox | processing | rejected | completed
+  source       TEXT NOT NULL,          -- home | client portal | agent | scheduler
+  requested_at TEXT NOT NULL,
+  note         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS payment (
@@ -289,9 +351,30 @@ function migrate(db: Database.Database) {
     ['agent_commission', 'REAL NOT NULL DEFAULT 0'],
     ['uploaded_at', 'TEXT'],
     ['source_file', 'TEXT'],
+    ['consultant_commission', 'REAL NOT NULL DEFAULT 0'],
+    ['loc_no', 'TEXT'],
   ];
   for (const [name, decl] of added) {
     if (!columns.has(name)) db.exec(`ALTER TABLE policy ADD COLUMN ${name} ${decl}`);
+  }
+
+  const orgColumns = new Set(
+    (db.prepare('PRAGMA table_info(organisation)').all() as { name: string }[]).map((c) => c.name),
+  );
+  for (const [name, decl] of [
+    ['logo_url', 'TEXT'], ['phone2', 'TEXT'], ['email2', 'TEXT'], ['website', 'TEXT'],
+    ['former_name', 'TEXT'], ['bank_name', 'TEXT'], ['bank_account_name', 'TEXT'],
+    ['bank_account_number', 'TEXT'], ['remark1', 'TEXT'], ['remark2', 'TEXT'],
+    ['loc_prefix', 'TEXT'], ['pos_prefix', 'TEXT'], ['invoice_template', 'TEXT'],
+  ] as [string, string][]) {
+    if (!orgColumns.has(name)) db.exec(`ALTER TABLE organisation ADD COLUMN ${name} ${decl}`);
+  }
+
+  const nmColumns = new Set(
+    (db.prepare('PRAGMA table_info(non_motor_detail)').all() as { name: string }[]).map((c) => c.name),
+  );
+  if (!nmColumns.has('class_of_business')) {
+    db.exec('ALTER TABLE non_motor_detail ADD COLUMN class_of_business TEXT');
   }
 }
 

@@ -3,11 +3,13 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import {
   getKpis, listOrgs, listOutstanding, recentSales, upcomingBirthdays, listAgentOptions, getOrg,
+  productionSummary, motorCompliance, renewalsDue,
 } from '@/lib/queries';
-import { money, longDate, today, classLabel } from '@/lib/format';
+import { classLabel, longDate, money, policyHref, today } from '@/lib/format';
 import FilterSelect from '@/components/FilterSelect';
 import OutstandingPanel from '@/components/OutstandingPanel';
 import { Help, SectionLabel, EmptyState } from '@/components/ui';
+import { Production, RenewalWatch, MotorCompliance, Calendar } from '@/components/HomeSections';
 import { IconGift, IconClipboard } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const outClient = listOutstanding(orgId, 'client', validAgent);
   const outPrincipal = listOutstanding(orgId, 'principal', validAgent);
   const sales = recentSales(orgId, validAgent, 10);
+  const production = productionSummary(orgId, year, validAgent);
+  const renewalWatch = renewalsDue(orgId, 90);
+  const compliance = motorCompliance(orgId, 12);
+
+  // Expiries falling in the current month, for the calendar.
+  const marks = new Map<string, number>();
+  for (const r of renewalsDue(orgId, 400)) {
+    if (String(r.expiry_date).slice(0, 7) !== today().slice(0, 7)) continue;
+    marks.set(r.expiry_date, (marks.get(r.expiry_date) ?? 0) + 1);
+  }
 
   const values: Record<string, string> = {
     collection30: money(kpis.collection30),
@@ -81,6 +93,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               ...agents.map((a) => ({ value: a.id, label: a.name })),
             ]}
           />
+          <Link
+            href={`/insurance/general-motor/export?${validAgent ? `agent=${validAgent}` : ''}`}
+            className="btn btn-ghost"
+          >
+            Export CSV
+          </Link>
+          <Link href="/insurance/renewals?tab=expiring" className="btn btn-primary">
+            Request renewal
+          </Link>
         </div>
       </div>
 
@@ -160,7 +181,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <tr key={s.id}>
                     <td>
                       <Link
-                        href={`/insurance/${s.class === 'motor' ? 'motor' : 'non-motor'}/${s.id}`}
+                        href={policyHref(s.class, s.id)}
                         className="link-red"
                       >
                         {s.policy_no}
@@ -183,6 +204,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </table>
           </div>
         </section>
+      </div>
+
+      <div className="mt-7">
+        <SectionLabel>Production</SectionLabel>
+        <Production rows={production} />
+      </div>
+
+      <div className="mt-7 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div>
+          <SectionLabel>Renewal watch</SectionLabel>
+          <RenewalWatch rows={renewalWatch} />
+        </div>
+        <div>
+          <SectionLabel>Calendar</SectionLabel>
+          <Calendar today={today()} marks={marks} />
+        </div>
+      </div>
+
+      <div className="mt-7">
+        <SectionLabel>Motor compliance</SectionLabel>
+        <MotorCompliance rows={compliance} />
       </div>
     </div>
   );

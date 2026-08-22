@@ -1,61 +1,120 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { listPolicies } from '@/lib/queries';
-import { money, longDate, classLabel } from '@/lib/format';
+import { listQuotations, quotationCounts } from '@/lib/queries';
+import { money, longDate, classLabel, policyHref } from '@/lib/format';
 import { PageHeader, StatusBadge } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
-export default async function QuotationsPage() {
+const TABS: { key: string; label: string }[] = [
+  { key: 'draft', label: 'Drafts' },
+  { key: 'sent', label: 'Sent' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'converted', label: 'Converted' },
+  { key: '', label: 'All' },
+];
+
+export default async function QuotationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [k: string]: string | string[] | undefined }>;
+}) {
   const user = await currentUser();
   if (!user) redirect('/login');
 
-  const rows = listPolicies(user.org_id, { status: 'quotation' });
-  const value = rows.reduce((s, r) => s + r.total_premium, 0);
+  const sp = await searchParams;
+  const tab = typeof sp.tab === 'string' && TABS.some((t) => t.key === sp.tab) ? sp.tab : '';
+  const rows = listQuotations(user.org_id, tab);
+  const counts = quotationCounts(user.org_id);
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  const value = rows.reduce((s, r) => s + Number(r.total_payable), 0);
 
   return (
     <div className="panel px-6 py-6">
       <PageHeader
         title="Quotations"
-        subtitle="Quotations issued but not yet converted into cover."
-        meta={`${rows.length} open · ${money(value)} of premium quoted`}
+        subtitle="Quote pipeline, from draft through to conversion into a policy."
+        meta={`${rows.length} shown · ${money(value)} of premium quoted`}
         actions={
           <>
-            <Link href="/insurance/motor/upload" className="btn btn-ghost">Upload PDF</Link>
-            <Link href="/insurance/motor/new" className="btn btn-primary">Create Policy</Link>
+            <Link href="/insurance/general-motor/new?from=quote" className="btn btn-ghost">
+              New motor quote
+            </Link>
+            <Link href="/insurance/non-motor/new?from=quote" className="btn btn-primary">
+              New non-motor quote
+            </Link>
           </>
         }
       />
+
+      <div className="mb-4 flex flex-wrap gap-x-5 border-b border-line">
+        {TABS.map((t) => {
+          const n = t.key === '' ? total : (counts.get(t.key) ?? 0);
+          return (
+            <Link
+              key={t.label}
+              href={t.key ? `/insurance/quotations?tab=${t.key}` : '/insurance/quotations'}
+              className={`-mb-px border-b-2 py-2.5 text-[13px] ${
+                tab === t.key
+                  ? 'border-accent font-semibold text-accent'
+                  : 'border-transparent text-ink-soft hover:text-ink'
+              }`}
+            >
+              {t.label} ({n})
+            </Link>
+          );
+        })}
+      </div>
+
       <div className="scroll-x rounded border border-line">
         <table className="tbl">
           <thead>
             <tr>
-              <th>Quotation no</th><th>Insured</th><th>Principal</th><th>Class</th>
-              <th>Product</th><th>Vehicle</th><th>Quoted for</th>
-              <th className="num">Total payable</th><th>Status</th>
+              <th>Quote no.</th>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>Principal</th>
+              <th className="num">Total payable</th>
+              <th>Valid until</th>
+              <th>Updated</th>
+              <th>Note</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((p) => (
-              <tr key={p.id}>
+            {rows.map((q) => (
+              <tr key={q.id}>
                 <td>
-                  <Link href={`/insurance/${p.class === 'motor' ? 'motor' : 'non-motor'}/${p.id}`} className="link-red">
-                    {p.policy_no}
+                  {q.policy_id ? (
+                    <Link href={policyHref(q.class, q.policy_id)} className="link-red">
+                      {q.quote_no}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold text-ink">{q.quote_no}</span>
+                  )}
+                </td>
+                <td><StatusBadge status={q.status} /></td>
+                <td className="text-ink-soft">{classLabel(q.class)}</td>
+                <td>
+                  <Link href={`/clients/${q.client_id}`} className="link-red">
+                    {q.client_name}
                   </Link>
                 </td>
-                <td className="text-ink">{p.client_name}</td>
-                <td className="font-semibold text-brand">{p.principal}</td>
-                <td className="text-ink-soft">{classLabel(p.class)}</td>
-                <td className="text-ink-soft">{p.product}</td>
-                <td className="text-ink-soft">{p.vehicle_no ?? '—'}</td>
-                <td className="text-ink-soft">{longDate(p.effective_date)}</td>
-                <td className="num font-semibold">{money(p.total_premium)}</td>
-                <td><StatusBadge status={p.status} /></td>
+                <td className="font-semibold text-brand">{q.principal}</td>
+                <td className="num font-semibold">{money(q.total_payable)}</td>
+                <td className="text-ink-soft">{longDate(q.valid_until)}</td>
+                <td className="text-ink-soft">{longDate(q.updated_at)}</td>
+                <td className="wrap text-ink-soft">{q.note ?? '—'}</td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={9} className="py-12 text-center text-[13px] text-muted">No open quotations.</td></tr>
+              <tr>
+                <td colSpan={9} className="py-12 text-center text-[13px] text-muted">
+                  No quotations in this stage.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

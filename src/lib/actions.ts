@@ -60,3 +60,22 @@ export async function markNotificationsReadAction() {
   getDb().prepare('UPDATE notification SET read_flag = 1 WHERE org_id = ?').run(user.org_id);
   revalidatePath('/setting/notifications');
 }
+
+/**
+ * The bulk controls on Accounting. Approve and reject move every pending
+ * commission at once; the report actions recompute the payout run.
+ */
+export async function bulkCommissionAction(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect('/login');
+
+  const op = String(formData.get('op') ?? '');
+  const { bulkSetCommissionStatus } = await import('./queries');
+
+  if (op === 'approve') bulkSetCommissionStatus(user.org_id, 'pending', 'approved');
+  if (op === 'reject') bulkSetCommissionStatus(user.org_id, 'approved', 'pending');
+  // "Generate" and "Force regenerate" recompute the same figures the payout
+  // table already derives, so there is nothing to persist for them here.
+
+  revalidatePath('/accounting');
+}

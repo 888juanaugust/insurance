@@ -5,14 +5,24 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { bulkPaidAction } from '@/lib/policy-actions';
 import { money, shortDate } from '@/lib/format';
+import { StatusBadge } from './ui';
 
 export type RegisterRow = Record<string, any>;
 
-const COLUMNS: { key: string; label: string; num?: boolean; sortable?: boolean }[] = [
+type Col = {
+  key: string;
+  label: string;
+  num?: boolean;
+  sortable?: boolean;
+  /** Motor-only columns drop away on the non-motor register. */
+  motorOnly?: boolean;
+};
+
+const COLUMNS: Col[] = [
   { key: 'issue_date', label: 'Issue Date', sortable: true },
   { key: 'policy_no', label: 'Policy No', sortable: true },
   { key: 'principal', label: 'Principal', sortable: true },
-  { key: 'vehicle_no', label: 'Veh.No', sortable: true },
+  { key: 'vehicle_no', label: 'Veh. No', sortable: true, motorOnly: true },
   { key: 'insured', label: 'Insured Name', sortable: true },
   { key: 'ident', label: 'NRIC / Passport / BRN', sortable: true },
   { key: 'sum_insured', label: 'Sum Insured (MYR)', num: true, sortable: true },
@@ -23,26 +33,39 @@ const COLUMNS: { key: string; label: string; num?: boolean; sortable?: boolean }
   { key: 'referral_fee', label: 'Referral Fee (MYR)', num: true, sortable: true },
   { key: 'commission_amt', label: 'Total Commission (MYR)', num: true, sortable: true },
   { key: 'agent_commission', label: 'Agent/Broker Commission (MYR)', num: true, sortable: true },
+  { key: 'consultant_commission', label: 'Sales Consultant Commission (MYR)', num: true, sortable: true },
+  { key: 'nett_amount', label: 'Nett Amount (MYR)', num: true, sortable: true },
+  { key: 'principal_nett_amount', label: 'Principal Nett Amount (MYR)', num: true, sortable: true },
+  { key: 'effective_date', label: 'Inception Date', sortable: true },
+  { key: 'expiry_date', label: 'Expiry Date', sortable: true },
+  { key: 'status', label: 'Policy Status', sortable: true },
+  { key: 'uploaded_at', label: 'Upload Date', sortable: true },
+  { key: 'client_paid', label: 'Client Paid' },
+  { key: 'loc_no', label: 'LOC' },
+  { key: 'principal_paid', label: 'Paid Principal' },
 ];
 
-const TOTALLED = new Set([
-  'sum_insured', 'gross_premium', 'service_tax', 'stamp_duty',
-  'total_premium', 'referral_fee', 'commission_amt', 'agent_commission',
-]);
+const TOTALLED = [
+  'sum_insured', 'gross_premium', 'service_tax', 'stamp_duty', 'total_premium',
+  'referral_fee', 'commission_amt', 'agent_commission', 'consultant_commission',
+  'nett_amount', 'principal_nett_amount',
+];
 
 export default function RegisterTable({
-  rows, slug, page, perPage,
+  rows, slug, page, perPage, isMotor,
 }: {
   rows: RegisterRow[];
   slug: string;
   page: number;
   perPage: number;
+  isMotor: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [selected, setSelected] = useState<string[]>([]);
 
+  const columns = useMemo(() => COLUMNS.filter((c) => isMotor || !c.motorOnly), [isMotor]);
   const sort = params.get('sort') ?? 'issue_date';
   const dir = params.get('dir') === 'asc' ? 'asc' : 'desc';
 
@@ -123,7 +146,7 @@ export default function RegisterTable({
                 />
               </th>
               <th>Action</th>
-              {COLUMNS.map((c) => (
+              {columns.map((c) => (
                 <th key={c.key} className={c.num ? 'num' : ''}>
                   {c.sortable ? (
                     <button
@@ -161,51 +184,30 @@ export default function RegisterTable({
                 </td>
                 <td>
                   <span className="flex items-center gap-2.5">
-                    <Link href={`/insurance/${slug}/${r.id}/edit`} title="Edit" className="text-[#3f7fc4] hover:text-accent">
+                    <Link href={`/insurance/${slug}/${r.id}/edit`} title="Update" className="text-[#3f7fc4] hover:text-accent">
                       <PencilIcon />
                     </Link>
                     <Link href={`/insurance/${slug}/${r.id}`} title="View" className="text-[#3f7fc4] hover:text-accent">
                       <EyeIcon />
                     </Link>
+                    <Link href={`/documents/loc/${r.id}`} title="Letter of collection" target="_blank" className="text-[#3f7fc4] hover:text-accent">
+                      <DocIcon />
+                    </Link>
+                    <Link href={`/documents/receipt/${r.id}`} title="Receipt" target="_blank" className="text-[#3f7fc4] hover:text-accent">
+                      <ReceiptIcon />
+                    </Link>
                   </span>
                 </td>
-                <td className="text-ink-soft">{shortDate(r.issue_date)}</td>
-                <td>
-                  <Link href={`/insurance/${slug}/${r.id}`} className="link-red">{r.policy_no}</Link>
-                </td>
-                <td className="font-semibold text-brand">{r.principal}</td>
-                <td className="font-semibold text-ink">{r.vehicle_no ?? '—'}</td>
-                <td className="text-ink">{r.insured}</td>
-                <td className="text-ink-soft">{r.ident || '—'}</td>
-                <td className="num">{money(r.sum_insured, 'MYR ')}</td>
-                <td className="num">{money(r.gross_premium, 'MYR ')}</td>
-                <td className="num">{money(r.service_tax, 'MYR ')}</td>
-                <td className="num">{money(r.stamp_duty, 'MYR ')}</td>
-                <td className="num font-semibold">{money(r.total_premium, 'MYR ')}</td>
-                <td className="num">{money(r.referral_fee, 'MYR ')}</td>
-                <td className="num">{money(r.commission_amt, 'MYR ')}</td>
-                <td className="num">{money(r.agent_commission, 'MYR ')}</td>
-                <td>
-                  <span className="flex gap-1">
-                    <span
-                      className={`badge ${r.client_paid === 'paid' ? 'badge-green' : 'badge-red'}`}
-                      title={r.client_paid === 'paid' ? 'Premium collected from client' : 'Premium outstanding from client'}
-                    >
-                      C
-                    </span>
-                    <span
-                      className={`badge ${r.principal_paid === 'paid' ? 'badge-green' : 'badge-red'}`}
-                      title={r.principal_paid === 'paid' ? 'Remitted to principal' : 'Not yet remitted to principal'}
-                    >
-                      P
-                    </span>
-                  </span>
-                </td>
+                {columns.map((c) => (
+                  <td key={c.key} className={cellClass(c)}>
+                    {renderCell(c, r, slug)}
+                  </td>
+                ))}
               </tr>
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={COLUMNS.length + 3} className="py-12 text-center text-[13px] text-muted">
+                <td colSpan={columns.length + 2} className="py-12 text-center text-[13px] text-muted">
                   No policies match the current filters.
                 </td>
               </tr>
@@ -214,12 +216,12 @@ export default function RegisterTable({
           {rows.length > 0 && (
             <tfoot>
               <tr className="bg-[#fafbfc] font-semibold">
-                <td colSpan={8} className="px-3 py-2.5 text-ink">Total</td>
-                {['sum_insured', 'gross_premium', 'service_tax', 'stamp_duty', 'total_premium',
-                  'referral_fee', 'commission_amt', 'agent_commission'].map((k) => (
-                  <td key={k} className="num px-3 py-2.5">{money(totals[k], 'MYR ')}</td>
+                <td colSpan={2} className="px-3 py-2.5 text-ink">Total</td>
+                {columns.map((c) => (
+                  <td key={c.key} className={c.num ? 'num px-3 py-2.5' : 'px-3 py-2.5'}>
+                    {c.num && TOTALLED.includes(c.key) ? money(totals[c.key], 'MYR ') : ''}
+                  </td>
                 ))}
-                <td />
               </tr>
             </tfoot>
           )}
@@ -260,6 +262,46 @@ export default function RegisterTable({
   );
 }
 
+function cellClass(c: Col): string {
+  if (c.num) return 'num';
+  if (c.key === 'policy_no' || c.key === 'vehicle_no') return 'font-semibold text-ink';
+  if (c.key === 'principal') return 'font-semibold text-brand';
+  return 'text-ink-soft';
+}
+
+function renderCell(c: Col, r: RegisterRow, slug: string): React.ReactNode {
+  const v = r[c.key];
+
+  if (c.num) return money(v, 'MYR ');
+
+  switch (c.key) {
+    case 'issue_date':
+    case 'effective_date':
+    case 'expiry_date':
+    case 'uploaded_at':
+      return shortDate(v);
+    case 'policy_no':
+      return (
+        <Link href={`/insurance/${slug}/${r.id}`} className="link-red">
+          {v}
+        </Link>
+      );
+    case 'status':
+      return <StatusBadge status={String(v)} />;
+    case 'client_paid':
+    case 'principal_paid':
+      return (
+        <span className={`badge ${v === 'paid' ? 'badge-green' : 'badge-red'}`}>
+          {v === 'paid' ? 'Paid' : 'Unpaid'}
+        </span>
+      );
+    case 'loc_no':
+      return v ? <span className="badge badge-blue">{String(v)}</span> : <span className="text-muted">—</span>;
+    default:
+      return v === null || v === undefined || v === '' ? '—' : String(v);
+  }
+}
+
 const PencilIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-[15px] w-[15px]">
     <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z" strokeLinejoin="round" />
@@ -269,5 +311,18 @@ const EyeIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-[15px] w-[15px]">
     <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
     <circle cx="12" cy="12" r="2.6" />
+  </svg>
+);
+const DocIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-[15px] w-[15px]">
+    <path d="M6 3.5h8l4 4v13H6Z" strokeLinejoin="round" />
+    <path d="M14 3.5V8h4" />
+    <path d="M9 13h6M9 16.5h4" strokeLinecap="round" />
+  </svg>
+);
+const ReceiptIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-[15px] w-[15px]">
+    <path d="M5 3.5h14v17l-2.3-1.5-2.4 1.5-2.3-1.5-2.4 1.5L7 19l-2 1.5Z" strokeLinejoin="round" />
+    <path d="M9 8.5h6M9 12h6" strokeLinecap="round" />
   </svg>
 );

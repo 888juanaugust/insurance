@@ -1,91 +1,137 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { renewalsDue } from '@/lib/queries';
-import { money, longDate, classLabel } from '@/lib/format';
-import { PageHeader } from '@/components/ui';
+import { listRenewalRequests, renewalCounts } from '@/lib/queries';
+import { longDate, classLabel, policyHref } from '@/lib/format';
+import { PageHeader, StatusBadge } from '@/components/ui';
+import { renewalActionForm } from '@/lib/renewal-actions';
 
 export const dynamic = 'force-dynamic';
 
-export default async function RenewalsPage() {
+const TABS = ['inbox', 'expiring', 'history'] as const;
+const LABELS: Record<string, string> = { inbox: 'Inbox', expiring: 'Expiring', history: 'History' };
+
+/**
+ * Each action is its own form: a submit button's name/value is not carried into
+ * a server action's FormData, so the operation travels as a hidden input.
+ */
+function RenewalButton({
+  op, id, policyId, cls, label, primary,
+}: {
+  op: string;
+  id?: string;
+  policyId: string;
+  cls: string;
+  label: string;
+  primary?: boolean;
+}) {
+  return (
+    <form action={renewalActionForm}>
+      <input type="hidden" name="op" value={op} />
+      {id && <input type="hidden" name="id" value={id} />}
+      <input type="hidden" name="policy_id" value={policyId} />
+      <input type="hidden" name="cls" value={cls} />
+      <button type="submit" className={`btn ${primary ? 'btn-primary' : 'btn-ghost'} px-2.5 py-1 text-[12px]`}>
+        {label}
+      </button>
+    </form>
+  );
+}
+
+export default async function RenewalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [k: string]: string | string[] | undefined }>;
+}) {
   const user = await currentUser();
   if (!user) redirect('/login');
 
-  const due = renewalsDue(user.org_id, 120);
-  const buckets = [
-    { label: 'Expiring within 30 days', rows: due.filter((r) => r.days_left <= 30) },
-    { label: '31 – 60 days', rows: due.filter((r) => r.days_left > 30 && r.days_left <= 60) },
-    { label: '61 – 120 days', rows: due.filter((r) => r.days_left > 60) },
-  ];
+  const sp = await searchParams;
+  const tab = (TABS as readonly string[]).includes(String(sp.tab)) ? (sp.tab as (typeof TABS)[number]) : 'inbox';
+  const rows = listRenewalRequests(user.org_id, tab);
+  const counts = renewalCounts(user.org_id);
 
   return (
-    <div className="space-y-4">
-      <div className="panel px-6 py-6">
-        <PageHeader
-          title="Renewals"
-          subtitle="Policies approaching expiry, so the renewal can be quoted before cover lapses."
-          meta={`${due.length} policies expiring in the next 120 days · ${money(due.reduce((s, r) => s + r.total_premium, 0))} of premium at risk`}
-        />
-        <div className="grid gap-4 sm:grid-cols-3">
-          {buckets.map((b) => (
-            <div key={b.label} className="rounded border border-line px-5 py-4">
-              <p className="sec-label">{b.label}</p>
-              <p className="mt-2 text-[22px] font-semibold tracking-tight text-ink">{b.rows.length}</p>
-              <p className="mt-1 text-[12px] text-muted">
-                {money(b.rows.reduce((s, r) => s + r.total_premium, 0))} premium
-              </p>
-            </div>
-          ))}
-        </div>
+    <div className="panel px-6 py-6">
+      <PageHeader
+        title="Renewals"
+        subtitle="Renewal requests raised from Home, the client portal and the expiry scheduler."
+        meta={`${counts.inbox} in the inbox · ${counts.expiring} expiring within 60 days`}
+      />
+
+      <div className="mb-4 flex flex-wrap gap-x-5 border-b border-line">
+        {TABS.map((t) => (
+          <Link
+            key={t}
+            href={`/insurance/renewals?tab=${t}`}
+            className={`-mb-px border-b-2 py-2.5 text-[13px] ${
+              tab === t ? 'border-accent font-semibold text-accent' : 'border-transparent text-ink-soft hover:text-ink'
+            }`}
+          >
+            {LABELS[t]} ({counts[t]})
+          </Link>
+        ))}
       </div>
 
-      <div className="panel">
-        <div className="panel-head">Expiring policies</div>
-        <div className="scroll-x">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Policy no</th><th>Insured</th><th>Principal</th><th>Class</th>
-                <th>Vehicle</th><th>Expires</th><th className="num">Days left</th>
-                <th className="num">Last premium</th><th>Contact</th><th>Action</th>
+      <div className="scroll-x rounded border border-line">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Policy No</th>
+              <th>Client</th>
+              <th>Principal</th>
+              <th>Requested</th>
+              <th>Source</th>
+              <th>Note</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <Link href={policyHref(r.class, r.policy_id)} className="link-red">
+                    {r.policy_no}
+                  </Link>
+                </td>
+                <td className="text-ink">{r.client_name}</td>
+                <td className="font-semibold text-brand">{r.principal}</td>
+                <td className="text-ink-soft">{r.requested_at ? longDate(r.requested_at) : '—'}</td>
+                <td className="text-ink-soft">{r.source}</td>
+                <td className="wrap text-ink-soft">{r.note ?? '—'}</td>
+                <td>
+                  {tab === 'history' ? (
+                    <StatusBadge status={r.status} />
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {tab === 'expiring' ? (
+                        <>
+                          <RenewalButton op="request" policyId={r.policy_id} cls={r.class} label="Request renewal" />
+                          <Link href={policyHref(r.class, r.policy_id)} className="btn btn-ghost px-2.5 py-1 text-[12px]">
+                            View policy
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <RenewalButton op="quote" id={r.id} policyId={r.policy_id} cls={r.class} label="Create quotation" primary />
+                          <RenewalButton op="process" id={r.id} policyId={r.policy_id} cls={r.class} label="Process renewal" />
+                          <RenewalButton op="reject" id={r.id} policyId={r.policy_id} cls={r.class} label="Reject" />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {due.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Link href={`/insurance/${r.class === 'motor' ? 'motor' : 'non-motor'}/${r.id}`} className="link-red">
-                      {r.policy_no}
-                    </Link>
-                  </td>
-                  <td className="text-ink">{r.insured}</td>
-                  <td className="font-semibold text-brand">{r.principal}</td>
-                  <td className="text-ink-soft">{classLabel(r.class)}</td>
-                  <td className="text-ink-soft">{r.vehicle_no ?? '—'}</td>
-                  <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
-                  <td className="num">
-                    <span className={`badge ${r.days_left <= 30 ? 'badge-red' : r.days_left <= 60 ? 'badge-amber' : 'badge-grey'}`}>
-                      {r.days_left}
-                    </span>
-                  </td>
-                  <td className="num">{money(r.total_premium)}</td>
-                  <td className="text-ink-soft">{r.phone}</td>
-                  <td>
-                    <Link
-                      href={`/insurance/${r.class === 'motor' ? 'motor' : 'non-motor'}/upload`}
-                      className="btn btn-ghost px-2.5 py-1 text-[12px]"
-                    >
-                      Upload renewal
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {due.length === 0 && (
-                <tr><td colSpan={10} className="py-12 text-center text-[13px] text-muted">Nothing due in the next 120 days.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-[13px] text-muted">
+                  Nothing in {LABELS[tab].toLowerCase()}.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import {
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
   listPrincipals, type PolicyInput,
 } from './queries';
-import { today } from './format';
+import { classSlug, today } from './format';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
@@ -228,9 +228,9 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   if (editingId) {
     const ok = updatePolicy(editingId, user.org_id, input);
     if (!ok) return { error: 'That policy could not be found.' };
-    revalidatePath('/insurance/motor');
+    revalidatePath('/insurance/general-motor');
     revalidatePath('/insurance/non-motor');
-    redirect(`/insurance/${input.class === 'motor' ? 'motor' : 'non-motor'}/${editingId}`);
+    redirect(`/insurance/${classSlug(input.class)}/${editingId}`);
   }
 
   if (findPolicyByNumber(user.org_id, policyNo) && str(fd, 'allow_duplicate') !== '1') {
@@ -238,10 +238,10 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
 
   const id = createPolicy(input, { uploadedAt: today() });
-  revalidatePath('/insurance/motor');
+  revalidatePath('/insurance/general-motor');
   revalidatePath('/insurance/non-motor');
   revalidatePath('/');
-  redirect(`/insurance/${input.class === 'motor' ? 'motor' : 'non-motor'}/${id}`);
+  redirect(`/insurance/${classSlug(input.class)}/${id}`);
 }
 
 export async function deletePolicyAction(fd: FormData) {
@@ -260,7 +260,7 @@ export async function bulkPaidAction(fd: FormData) {
   const kind = String(fd.get('kind') ?? '') === 'principal' ? 'principal' : 'client';
   const ids = fd.getAll('selected').map(String).filter(Boolean);
   bulkMarkPaid(ids, user.org_id, kind);
-  revalidatePath(String(fd.get('back') ?? '/insurance/motor'));
+  revalidatePath(String(fd.get('back') ?? '/insurance/general-motor'));
   revalidatePath('/');
 }
 

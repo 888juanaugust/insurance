@@ -17,7 +17,7 @@ const MODULES = [
     body: 'Stores insured and client details, and provides the portal through which a client logs in to view their own policy details.',
   },
   {
-    href: '/insurance/motor',
+    href: '/insurance/general-motor',
     title: 'Insurance — General Motor',
     body: 'Holds motor policy details: vehicle particulars, period of insurance, sums insured, NCD, extensions and the full premium computation.',
   },

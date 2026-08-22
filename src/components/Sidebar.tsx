@@ -18,10 +18,10 @@ type Item = {
 
 const ITEMS: Item[] = [
   { href: '/', label: 'Home', icon: IconHome },
-  { href: '/sub-agents', label: 'Sub Agents', icon: IconUsers },
+  { href: '/team', label: 'Sub Agents', icon: IconUsers },
   { href: '/organisation', label: 'Organisation', icon: IconGlobe },
   { href: '/clients', label: 'Clients', icon: IconClients },
-  { href: '/grouping-client', label: 'Grouping Client', icon: IconGroup },
+  { href: '/client-groups', label: 'Grouping Client', icon: IconGroup },
   { href: '/client-planning', label: 'Client Planning (Life Insurance)', icon: IconPlanning },
   {
     href: '/insurance',
@@ -29,16 +29,16 @@ const ITEMS: Item[] = [
     icon: IconShield,
     children: [
       { href: '/insurance/quotations', label: 'Quotations' },
-      { href: '/insurance/motor', label: 'General Motor' },
+      { href: '/insurance/general-motor', label: 'General Motor' },
       { href: '/insurance/non-motor', label: 'General Non-Motor' },
       { href: '/insurance/reconcile', label: 'Reconcile' },
       { href: '/insurance/renewals', label: 'Renewals' },
-      { href: '/insurance/employee-benefits', label: 'Employee Benefits' },
+      { href: '/insurance/endorsement', label: 'Employee Benefits' },
     ],
   },
   { href: '/reports', label: 'Reports', icon: IconReports },
   { href: '/accounting', label: 'Accounting', icon: IconAccounting },
-  { href: '/setting', label: 'Setting', icon: IconSetting },
+  { href: '/settings', label: 'Setting', icon: IconSetting },
   { href: '/user-guide', label: 'User Guide', icon: IconGuide },
   { href: '/contact-us', label: 'Contact Us', icon: IconContact },
 ];
@@ -147,9 +147,9 @@ export default function Sidebar({ logout }: { logout: () => Promise<void> }) {
         <div className="border-t border-line px-4 py-3 text-[11px] leading-relaxed text-muted">
           © 2026 Simplicity Consulting Sdn Bhd
           <div className="mt-1">
-            <Link href="/terms" className="text-link hover:underline">Terms</Link>
+            <Link href="/terms-and-conditions" className="text-link hover:underline">Terms</Link>
             <span className="px-1 text-line">|</span>
-            <Link href="/privacy" className="text-link hover:underline">Privacy</Link>
+            <Link href="/privacy-policy" className="text-link hover:underline">Privacy</Link>
           </div>
         </div>
       )}

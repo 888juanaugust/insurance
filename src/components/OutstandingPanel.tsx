@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { IconCash, IconSearch } from './icons';
 import { Help } from './ui';
-import { money, classLabel } from '@/lib/format';
+import { classLabel, money, policyHref, shortDate } from '@/lib/format';
 
 export type OutRow = {
   id: string; policy_no: string; class: string; insured: string; principal: string;
@@ -100,6 +100,7 @@ export default function OutstandingPanel({
                   # of days <Help text="Days elapsed since the premium became due." />
                 </span>
               </th>
+              <th>Pay By</th>
               <th className="num">Outstanding</th>
             </tr>
           </thead>
@@ -108,7 +109,7 @@ export default function OutstandingPanel({
               <tr key={r.id}>
                 <td>
                   <Link
-                    href={`/insurance/${r.class === 'motor' ? 'motor' : 'non-motor'}/${r.id}`}
+                    href={policyHref(r.class, r.id)}
                     className="link-red"
                   >
                     {r.policy_no}
@@ -118,6 +119,7 @@ export default function OutstandingPanel({
                 <td className="font-semibold text-brand">{r.principal}</td>
                 <td className="text-ink-soft">{classLabel(r.class)}</td>
                 <td className="num text-ink-soft">{r.days}</td>
+                <td className="text-ink-soft">{shortDate(r.due_date)}</td>
                 <td className="num">
                   <span className="badge badge-red">Premium {money(r.outstanding, 'RM ')}</span>
                 </td>
@@ -125,7 +127,7 @@ export default function OutstandingPanel({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-[13px] text-muted">
+                <td colSpan={7} className="py-10 text-center text-[13px] text-muted">
                   No outstanding records match your search.
                 </td>
               </tr>

@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { savePolicyAction } from '@/lib/policy-actions';
 import type { ExtractionResult, FieldKey } from '@/lib/extract';
+import { classSlug } from '@/lib/format';
 
 export type Option = { value: string; label: string };
 
@@ -263,7 +264,7 @@ export default function PolicyForm({
         <button type="submit" disabled={pending} className="btn btn-primary disabled:opacity-60">
           {pending ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Save policy'}
         </button>
-        <a href={`/insurance/${cls === 'motor' ? 'motor' : 'non-motor'}`} className="btn btn-ghost">Cancel</a>
+        <a href={`/insurance/${classSlug(cls)}`} className="btn btn-ghost">Cancel</a>
       </div>
     </form>
   );

@@ -54,13 +54,16 @@ export default async function ClientsPage({
             <tr>
               <th>Name</th>
               <th>Type</th>
-              <th>NRIC / Business reg no</th>
-              <th>Contact</th>
               <th>Group</th>
+              <th>Identity</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>DOB</th>
               <th className="num">Policies</th>
               <th className="num">Outstanding</th>
               <th>Portal</th>
               <th>Registered</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -72,12 +75,11 @@ export default async function ClientsPage({
                   </Link>
                 </td>
                 <td className="text-ink-soft capitalize">{c.client_type}</td>
-                <td className="text-ink-soft">{c.nric || c.business_reg || '—'}</td>
-                <td className="text-ink-soft">
-                  {c.phone}
-                  <span className="block text-[12px] text-muted">{c.email}</span>
-                </td>
                 <td className="text-ink-soft">{c.group_name ?? '—'}</td>
+                <td className="text-ink-soft">{c.nric || c.business_reg || '—'}</td>
+                <td className="text-ink-soft">{c.phone}</td>
+                <td className="text-ink-soft">{c.email}</td>
+                <td className="text-ink-soft">{c.dob ? longDate(c.dob) : '—'}</td>
                 <td className="num">{c.policy_count}</td>
                 <td className="num">
                   {Number(c.outstanding) > 0 ? (
@@ -92,11 +94,16 @@ export default async function ClientsPage({
                   </span>
                 </td>
                 <td className="text-ink-soft">{longDate(c.created_at)}</td>
+                <td>
+                  <Link href={`/clients/${c.id}`} className="text-[12.5px] text-[#3f7fc4] hover:underline">
+                    View
+                  </Link>
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-[13px] text-muted">
+                <td colSpan={12} className="py-12 text-center text-[13px] text-muted">
                   No clients match your search.
                 </td>
               </tr>

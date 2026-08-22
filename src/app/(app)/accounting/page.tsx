@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import { listCommissions, commissionTotals } from '@/lib/queries';
-import { money, longDate, classLabel } from '@/lib/format';
+import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { PageHeader, StatusBadge, Help } from '@/components/ui';
-import { approveCommissionAction } from '@/lib/actions';
+import { approveCommissionAction, bulkCommissionAction } from '@/lib/actions';
 import FilterSelect from '@/components/FilterSelect';
+import { commissionByAgent } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,18 @@ function StatusButton({
   );
 }
 
+/** One form per control — see RenewalButton for why the op is a hidden input. */
+function BulkButton({ op, label, primary }: { op: string; label: string; primary?: boolean }) {
+  return (
+    <form action={bulkCommissionAction}>
+      <input type="hidden" name="op" value={op} />
+      <button type="submit" className={`btn ${primary ? 'btn-primary' : 'btn-ghost'}`}>
+        {label}
+      </button>
+    </form>
+  );
+}
+
 export default async function AccountingPage({
   searchParams,
 }: {
@@ -41,8 +54,10 @@ export default async function AccountingPage({
 
   const sp = await searchParams;
   const status = typeof sp.status === 'string' ? sp.status : '';
+  const tab = sp.tab === 'einvoice' ? 'einvoice' : 'monthly';
   const rows = listCommissions(user.org_id, status);
   const totals = commissionTotals(user.org_id);
+  const byAgent = commissionByAgent(user.org_id);
 
   return (
     <div className="space-y-4">
@@ -84,6 +99,90 @@ export default async function AccountingPage({
         </div>
       </div>
 
+      <div className="panel px-6 py-2">
+        <div className="flex flex-wrap gap-x-5 border-b border-line">
+          {[
+            ['monthly', 'Monthly reports (audit)'],
+            ['einvoice', 'e-Invoice · Agent commission'],
+          ].map(([key, label]) => (
+            <Link
+              key={key}
+              href={key === 'monthly' ? '/accounting' : '/accounting?tab=einvoice'}
+              className={`-mb-px border-b-2 py-2.5 text-[13px] ${
+                tab === key
+                  ? 'border-accent font-semibold text-accent'
+                  : 'border-transparent text-ink-soft hover:text-ink'
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 py-3">
+          <BulkButton op="regenerate" label="Generate / update reports" />
+          <BulkButton op="force" label="Force regenerate…" />
+          <BulkButton op="approve" label="Bulk approve (all pending)" primary />
+          <BulkButton op="reject" label="Bulk reject (all pending)" />
+        </div>
+      </div>
+
+      {tab === 'einvoice' && (
+        <div className="panel">
+          <div className="panel-head">
+            Agent commission — e-Invoice
+            <Help text="Self-billed e-Invoice is raised by the agency on the sub agent's behalf, so the agency needs their TIN on file." />
+          </div>
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th className="num">Total Amount</th>
+                  <th className="num">Policies</th>
+                  <th>Audit</th>
+                  <th>Payout status</th>
+                  <th className="num">Scheduled</th>
+                  <th className="num">Paid</th>
+                  <th>Last generated</th>
+                  <th>E-invoice</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byAgent.map((a) => (
+                  <tr key={a.id}>
+                    <td className="font-semibold text-ink">
+                      {a.name}
+                      <span className="block text-[12px] text-muted">{a.agent_code}</span>
+                    </td>
+                    <td className="num font-semibold">{money(a.total_amount)}</td>
+                    <td className="num">{a.policies}</td>
+                    <td className="text-ink-soft">
+                      {a.einvoice_tin ? (
+                        <span className="badge badge-green">TIN on file</span>
+                      ) : (
+                        <span className="badge badge-amber">TIN missing</span>
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={a.pending > 0 ? 'pending' : a.scheduled > 0 ? 'approved' : 'paid'} />
+                    </td>
+                    <td className="num">{money(a.scheduled)}</td>
+                    <td className="num">{money(a.paid)}</td>
+                    <td className="text-ink-soft">{a.last_generated ? longDate(a.last_generated) : '—'}</td>
+                    <td>
+                      <span className={`badge ${a.self_billed ? 'badge-blue' : 'badge-grey'}`}>
+                        {a.self_billed ? 'Self-billed' : 'Not enabled'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="panel">
         <div className="panel-head">
           Commission payout
@@ -113,7 +212,7 @@ export default async function AccountingPage({
                 <tr key={r.id}>
                   <td>
                     <Link
-                      href={`/insurance/${r.class === 'motor' ? 'motor' : 'non-motor'}/${r.policy_id}`}
+                      href={policyHref(r.class, r.policy_id)}
                       className="link-red"
                     >
                       {r.policy_no}
