@@ -5,7 +5,7 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
-# local data store
+# local data store (the database is created and seeded on first run)
 data/*.db
 data/*.db-journal
 data/*.db-wal

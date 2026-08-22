@@ -12,7 +12,7 @@ export type Org = {
 };
 
 export type PolicyRow = {
-  id: string; policy_no: string; cover_note_no: string | null; class: string; product: string;
+  id: string; org_id: string; policy_no: string; cover_note_no: string | null; class: string; product: string;
   type_of_cover: string; status: string; case_type: string; effective_date: string;
   expiry_date: string; issue_date: string; created_date: string; sum_insured: number;
   basic_premium: number; ncd_pct: number; ncd_amount: number; extra_premium: number;
