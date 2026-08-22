@@ -20,7 +20,7 @@ export default async function ContactUsPage() {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="panel px-6 py-6">
-        <PageHeader title="Contact Us" subtitle="Support and account enquiries for your SimSuite subscription." />
+        <PageHeader title="Contact Us" subtitle="Support and account enquiries for your Insurance Helper subscription." />
         <div>
           <Row label="Company" value="Simplicity Consulting Sdn. Bhd." />
           <Row

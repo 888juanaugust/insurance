@@ -4,7 +4,7 @@ import path from 'node:path';
 import { seed } from './seed';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = process.env.SIMSUITE_DB ?? path.join(DATA_DIR, 'simsuite.db');
+const DB_PATH = process.env.IH_DB ?? path.join(DATA_DIR, 'insurance-helper.db');
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;

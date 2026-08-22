@@ -1,8 +1,11 @@
-# SimSuite — insurance agency management (clone)
+# Insurance Helper
 
-A working clone of the SimSuite agency portal: a Next.js application for a Malaysian
-general-insurance agency that tracks clients, motor and non-motor policies, premium
-collection, remittance to principals, and sub agent commission.
+A Next.js application for a Malaysian general-insurance agency: clients, motor and
+non-motor policies, premium collection, remittance to principals, and sub agent
+commission — with policy documents read straight out of the insurer's PDF.
+
+The screen structure follows a teardown of the SimSuite staging app, so routes and
+field lists match a system agencies already know.
 
 ## Running it
 
@@ -18,7 +21,7 @@ Sign in with:
 | `exemaster3@gmail.com` | `12345Abcdefg` |
 | `boonseng_agent@yahoo.com` | `12345Abcdefg` |
 
-The SQLite database is created and seeded automatically at `data/simsuite.db` on first
+The SQLite database is created and seeded automatically at `data/insurance-helper.db` on first
 request. `npm run db:reset` deletes it so the next request reseeds from scratch.
 
 ```bash
@@ -28,7 +31,7 @@ npm run typecheck            # tsc --noEmit
 
 ## What is in it
 
-Routes and field lists follow a teardown of the live staging app, so paths match
+Routes and field lists follow a teardown of the SimSuite staging app, so paths match
 (`/team`, `/client-groups`, `/insurance/general-motor`, `/settings`) rather than being
 invented.
 
@@ -83,7 +86,7 @@ more blanks to fill in. Configure the model pass with:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
-export SIMSUITE_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
+export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
 ```
 
 ## How the money adds up
@@ -132,7 +135,7 @@ src/
     format.ts       currency and date helpers
 ```
 
-## Divergences from the live app
+## Divergences from the reference app
 
 - **Employee Benefits** is served from `/insurance/endorsement` to match the live route, but
   the live build renders the Renewals screen there — a wiring bug noted in the teardown. This
@@ -146,10 +149,10 @@ src/
 
 ## Notes
 
-- Set `SIMSUITE_TODAY=2026-08-22` to pin "today" so the seeded figures stay put; otherwise
+- Set `IH_TODAY=2026-08-22` to pin "today" so the seeded figures stay put; otherwise
   the dashboard uses the real current date and the 30-day windows move with it.
-- `SIMSUITE_SECRET` signs the session cookie and should be set to a real secret outside of
-  local development. `SIMSUITE_DB` overrides the database path.
+- `IH_SECRET` signs the session cookie and should be set to a real secret outside of
+  local development. `IH_DB` overrides the database path.
 - Uploads are capped at 15 MB, enforced in the browser and again in the server action. Next.js
   caps Server Action bodies at 1 MB by default, so `serverActions.bodySizeLimit` is raised to
   match — lower it and larger PDFs fail before the action can report anything useful.

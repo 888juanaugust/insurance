@@ -39,7 +39,7 @@ export default async function PrivacyPage() {
     <div className="panel px-6 py-6">
       <PageHeader
         title="Privacy Notice"
-        subtitle="How personal data recorded in SimSuite is handled."
+        subtitle="How personal data recorded in Insurance Helper is handled."
         meta="Copyright © 2020–2026 Simplicity Consulting Sdn. Bhd. All rights reserved."
       />
       <div className="max-w-[820px] space-y-5">

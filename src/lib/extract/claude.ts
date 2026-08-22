@@ -83,7 +83,7 @@ export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Prom
   }
 
   const client = new Anthropic();
-  const model = process.env.SIMSUITE_EXTRACT_MODEL ?? 'claude-opus-5';
+  const model = process.env.IH_EXTRACT_MODEL ?? 'claude-opus-5';
 
   // The schedule always sits in the opening pages; the rest is policy wording.
   const head = doc.pages.slice(0, 5).flat().join('\n');

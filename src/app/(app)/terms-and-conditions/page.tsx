@@ -39,7 +39,7 @@ export default async function TermsPage() {
     <div className="panel px-6 py-6">
       <PageHeader
         title="Terms of Service"
-        subtitle="Summary of the SimSuite SaaS cloud service subscription terms."
+        subtitle="Summary of the Insurance Helper cloud service subscription terms."
         meta="Copyright © 2020–2026 Simplicity Consulting Sdn. Bhd. All rights reserved."
       />
       <div className="max-w-[820px] space-y-5">

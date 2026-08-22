@@ -1,15 +1,15 @@
 {
-  "name": "simsuite-clone",
+  "name": "insurance-helper",
   "version": "1.0.0",
   "private": true,
-  "description": "SimSuite — insurance agency management SaaS (clone)",
+  "description": "Insurance Helper — insurance agency management for motor and non-motor portfolios",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:reset": "rm -f data/simsuite.db data/simsuite.db-wal data/simsuite.db-shm"
+    "db:reset": "rm -f data/insurance-helper.db data/insurance-helper.db-wal data/insurance-helper.db-shm"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

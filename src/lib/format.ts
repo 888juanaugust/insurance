@@ -32,7 +32,7 @@ export function shortDate(iso: string | null | undefined): string {
 
 /** Server "today" as an ISO date string; overridable so the demo data stays put. */
 export function today(): string {
-  return process.env.SIMSUITE_TODAY ?? new Date().toISOString().slice(0, 10);
+  return process.env.IH_TODAY ?? new Date().toISOString().slice(0, 10);
 }
 
 export function classLabel(cls: string): string {

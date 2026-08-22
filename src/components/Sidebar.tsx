@@ -59,7 +59,7 @@ export default function Sidebar({ logout }: { logout: () => Promise<void> }) {
     >
       <div className="flex h-[62px] items-center gap-2 px-4">
         <Logo className="h-7 w-7 shrink-0" />
-        {!collapsed && <span className="truncate text-[19px] font-semibold tracking-tight">Sim Suite</span>}
+        {!collapsed && <span className="truncate text-[19px] font-semibold tracking-tight">Insurance Helper</span>}
       </div>
 
       <button

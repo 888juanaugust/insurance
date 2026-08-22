@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
 import { getDb } from './db';
 
-const COOKIE = 'simsuite_session';
-const SECRET = process.env.SIMSUITE_SECRET ?? 'simsuite-dev-secret-change-me';
+const COOKIE = 'ih_session';
+const SECRET = process.env.IH_SECRET ?? 'insurance-helper-dev-secret-change-me';
 
 export type SessionUser = {
   id: string;

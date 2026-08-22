@@ -34,7 +34,7 @@ export default async function OrganisationPage() {
       <div className="panel px-6 py-6">
         <PageHeader
           title="Organisation"
-          subtitle="Company particulars registered against this SimSuite subscription."
+          subtitle="Company particulars registered against this Insurance Helper subscription."
           meta={`${org.name} · code ${org.code} · live since ${longDate(org.kick_start_date)}`}
         />
         <dl className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
