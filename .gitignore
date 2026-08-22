@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# local data store
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+.env
+.env.local
+.DS_Store
+npm-debug.log*
+
+# local verification artifacts
+.verify/
+*.tmp.js
