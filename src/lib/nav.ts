@@ -4,15 +4,31 @@
  * to a contextual second row that only appears where there is more than one
  * screen underneath.
  */
-export type NavChild = { href: string; label: string; hint?: string };
-export type NavSection = { key: string; href: string; label: string; children?: NavChild[] };
+export type NavChild = { href: string; label: string; hint?: string; count?: CountKey };
+export type NavSection = {
+  key: string;
+  href: string;
+  label: string;
+  icon: IconKey;
+  children?: NavChild[];
+  /** Rolls the children's counts up onto the section when collapsed. */
+  count?: CountKey;
+};
+
+/** Which live figure, if any, this entry carries. */
+export type CountKey = 'renewals' | 'accounts' | 'quotations';
+
+export type IconKey =
+  | 'overview' | 'clients' | 'policies' | 'renewals'
+  | 'accounts' | 'reports' | 'team' | 'settings';
 
 export const NAV: NavSection[] = [
-  { key: 'overview', href: '/', label: 'Overview' },
+  { key: 'overview', href: '/', label: 'Overview', icon: 'overview' },
   {
     key: 'clients',
     href: '/clients',
     label: 'Clients',
+    icon: 'clients',
     children: [
       { href: '/clients', label: 'All clients', hint: 'Individuals and companies' },
       { href: '/client-groups', label: 'Groups', hint: 'Fleets, families, affinity blocks' },
@@ -23,28 +39,33 @@ export const NAV: NavSection[] = [
     key: 'policies',
     href: '/insurance/general-motor',
     label: 'Policies',
+    icon: 'policies',
+    count: 'quotations',
     children: [
       { href: '/insurance/general-motor', label: 'Motor', hint: 'Private car, commercial, motorcycle' },
       { href: '/insurance/non-motor', label: 'Non-motor', hint: 'Fire, PA, medical, liability' },
-      { href: '/insurance/quotations', label: 'Quotations', hint: 'Quote pipeline' },
+      { href: '/insurance/quotations', label: 'Quotations', hint: 'Quote pipeline', count: 'quotations' },
       { href: '/insurance/endorsement', label: 'Employee benefits', hint: 'Group schemes' },
     ],
   },
-  { key: 'renewals', href: '/insurance/renewals', label: 'Renewals' },
+  { key: 'renewals', href: '/insurance/renewals', label: 'Renewals', icon: 'renewals', count: 'renewals' },
   {
     key: 'accounts',
     href: '/accounting',
     label: 'Accounts',
+    icon: 'accounts',
+    count: 'accounts',
     children: [
-      { href: '/accounting', label: 'Commission payout', hint: 'Approve and pay agents' },
+      { href: '/accounting', label: 'Commission payout', hint: 'Approve and pay agents', count: 'accounts' },
       { href: '/insurance/reconcile', label: 'Reconcile', hint: 'Receivable against payable' },
     ],
   },
-  { key: 'reports', href: '/reports', label: 'Reports' },
+  { key: 'reports', href: '/reports', label: 'Reports', icon: 'reports' },
   {
     key: 'team',
     href: '/team',
     label: 'Team',
+    icon: 'team',
     children: [
       { href: '/team', label: 'Agents', hint: 'Downline and commission structure' },
       { href: '/organisation', label: 'Organisation', hint: 'Company profile and billing identity' },
@@ -54,6 +75,7 @@ export const NAV: NavSection[] = [
     key: 'settings',
     href: '/settings',
     label: 'Settings',
+    icon: 'settings',
     children: [
       { href: '/settings', label: 'Your profile', hint: 'e-Invoice identity and password' },
       { href: '/settings/global', label: 'Rates and insurers', hint: 'Commission rates, principals' },

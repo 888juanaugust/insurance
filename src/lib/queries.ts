@@ -1238,3 +1238,122 @@ export function motorCompliance(orgId: string, limit = 12) {
     )
     .all({ org: orgId, t: today(), lim: limit }) as Array<Record<string, any>>;
 }
+
+/**
+ * Counts shown against the navigation, so a person can see where the work is
+ * without opening each screen.
+ */
+export function navCounts(orgId: string) {
+  const db = getDb();
+  const one = (sql: string) => (db.prepare(sql).get(orgId) as { v: number }).v;
+
+  return {
+    renewals: one(
+      "SELECT COUNT(*) v FROM renewal_request WHERE org_id = ? AND status IN ('inbox','processing')",
+    ),
+    accounts: one(
+      `SELECT COUNT(*) v FROM commission cm JOIN policy p ON p.id = cm.policy_id
+        WHERE p.org_id = ? AND cm.status = 'pending'`,
+    ),
+    quotations: one(
+      "SELECT COUNT(*) v FROM quotation WHERE org_id = ? AND status IN ('draft','sent')",
+    ),
+    notifications: one('SELECT COUNT(*) v FROM notification WHERE org_id = ? AND read_flag = 0'),
+  };
+}
+
+/* ------------------------------------------------------------- sub agents */
+
+export type SubAgentInput = {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  nric: string | null;
+  agent_code: string | null;
+  rank: string | null;
+  motor_rate: number;
+  non_motor_rate: number;
+  override_rate: number;
+  bank_name: string | null;
+  bank_account: string | null;
+  einvoice_tin: string | null;
+  self_billed: number;
+  join_date: string | null;
+  status: string;
+};
+
+const SUB_AGENT_COLUMNS = [
+  'name', 'email', 'phone', 'nric', 'agent_code', 'rank', 'motor_rate', 'non_motor_rate',
+  'override_rate', 'bank_name', 'bank_account', 'einvoice_tin', 'self_billed', 'join_date', 'status',
+] as const;
+
+export function getSubAgent(id: string) {
+  return getDb().prepare('SELECT * FROM sub_agent WHERE id = ?').get(id) as Record<string, any> | undefined;
+}
+
+export function createSubAgent(orgId: string, input: SubAgentInput): string {
+  const id = newId('sa');
+  getDb()
+    .prepare(
+      `INSERT INTO sub_agent (id, org_id, ${SUB_AGENT_COLUMNS.join(', ')})
+       VALUES (@id, @org_id, ${SUB_AGENT_COLUMNS.map((c) => '@' + c).join(', ')})`,
+    )
+    .run({ ...input, id, org_id: orgId });
+  return id;
+}
+
+export function updateSubAgent(id: string, orgId: string, input: SubAgentInput): boolean {
+  const info = getDb()
+    .prepare(
+      `UPDATE sub_agent SET ${SUB_AGENT_COLUMNS.map((c) => `${c} = @${c}`).join(', ')}
+        WHERE id = @id AND org_id = @org_id`,
+    )
+    .run({ ...input, id, org_id: orgId });
+  return info.changes > 0;
+}
+
+export function setSubAgentStatus(id: string, orgId: string, status: string): boolean {
+  const info = getDb()
+    .prepare('UPDATE sub_agent SET status = ? WHERE id = ? AND org_id = ?')
+    .run(status, id, orgId);
+  return info.changes > 0;
+}
+
+/** An agent code has to be unique within the agency, or payouts get misfiled. */
+export function findSubAgentByCode(orgId: string, code: string, excludeId?: string) {
+  return getDb()
+    .prepare(
+      `SELECT id, name FROM sub_agent
+        WHERE org_id = ? AND (? = '' OR id != ?) AND upper(COALESCE(agent_code,'')) = upper(?)
+        LIMIT 1`,
+    )
+    .get(orgId, excludeId ?? '', excludeId ?? '', code) as { id: string; name: string } | undefined;
+}
+
+export function subAgentPolicyCount(id: string): number {
+  const row = getDb().prepare('SELECT COUNT(*) n FROM policy WHERE sub_agent_id = ?').get(id) as { n: number };
+  return row.n;
+}
+
+export function deleteSubAgent(id: string, orgId: string): boolean {
+  if (subAgentPolicyCount(id) > 0) return false;
+  const db = getDb();
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM commission WHERE sub_agent_id = ?').run(id);
+    db.prepare('DELETE FROM sub_agent WHERE id = ? AND org_id = ?').run(id, orgId);
+  });
+  tx();
+  return true;
+}
+
+/**
+ * The agency is paid a percentage by the insurer and passes part of it on. A
+ * rate above what any insurer pays would lose money on every single policy.
+ */
+export function principalRateCeiling(cls: 'motor' | 'non_motor') {
+  const column = cls === 'motor' ? 'motor_rate' : 'non_motor_rate';
+  const row = getDb()
+    .prepare(`SELECT MIN(${column}) lo, MAX(${column}) hi FROM principal WHERE status = 'active'`)
+    .get() as { lo: number | null; hi: number | null };
+  return { lo: row.lo ?? 0, hi: row.hi ?? 0 };
+}

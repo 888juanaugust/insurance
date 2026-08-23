@@ -93,6 +93,13 @@ export default function ClientForm({ mode, groups, initial, policyCount = 0 }: C
   }
   const [nric, setNric] = useState(String(initial.nric ?? ''));
   const [dob, setDob] = useState(String(initial.dob ?? ''));
+  const [portal, setPortal] = useState(Number(initial.portal_enabled) === 1);
+  const [portalEcho, setPortalEcho] = useState<string | null>(null);
+
+  if (state?.values && portalEcho !== JSON.stringify(state.values.portal_enabled ?? '')) {
+    setPortalEcho(JSON.stringify(state.values.portal_enabled ?? ''));
+    setPortal(Boolean(state.values.portal_enabled));
+  }
 
   /** Echoed submission wins, so a validation error does not empty the form. */
   const v = (k: string) => {
@@ -244,14 +251,13 @@ export default function ClientForm({ mode, groups, initial, policyCount = 0 }: C
 
         <div className="sm:col-span-2">
           <span className="mb-1 block text-[12px] font-semibold text-ink-soft">Client portal</span>
+          {/* Display only — the hidden input above is the submitted field. */}
+          <input type="hidden" name="portal_enabled" value={portal ? 'on' : ''} />
           <label className="flex items-start gap-2.5 rounded border border-line px-3.5 py-2.5">
             <input
               type="checkbox"
-              name="portal_enabled"
-              key={`portal-${state?.values ? state.values.portal_enabled ?? '' : initial.portal_enabled}`}
-              defaultChecked={
-                state?.values ? state.values.portal_enabled === 'on' : Number(initial.portal_enabled) === 1
-              }
+              checked={portal}
+              onChange={(e) => setPortal(e.target.checked)}
               className="mt-0.5 accent-brand"
             />
             <span className="text-[13px] text-ink-soft">

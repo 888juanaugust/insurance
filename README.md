@@ -41,7 +41,7 @@ invented.
 | Module | Route | Notes |
 | --- | --- | --- |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
-| Sub Agents | `/team` | Commission structure per agent plus bank and TIN details for self-billed e-Invoice. |
+| Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
 | Organisation | `/organisation` | Company particulars, subscription terms and quota usage. |
 | Clients | `/clients`, `/clients/new`, `/clients/[id]`, `/clients/[id]/edit` | Add, edit and delete clients — individual or company. NRIC fills the date of birth, duplicate identification is refused, and a client carrying policies cannot be deleted. |
 | Grouping Client | `/client-groups` | Group accounts and their members. |
@@ -126,17 +126,27 @@ Everything else is fabricated demo data.
 ```
 src/
   app/
-    (app)/          authenticated pages, wrapped in the sidebar + topbar shell
+    (app)/          authenticated pages, wrapped in the left-rail shell
     login/          sign-in page
-  components/       sidebar, topbar, icons, filters, shared UI
+  components/       SideNav, forms, icons, filters, shared UI
   lib/
     db.ts           schema and connection; seeds on first use
     seed.ts         the seed dataset
     queries.ts      all data access
+    nav.ts          the navigation tree
     actions.ts      server actions (login, record payment, approve commission)
     session.ts      signed-cookie session
     format.ts       currency and date helpers
 ```
+
+Navigation is a left rail (`src/components/SideNav.tsx`), driven by `src/lib/nav.ts`.
+Nineteen flat destinations are grouped into eight sections — Overview, Clients, Policies,
+Renewals, Accounts, Reports, Team, Settings — each holding the screens you move between
+while doing one job, so a task stays inside one section instead of crossing the whole menu.
+The section covering the current page expands on its own; the rest stay shut. Sections that
+can be behind — renewals due, money outstanding, quotations open — carry a live count from
+`navCounts()`, so the rail says what needs attention without a page load. The rail collapses
+to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
 
 ## Known gaps
 
@@ -168,5 +178,5 @@ src/
 - Sign-in allows 8 failures per 15 minutes, per address and per email. The counter is
   in memory, so it resets on restart and does not span multiple instances.
 - Passwords are hashed with scrypt. This is a demo application, not a production system —
-  it has no rate limiting, audit trail, or multi-tenant hardening beyond scoping every query
-  to the signed-in user's organisation.
+  it has no audit trail, role permissions, or multi-tenant hardening beyond scoping every
+  query to the signed-in user's organisation.
