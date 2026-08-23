@@ -43,7 +43,7 @@ invented.
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
 | Sub Agents | `/team` | Commission structure per agent plus bank and TIN details for self-billed e-Invoice. |
 | Organisation | `/organisation` | Company particulars, subscription terms and quota usage. |
-| Clients | `/clients`, `/clients/[id]` | Client register with search; detail view lists the client's policies and life plans. |
+| Clients | `/clients`, `/clients/new`, `/clients/[id]`, `/clients/[id]/edit` | Add, edit and delete clients — individual or company. NRIC fills the date of birth, duplicate identification is refused, and a client carrying policies cannot be deleted. |
 | Grouping Client | `/client-groups` | Group accounts and their members. |
 | Client Planning | `/client-planning` | Life and medical plans held alongside the general book. |
 | Insurance | `/insurance/general-motor`, `/insurance/non-motor` | Policy registers, 25 columns: principal chips (20 insurers), 15 class-of-business tabs on non-motor, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |

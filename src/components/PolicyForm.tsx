@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { savePolicyAction } from '@/lib/policy-actions';
+import { savePolicyAction, type SaveState } from '@/lib/policy-actions';
 import type { ExtractionResult, FieldKey } from '@/lib/extract';
 import { classSlug } from '@/lib/format';
 
@@ -41,77 +41,110 @@ function chipFor(f: { value: unknown; confidence: number; source: string } | und
   return { label: 'check this', cls: 'badge-amber', title: 'Low confidence, or the two readings disagreed. Please confirm.' };
 }
 
-export default function PolicyForm({
-  mode, cls, clients, principals, agents, initial, extraction, matchedClientId, isDuplicate, sourceFile,
-}: PolicyFormProps) {
-  const [state, action, pending] = useActionState(savePolicyAction, null as { error?: string } | null);
-  const [useExisting, setUseExisting] = useState(Boolean(matchedClientId));
-  const [allowDuplicate, setAllowDuplicate] = useState(false);
 
-  const v = (k: string) => {
-    const raw = initial[k];
-    return raw === null || raw === undefined ? '' : String(raw);
-  };
+type PFieldProps = {
+  name: string;
+  label: string;
+  type?: string;
+  span?: number;
+  required?: boolean;
+  placeholder?: string;
+  step?: string;
+  defaultValue?: string;
+  chip?: { label: string; cls: string; title: string } | null;
+  evidence?: string;
+};
 
-  const Field = ({
-    name, label, type = 'text', span = 1, required, placeholder, step,
-  }: {
-    name: string; label: string; type?: string; span?: number; required?: boolean;
-    placeholder?: string; step?: string;
-  }) => {
-    const meta = extraction?.fields[name as FieldKey];
-    const chip = extraction ? chipFor(meta) : null;
-    return (
-      <div className={span === 2 ? 'sm:col-span-2' : ''}>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <label htmlFor={name} className="text-[12px] font-semibold text-ink-soft">
-            {label}
-            {required && <span className="ml-0.5 text-brand">*</span>}
-          </label>
-          {chip && (
-            <span className={`badge ${chip.cls}`} title={chip.title}>
-              {chip.label}
-            </span>
-          )}
-        </div>
-        <input
-          id={name}
-          name={name}
-          type={type}
-          step={step}
-          required={required}
-          placeholder={placeholder}
-          defaultValue={v(name)}
-          className="inp"
-        />
-        {meta?.evidence && meta.confidence < 0.95 && (
-          <p className="mt-1 truncate text-[11px] text-muted" title={meta.evidence}>
-            from: {meta.evidence}
-          </p>
+function PField({
+  name, label, type = 'text', span = 1, required, placeholder, step, defaultValue, chip, evidence,
+}: PFieldProps) {
+  return (
+    <div className={span === 2 ? 'sm:col-span-2' : ''}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <label htmlFor={name} className="text-[12px] font-semibold text-ink-soft">
+          {label}
+          {required && <span className="ml-0.5 text-brand">*</span>}
+        </label>
+        {chip && (
+          <span className={`badge ${chip.cls}`} title={chip.title}>
+            {chip.label}
+          </span>
         )}
       </div>
-    );
-  };
+      <input
+        id={name}
+        name={name}
+        type={type}
+        step={step}
+        required={required}
+        placeholder={placeholder}
+        key={`${name}-${defaultValue ?? ''}`}
+        defaultValue={defaultValue}
+        className="inp"
+      />
+      {evidence && (
+        <p className="mt-1 truncate text-[11px] text-muted" title={evidence}>
+          from: {evidence}
+        </p>
+      )}
+    </div>
+  );
+}
 
-  const Select = ({
-    name, label, options, defaultValue, span = 1,
-  }: { name: string; label: string; options: Option[]; defaultValue?: string; span?: number }) => (
+function PSelect({
+  name, label, options, defaultValue, span = 1,
+}: { name: string; label: string; options: Option[]; defaultValue?: string; span?: number }) {
+  return (
     <div className={span === 2 ? 'sm:col-span-2' : ''}>
       <label htmlFor={name} className="mb-1 block text-[12px] font-semibold text-ink-soft">{label}</label>
-      <select id={name} name={name} defaultValue={defaultValue ?? v(name)} className="inp cursor-pointer">
+      <select
+        id={name}
+        name={name}
+        key={`${name}-${defaultValue ?? ''}`}
+        defaultValue={defaultValue}
+        className="inp cursor-pointer"
+      >
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
     </div>
   );
+}
 
-  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+function PSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
     <section className="panel">
       <div className="panel-head">{title}</div>
       <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
     </section>
   );
+}
+
+export default function PolicyForm({
+  mode, cls, clients, principals, agents, initial, extraction, matchedClientId, isDuplicate, sourceFile,
+}: PolicyFormProps) {
+  const [state, action, pending] = useActionState(savePolicyAction, null as SaveState | null);
+  const [useExisting, setUseExisting] = useState(Boolean(matchedClientId));
+  const [allowDuplicate, setAllowDuplicate] = useState(false);
+
+  /** Echoed submission wins, so a rejected save does not empty the form. */
+  const v = (k: string) => {
+    const echoed = state?.values?.[k];
+    if (echoed !== undefined) return echoed;
+    const raw = initial[k];
+    return raw === null || raw === undefined ? '' : String(raw);
+  };
+
+
+  const fieldProps = (name: string) => {
+    const meta = extraction?.fields[name as FieldKey];
+    return {
+      defaultValue: v(name),
+      chip: extraction ? chipFor(meta) : null,
+      evidence: meta?.evidence && meta.confidence < 0.95 ? meta.evidence : undefined,
+    };
+  };
 
   return (
     <form action={action} className="space-y-4">
@@ -121,24 +154,23 @@ export default function PolicyForm({
       {extraction?.principal && <input type="hidden" name="principal_detected" value={extraction.principal} />}
       {allowDuplicate && <input type="hidden" name="allow_duplicate" value="1" />}
 
-      <Section title="Policy">
-        <Field name="policy_no" label="Policy no" required />
-        <Field name="cover_note_no" label="Cover note no" />
-        <Select
-          name="principal_id"
+      <PSection title="Policy">
+        <PField name="policy_no" {...fieldProps("policy_no")} label="Policy no" required />
+        <PField name="cover_note_no" {...fieldProps("cover_note_no")} label="Cover note no" />
+        <PSelect name="principal_id"
           label="Principal"
           defaultValue={v('principal_id')}
           options={[{ value: '', label: 'Select principal…' }, ...principals]}
         />
-        <Select
-          name="sub_agent_id"
+        <PSelect name="sub_agent_id"
+          defaultValue={v('sub_agent_id')}
           label="Servicing agent"
           options={[{ value: '', label: 'Unassigned' }, ...agents]}
         />
-        <Field name="product" label="Product" placeholder={cls === 'motor' ? 'Private Car' : 'Fire & Perils'} />
-        <Field name="type_of_cover" label="Type of cover" placeholder="Comprehensive" />
-        <Select
-          name="status"
+        <PField name="product" {...fieldProps("product")} label="Product" placeholder={cls === 'motor' ? 'Private Car' : 'Fire & Perils'} />
+        <PField name="type_of_cover" {...fieldProps("type_of_cover")} label="Type of cover" placeholder="Comprehensive" />
+        <PSelect name="status"
+          defaultValue={v('status')}
           label="Status"
           options={[
             { value: 'active', label: 'Active' },
@@ -147,8 +179,8 @@ export default function PolicyForm({
             { value: 'cancelled', label: 'Cancelled' },
           ]}
         />
-        <Select
-          name="case_type"
+        <PSelect name="case_type"
+          defaultValue={v('case_type')}
           label="Case type"
           options={[
             { value: 'new', label: 'New business' },
@@ -156,12 +188,12 @@ export default function PolicyForm({
             { value: 'endorsement', label: 'Endorsement' },
           ]}
         />
-        <Field name="issue_date" label="Issue date" type="date" />
-        <Field name="effective_date" label="Effective date" type="date" required />
-        <Field name="expiry_date" label="Expiry date" type="date" required />
-      </Section>
+        <PField name="issue_date" {...fieldProps("issue_date")} label="Issue date" type="date" />
+        <PField name="effective_date" {...fieldProps("effective_date")} label="Effective date" type="date" required />
+        <PField name="expiry_date" {...fieldProps("expiry_date")} label="Expiry date" type="date" required />
+      </PSection>
 
-      <Section title="Insured">
+      <PSection title="Insured">
         <div className="sm:col-span-2 xl:col-span-4">
           <div className="mb-2 flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-[13px] text-ink-soft">
@@ -198,54 +230,54 @@ export default function PolicyForm({
           </div>
         ) : (
           <>
-            <Field name="insured_name" label="Insured name" span={2} required />
-            <Field name="nric" label="NRIC / business reg no" />
-            <Field name="occupation" label="Occupation" />
-            <Field name="address" label="Address" span={2} />
+            <PField name="insured_name" {...fieldProps("insured_name")} label="Insured name" span={2} required />
+            <PField name="nric" {...fieldProps("nric")} label="NRIC / business reg no" />
+            <PField name="occupation" {...fieldProps("occupation")} label="Occupation" />
+            <PField name="address" {...fieldProps("address")} label="Address" span={2} />
           </>
         )}
-      </Section>
+      </PSection>
 
       {cls === 'motor' ? (
-        <Section title="Vehicle">
-          <Field name="vehicle_no" label="Registration no" />
-          <Field name="make_model" label="Make & model" span={2} />
-          <Field name="body_type" label="Body type" />
-          <Field name="engine_no" label="Engine no" />
-          <Field name="chassis_no" label="Chassis no" />
-          <Field name="engine_cc" label="Engine capacity (CC)" />
-          <Field name="year_make" label="Year of manufacture" />
-          <Field name="seating" label="Seating capacity" type="number" />
-          <Field name="hire_purchase" label="Hire purchase owner" />
-          <Field name="named_drivers" label="Authorised drivers" span={2} />
-          <Field name="windscreen_si" label="Windscreen sum insured" type="number" step="0.01" />
-        </Section>
+        <PSection title="Vehicle">
+          <PField name="vehicle_no" {...fieldProps("vehicle_no")} label="Registration no" />
+          <PField name="make_model" {...fieldProps("make_model")} label="Make & model" span={2} />
+          <PField name="body_type" {...fieldProps("body_type")} label="Body type" />
+          <PField name="engine_no" {...fieldProps("engine_no")} label="Engine no" />
+          <PField name="chassis_no" {...fieldProps("chassis_no")} label="Chassis no" />
+          <PField name="engine_cc" {...fieldProps("engine_cc")} label="Engine capacity (CC)" />
+          <PField name="year_make" {...fieldProps("year_make")} label="Year of manufacture" />
+          <PField name="seating" {...fieldProps("seating")} label="Seating capacity" type="number" />
+          <PField name="hire_purchase" {...fieldProps("hire_purchase")} label="Hire purchase owner" />
+          <PField name="named_drivers" {...fieldProps("named_drivers")} label="Authorised drivers" span={2} />
+          <PField name="windscreen_si" {...fieldProps("windscreen_si")} label="Windscreen sum insured" type="number" step="0.01" />
+        </PSection>
       ) : (
-        <Section title="Risk">
-          <Field name="risk_type" label="Class of risk" span={2} />
-          <Field name="occupancy" label="Occupancy" span={2} />
-          <Field name="risk_address" label="Situation of risk" span={2} />
-          <Field name="period_desc" label="Period" />
-          <Field name="benefits" label="Benefits / sums insured" span={2} />
-        </Section>
+        <PSection title="Risk">
+          <PField name="risk_type" {...fieldProps("risk_type")} label="Class of risk" span={2} />
+          <PField name="occupancy" {...fieldProps("occupancy")} label="Occupancy" span={2} />
+          <PField name="risk_address" {...fieldProps("risk_address")} label="Situation of risk" span={2} />
+          <PField name="period_desc" {...fieldProps("period_desc")} label="Period" />
+          <PField name="benefits" {...fieldProps("benefits")} label="Benefits / sums insured" span={2} />
+        </PSection>
       )}
 
-      <Section title="Premium and commission">
-        <Field name="sum_insured" label="Sum insured" type="number" step="0.01" />
-        <Field name="ncd_pct" label="NCD %" type="number" step="0.01" />
-        <Field name="excess" label="Excess" type="number" step="0.01" />
-        <Field name="extra_premium" label="Extra cover premium" type="number" step="0.01" />
-        <Field name="basic_premium" label="Basic premium" type="number" step="0.01" />
-        <Field name="gross_premium" label="Gross premium" type="number" step="0.01" />
-        <Field name="service_tax" label="Service tax" type="number" step="0.01" />
-        <Field name="stamp_duty" label="Stamp duty" type="number" step="0.01" />
-        <Field name="total_premium" label="Total payable" type="number" step="0.01" />
-        <Field name="commission_rate" label="Commission rate %" type="number" step="0.01" />
-        <Field name="commission_amt" label="Total commission" type="number" step="0.01" />
-        <Field name="agent_commission" label="Agent commission" type="number" step="0.01" />
-        <Field name="referral_fee" label="Referral fee" type="number" step="0.01" />
-        <Field name="remarks" label="Remarks" span={2} />
-      </Section>
+      <PSection title="Premium and commission">
+        <PField name="sum_insured" {...fieldProps("sum_insured")} label="Sum insured" type="number" step="0.01" />
+        <PField name="ncd_pct" {...fieldProps("ncd_pct")} label="NCD %" type="number" step="0.01" />
+        <PField name="excess" {...fieldProps("excess")} label="Excess" type="number" step="0.01" />
+        <PField name="extra_premium" {...fieldProps("extra_premium")} label="Extra cover premium" type="number" step="0.01" />
+        <PField name="basic_premium" {...fieldProps("basic_premium")} label="Basic premium" type="number" step="0.01" />
+        <PField name="gross_premium" {...fieldProps("gross_premium")} label="Gross premium" type="number" step="0.01" />
+        <PField name="service_tax" {...fieldProps("service_tax")} label="Service tax" type="number" step="0.01" />
+        <PField name="stamp_duty" {...fieldProps("stamp_duty")} label="Stamp duty" type="number" step="0.01" />
+        <PField name="total_premium" {...fieldProps("total_premium")} label="Total payable" type="number" step="0.01" />
+        <PField name="commission_rate" {...fieldProps("commission_rate")} label="Commission rate %" type="number" step="0.01" />
+        <PField name="commission_amt" {...fieldProps("commission_amt")} label="Total commission" type="number" step="0.01" />
+        <PField name="agent_commission" {...fieldProps("agent_commission")} label="Agent commission" type="number" step="0.01" />
+        <PField name="referral_fee" {...fieldProps("referral_fee")} label="Referral fee" type="number" step="0.01" />
+        <PField name="remarks" {...fieldProps("remarks")} label="Remarks" span={2} />
+      </PSection>
 
       {isDuplicate && (
         <label className="flex items-center gap-2 rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-3 text-[13px] text-[#b32b21]">

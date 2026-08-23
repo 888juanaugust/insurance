@@ -179,7 +179,23 @@ function buildInput(fd: FormData, orgId: string, clientId: string, principalId: 
   };
 }
 
-export type SaveState = { error?: string };
+export type SaveState = {
+  error?: string;
+  /**
+   * What was submitted, echoed back. React resets the form once a server
+   * action returns, so without this a rejected save empties every field —
+   * including a whole policy just read out of a PDF.
+   */
+  values?: Record<string, string>;
+};
+
+function submitted(fd: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of fd.entries()) {
+    if (typeof value === 'string' && !key.startsWith('$')) out[key] = value;
+  }
+  return out;
+}
 
 /** Persist a reviewed policy — from the upload review form or Create Policy. */
 export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<SaveState> {
@@ -187,15 +203,15 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   if (!user) redirect('/login');
 
   const policyNo = str(fd, 'policy_no');
-  if (!policyNo) return { error: 'Policy number is required.' };
+  if (!policyNo) return { error: 'Policy number is required.' , values: submitted(fd) };
   if (!str(fd, 'effective_date') || !str(fd, 'expiry_date')) {
-    return { error: 'Both the effective and expiry dates are required.' };
+    return { error: 'Both the effective and expiry dates are required.' , values: submitted(fd) };
   }
   if (str(fd, 'expiry_date') <= str(fd, 'effective_date')) {
-    return { error: 'The expiry date must fall after the effective date.' };
+    return { error: 'The expiry date must fall after the effective date.' , values: submitted(fd) };
   }
   if (numOf(fd, 'total_premium') <= 0 && numOf(fd, 'gross_premium') <= 0) {
-    return { error: 'Enter the gross premium or the total payable.' };
+    return { error: 'Enter the gross premium or the total payable.' , values: submitted(fd) };
   }
 
   // Resolve the principal, by id when picked or by detected name from a document.
@@ -206,15 +222,15 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
   if (!principalId) {
     const first = listPrincipals()[0];
-    if (!first) return { error: 'No insurance companies are configured. Add one under Setting → Global.' };
-    return { error: 'Choose the principal for this policy.' };
+    if (!first) return { error: 'No insurance companies are configured. Add one under Setting → Global.' , values: submitted(fd) };
+    return { error: 'Choose the principal for this policy.' , values: submitted(fd) };
   }
 
   // Resolve the client: an existing one, or create from what the document gave.
   let clientId = str(fd, 'client_id');
   if (!clientId) {
     const name = str(fd, 'insured_name');
-    if (!name) return { error: 'Enter the insured name, or pick an existing client.' };
+    if (!name) return { error: 'Enter the insured name, or pick an existing client.' , values: submitted(fd) };
     const nric = str(fd, 'nric') || null;
     const existing = findClientByIdentity(user.org_id, name, nric);
     clientId = existing
@@ -227,14 +243,17 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
 
   if (editingId) {
     const ok = updatePolicy(editingId, user.org_id, input);
-    if (!ok) return { error: 'That policy could not be found.' };
+    if (!ok) return { error: 'That policy could not be found.' , values: submitted(fd) };
     revalidatePath('/insurance/general-motor');
     revalidatePath('/insurance/non-motor');
     redirect(`/insurance/${classSlug(input.class)}/${editingId}`);
   }
 
   if (findPolicyByNumber(user.org_id, policyNo) && str(fd, 'allow_duplicate') !== '1') {
-    return { error: `Policy ${policyNo} already exists. Tick "save anyway" to record it a second time.` };
+    return {
+      error: `Policy ${policyNo} already exists. Tick "save anyway" to record it a second time.`,
+      values: submitted(fd),
+    };
   }
 
   const id = createPolicy(input, { uploadedAt: today() });

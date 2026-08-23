@@ -4,6 +4,7 @@ import { currentUser } from '@/lib/session';
 import { getClient, listClientPolicies, listLifePlans } from '@/lib/queries';
 import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { Crumb, StatusBadge } from '@/components/ui';
+import { deleteClientAction } from '@/lib/client-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,10 +40,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               {client.client_type} · {client.nric || client.business_reg || 'No identifier on file'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className={`badge ${client.portal_enabled ? 'badge-green' : 'badge-grey'}`}>
-              Client portal {client.portal_enabled ? 'enabled' : 'disabled'}
+              Client portal {client.portal_enabled ? 'marked' : 'not marked'}
             </span>
+            <Link href={`/clients/${client.id}/edit`} className="btn btn-ghost">Edit</Link>
+            {policies.length === 0 && (
+              <form action={deleteClientAction}>
+                <input type="hidden" name="id" value={client.id} />
+                <button type="submit" className="btn btn-ghost text-danger hover:bg-danger-wash">
+                  Delete
+                </button>
+              </form>
+            )}
           </div>
         </div>
 

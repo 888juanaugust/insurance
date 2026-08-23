@@ -722,24 +722,156 @@ export function findClientByIdentity(orgId: string, name: string | null, nric: s
   return undefined;
 }
 
-export function createClientFromPolicy(orgId: string, name: string, nric: string | null, address: string | null, occupation: string | null): string {
+export type ClientInput = {
+  name: string;
+  client_type: 'individual' | 'company';
+  nric: string | null;
+  business_reg: string | null;
+  email: string | null;
+  phone: string | null;
+  address1: string | null;
+  address2: string | null;
+  postcode: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  dob: string | null;
+  occupation: string | null;
+  group_id: string | null;
+  portal_enabled: number;
+};
+
+const CLIENT_COLUMNS = [
+  'name', 'client_type', 'nric', 'business_reg', 'email', 'phone', 'address1', 'address2',
+  'postcode', 'city', 'state', 'country', 'dob', 'occupation', 'group_id', 'portal_enabled',
+] as const;
+
+export function createClient(orgId: string, input: ClientInput): string {
   const id = newId('cl');
-  const isCompany = /\b(SDN|BHD|BERHAD|ENTERPRISE|TRADING|HOLDINGS?|GROUP|LTD|PLT)\b/i.test(name);
   getDb()
     .prepare(
-      `INSERT INTO client (id, org_id, group_id, name, client_type, nric, business_reg, email, phone,
-         address1, address2, postcode, city, state, country, dob, occupation, portal_enabled, created_at)
-       VALUES (@id, @org_id, NULL, @name, @client_type, @nric, @business_reg, NULL, NULL,
-         @address1, NULL, NULL, NULL, NULL, 'MALAYSIA', NULL, @occupation, 0, @created_at)`,
+      `INSERT INTO client (id, org_id, created_at, ${CLIENT_COLUMNS.join(', ')})
+       VALUES (@id, @org_id, @created_at, ${CLIENT_COLUMNS.map((c) => '@' + c).join(', ')})`,
     )
-    .run({
-      id, org_id: orgId, name: name.trim(),
-      client_type: isCompany ? 'company' : 'individual',
-      nric: isCompany ? null : nric,
-      business_reg: isCompany ? nric : null,
-      address1: address, occupation, created_at: today(),
-    });
+    .run({ ...input, id, org_id: orgId, created_at: today() });
   return id;
+}
+
+export function updateClient(id: string, orgId: string, input: ClientInput): boolean {
+  const info = getDb()
+    .prepare(
+      `UPDATE client SET ${CLIENT_COLUMNS.map((c) => `${c} = @${c}`).join(', ')}
+        WHERE id = @id AND org_id = @org_id`,
+    )
+    .run({ ...input, id, org_id: orgId });
+  return info.changes > 0;
+}
+
+/**
+ * Another client in the same agency already carrying this identification.
+ * Two records for one person is how a book quietly goes wrong, so this is
+ * checked on the way in rather than cleaned up later.
+ */
+export function findClientByIdentification(
+  orgId: string,
+  identification: string,
+  excludeId?: string,
+): { id: string; name: string } | undefined {
+  const bare = identification.replace(/[^A-Za-z0-9]/g, '');
+  if (!bare) return undefined;
+  return getDb()
+    .prepare(
+      `SELECT id, name FROM client
+        WHERE org_id = ?
+          AND (? = '' OR id != ?)
+          AND (
+            replace(replace(COALESCE(nric,''), '-', ''), ' ', '') = ?
+            OR replace(replace(COALESCE(business_reg,''), '-', ''), ' ', '') = ?
+          )
+        LIMIT 1`,
+    )
+    .get(orgId, excludeId ?? '', excludeId ?? '', bare, bare) as
+    | { id: string; name: string }
+    | undefined;
+}
+
+/** Policies stop a client being deleted — the history has to go somewhere. */
+export function clientPolicyCount(id: string): number {
+  const row = getDb().prepare('SELECT COUNT(*) n FROM policy WHERE client_id = ?').get(id) as { n: number };
+  return row.n;
+}
+
+export function deleteClient(id: string, orgId: string): boolean {
+  if (clientPolicyCount(id) > 0) return false;
+  const info = getDb().prepare('DELETE FROM client WHERE id = ? AND org_id = ?').run(id, orgId);
+  return info.changes > 0;
+}
+
+export function listGroupOptions(orgId: string) {
+  return getDb()
+    .prepare('SELECT id, name FROM client_group WHERE org_id = ? ORDER BY name')
+    .all(orgId) as Array<{ id: string; name: string }>;
+}
+
+/** Names that look like a company, so an upload can pick the right type. */
+const COMPANY_HINT = /\b(SDN|BHD|BERHAD|ENTERPRISE|TRADING|HOLDINGS?|GROUP|LTD|PLT|RESOURCES|SERVICES|VENTURES?)\b/i;
+
+export function looksLikeCompany(name: string): boolean {
+  return COMPANY_HINT.test(name);
+}
+
+/** Used by the policy upload, which knows only what the document stated. */
+export function createClientFromPolicy(
+  orgId: string,
+  name: string,
+  nric: string | null,
+  address: string | null,
+  occupation: string | null,
+): string {
+  const isCompany = looksLikeCompany(name);
+  return createClient(orgId, {
+    name: name.trim(),
+    client_type: isCompany ? 'company' : 'individual',
+    nric: isCompany ? null : nric,
+    business_reg: isCompany ? nric : null,
+    email: null,
+    phone: null,
+    address1: address,
+    address2: null,
+    postcode: null,
+    city: null,
+    state: null,
+    country: 'MALAYSIA',
+    dob: !isCompany && nric ? dobFromNric(nric) : null,
+    occupation,
+    group_id: null,
+    portal_enabled: 0,
+  });
+}
+
+/**
+ * A Malaysian NRIC opens with the date of birth as YYMMDD. Two digits cannot
+ * say which century, so a date that would still be in the future belongs to
+ * the previous one.
+ */
+export function dobFromNric(nric: string): string | null {
+  const m = nric.replace(/[^0-9]/g, '');
+  if (m.length !== 12) return null;
+
+  const yy = Number(m.slice(0, 2));
+  const mm = Number(m.slice(2, 4));
+  const dd = Number(m.slice(4, 6));
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const iso = (year: number) =>
+    `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+
+  const thisCentury = iso(2000 + yy);
+  const candidate = thisCentury > today() ? iso(1900 + yy) : thisCentury;
+
+  const d = new Date(`${candidate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.getUTCDate() !== dd) return null;
+  return candidate;
 }
 
 export function findPolicyByNumber(orgId: string, policyNo: string) {

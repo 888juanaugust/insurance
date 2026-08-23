@@ -32,6 +32,9 @@ export default async function ClientsPage({
         meta={`${rows.length} client${rows.length === 1 ? '' : 's'} · ${money(outstanding)} premium outstanding`}
         actions={
           <>
+            <Link href="/clients/new" className="btn btn-primary">
+              <span className="text-[15px] leading-none">+</span> Add client
+            </Link>
             <FilterSelect
               name="type"
               label="Client type"
@@ -95,16 +98,18 @@ export default async function ClientsPage({
                 </td>
                 <td className="text-ink-soft">{longDate(c.created_at)}</td>
                 <td>
-                  <Link href={`/clients/${c.id}`} className="text-[12.5px] text-[#3f7fc4] hover:underline">
-                    View
-                  </Link>
+                  <span className="flex gap-3 text-[12.5px]">
+                    <Link href={`/clients/${c.id}`} className="text-link hover:underline">View</Link>
+                    <Link href={`/clients/${c.id}/edit`} className="text-link hover:underline">Edit</Link>
+                  </span>
                 </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
                 <td colSpan={12} className="py-12 text-center text-[13px] text-muted">
-                  No clients match your search.
+                  No clients match your search.{' '}
+                  <Link href="/clients/new" className="text-link hover:underline">Add one</Link>.
                 </td>
               </tr>
             )}
