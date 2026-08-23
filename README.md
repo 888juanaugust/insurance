@@ -41,6 +41,7 @@ invented.
 
 | Module | Route | Notes |
 | --- | --- | --- |
+| Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
 | Audit trail | `/audit` | Every change, refusal and sign-in. |
 | Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
@@ -164,6 +165,36 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Search
+
+One box, in the rail on every screen and behind Ctrl/⌘+K, over policies,
+clients, claims, endorsements, sub agents and documents.
+
+The work is in matching what people actually type. Identifiers in this domain
+are written inconsistently everywhere: a plate is `WXY 4471` on the schedule and
+`wxy4471` in a text message, an NRIC comes with or without dashes, a policy
+number carries slashes one insurer uses and another does not. Every identifier
+is reduced to letters and digits on both sides before comparison, so all of
+those find the same record.
+
+Ranking matters more than recall. An exact identifier match outranks a name,
+which outranks a passing mention in a remark — someone who types a plate wants
+that vehicle, not every client whose address contains those letters. Each result
+says which field it matched on, so a surprising hit explains itself. Short
+queries are held back deliberately: two characters match the start of a name or
+an identifier, three are needed before a fragment inside free text counts, and an
+empty query matches nothing at all.
+
+A query that names exactly one record goes straight to it — a policy number, a
+claim number, an NRIC. A **plate does not**, because it legitimately belongs to
+the policy, every claim made under it and every endorsement: the list is the
+honest answer, and `?go=list` forces it for the others.
+
+The SQL narrows with a broad `LIKE` and the ranking happens in TypeScript, where
+the normalisation lives. A leading-wildcard `LIKE` is a table scan, which is fine
+for an agency's book and would not be for a million rows; that is the point at
+which this wants SQLite's FTS5.
 
 ## Endorsements
 

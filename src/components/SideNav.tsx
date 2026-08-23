@@ -9,6 +9,7 @@ import {
   IconReports, IconUsers, IconSetting, IconChevron, IconBell, IconLogout,
 } from './icons';
 import type { SessionUser } from '@/lib/session';
+import GlobalSearch from './GlobalSearch';
 
 const ICONS: Record<IconKey, (p: { className?: string }) => React.ReactElement> = {
   overview: IconHome,
@@ -101,6 +102,8 @@ export default function SideNav({
           )}
         </Link>
       </div>
+
+      <GlobalSearch collapsed={collapsed} />
 
       <nav aria-label="Sections" className="flex-1 overflow-y-auto px-2 pb-3">
         {NAV.map((s) => {

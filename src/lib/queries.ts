@@ -2089,3 +2089,122 @@ export function endorsementCounts(orgId: string) {
     refunded: one("SELECT COALESCE(SUM(total_amount),0) v FROM endorsement WHERE org_id = ? AND status = 'issued' AND total_amount < 0"),
   };
 }
+
+/* ----------------------------------------------------------------- search */
+
+/**
+ * Candidates for the global search.
+ *
+ * The SQL narrows with a broad LIKE; the ranking happens in TypeScript, where
+ * the identifier normalisation lives — SQLite cannot compare "WXY 4471" to
+ * "wxy4471" without stripping both sides, and doing that in SQL would rule out
+ * any index anyway. A leading-wildcard LIKE is a table scan either way, which
+ * is fine for an agency's book and would not be for a million rows; that is the
+ * point at which this wants FTS5.
+ */
+export function searchCandidates(orgId: string, term: string, limitPerKind = 40) {
+  const db = getDb();
+  const like = `%${term.toLowerCase()}%`;
+  // The same term with separators removed, so a squashed query still narrows
+  // rows whose stored value carries them.
+  const squashedLike = `%${term.toUpperCase().replace(/[^A-Z0-9]/g, '')}%`;
+  const p = { org: orgId, like, sq: squashedLike, lim: limitPerKind };
+
+  return {
+    clients: db
+      .prepare(
+        `SELECT id, name, nric, business_reg, phone, email, client_type
+           FROM client
+          WHERE org_id = @org
+            AND (lower(name) LIKE @like
+                 OR upper(replace(replace(COALESCE(nric,''),'-',''),' ','')) LIKE @sq
+                 OR upper(replace(replace(COALESCE(business_reg,''),'-',''),' ','')) LIKE @sq
+                 OR lower(COALESCE(phone,'')) LIKE @like
+                 OR lower(COALESCE(email,'')) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+
+    policies: db
+      .prepare(
+        `SELECT p.id, p.policy_no, p.cover_note_no, p.class, p.status, p.effective_date,
+                p.expiry_date, p.total_premium, c.name AS client_name, pr.short_name AS principal,
+                m.vehicle_no, m.make_model, m.chassis_no, m.engine_no
+           FROM policy p
+           JOIN client c     ON c.id = p.client_id
+           JOIN principal pr ON pr.id = p.principal_id
+           LEFT JOIN motor_detail m ON m.policy_id = p.id
+          WHERE p.org_id = @org
+            AND (upper(replace(replace(p.policy_no,'/',''),' ','')) LIKE @sq
+                 OR upper(replace(replace(COALESCE(p.cover_note_no,''),'/',''),' ','')) LIKE @sq
+                 OR upper(replace(COALESCE(m.vehicle_no,''),' ','')) LIKE @sq
+                 OR upper(replace(COALESCE(m.chassis_no,''),' ','')) LIKE @sq
+                 OR upper(replace(COALESCE(m.engine_no,''),' ','')) LIKE @sq
+                 OR lower(COALESCE(m.make_model,'')) LIKE @like
+                 OR lower(c.name) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+
+    claims: db
+      .prepare(
+        `SELECT cl.id, cl.claim_no, cl.insurer_claim_no, cl.police_report_no, cl.status,
+                cl.type, cl.incident_date, cl.description, p.policy_no, c.name AS client_name,
+                m.vehicle_no
+           FROM claim cl
+           JOIN policy p ON p.id = cl.policy_id
+           JOIN client c ON c.id = p.client_id
+           LEFT JOIN motor_detail m ON m.policy_id = p.id
+          WHERE cl.org_id = @org
+            AND (upper(replace(cl.claim_no,'-','')) LIKE @sq
+                 OR upper(replace(replace(COALESCE(cl.insurer_claim_no,''),'/',''),' ','')) LIKE @sq
+                 OR upper(replace(replace(COALESCE(cl.police_report_no,''),'/',''),' ','')) LIKE @sq
+                 OR upper(replace(COALESCE(m.vehicle_no,''),' ','')) LIKE @sq
+                 OR lower(c.name) LIKE @like
+                 OR lower(COALESCE(cl.description,'')) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+
+    endorsements: db
+      .prepare(
+        `SELECT e.id, e.endorsement_no, e.insurer_ref, e.type, e.status, e.effective_date,
+                e.description, e.total_amount, p.policy_no, c.name AS client_name
+           FROM endorsement e
+           JOIN policy p ON p.id = e.policy_id
+           JOIN client c ON c.id = p.client_id
+          WHERE e.org_id = @org
+            AND (upper(replace(e.endorsement_no,'-','')) LIKE @sq
+                 OR upper(replace(replace(COALESCE(e.insurer_ref,''),'/',''),' ','')) LIKE @sq
+                 OR lower(c.name) LIKE @like
+                 OR lower(COALESCE(e.description,'')) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+
+    agents: db
+      .prepare(
+        `SELECT id, name, agent_code, nric, email, phone, status
+           FROM sub_agent
+          WHERE org_id = @org
+            AND (lower(name) LIKE @like
+                 OR upper(replace(COALESCE(agent_code,''),'-','')) LIKE @sq
+                 OR upper(replace(COALESCE(nric,''),'-','')) LIKE @sq
+                 OR lower(COALESCE(email,'')) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+
+    documents: db
+      .prepare(
+        `SELECT d.id, d.filename, d.kind, d.note, d.uploaded_at, d.policy_id, d.claim_id,
+                p.policy_no, p.class
+           FROM policy_document d
+           LEFT JOIN policy p ON p.id = d.policy_id
+          WHERE d.org_id = @org AND d.storage_key IS NOT NULL
+            AND (lower(d.filename) LIKE @like OR lower(COALESCE(d.note,'')) LIKE @like)
+          LIMIT @lim`,
+      )
+      .all(p) as Array<Record<string, any>>,
+  };
+}
