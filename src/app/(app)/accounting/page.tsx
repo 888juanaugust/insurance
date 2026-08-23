@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { listCommissions, commissionTotals } from '@/lib/queries';
+import { listCommissions, commissionTotals, statementExposure } from '@/lib/queries';
 import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { PageHeader, StatusBadge, Help } from '@/components/ui';
 import { approveCommissionAction, bulkCommissionAction } from '@/lib/actions';
@@ -58,6 +58,7 @@ export default async function AccountingPage({
   const rows = listCommissions(user.org_id, status);
   const totals = commissionTotals(user.org_id);
   const byAgent = commissionByAgent(user.org_id);
+  const statements = statementExposure(user.org_id);
 
   return (
     <div className="space-y-4">
@@ -96,6 +97,33 @@ export default async function AccountingPage({
               <p className="mt-2 text-[22px] font-semibold tracking-tight text-ink">{value}</p>
             </div>
           ))}
+        </div>
+
+        {/* The payout figures above are what the agency owes its agents. This
+            is the other half — whether the insurers have paid the agency in
+            the first place — and it belongs where somebody is already looking
+            at commission. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded border border-line px-5 py-3.5">
+          <span className="sec-label">From the insurers</span>
+          {statements.open === 0 ? (
+            <span className="text-[13px] text-ink-soft">
+              No commission statement has been checked yet.
+            </span>
+          ) : (
+            <span className="text-[13px] text-ink-soft">
+              {statements.open} open statement{statements.open === 1 ? '' : 's'} ·{' '}
+              <strong className={statements.gap < -0.01 ? 'text-danger' : 'text-ink'}>
+                {money(statements.gap)}
+              </strong>{' '}
+              against what the register booked
+              {statements.unresolved > 0 && (
+                <> · {statements.unresolved} line{statements.unresolved === 1 ? '' : 's'} still to place</>
+              )}
+            </span>
+          )}
+          <Link href="/accounting/statements" className="btn btn-ghost ml-auto py-1 px-3 text-[12px]">
+            Insurer statements
+          </Link>
         </div>
       </div>
 

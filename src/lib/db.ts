@@ -365,6 +365,63 @@ CREATE TABLE IF NOT EXISTS message (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_message_dedupe ON message(dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_message_org ON message(org_id, status, scheduled_for);
 
+CREATE TABLE IF NOT EXISTS commission_statement (
+  id            TEXT PRIMARY KEY,
+  org_id        TEXT NOT NULL REFERENCES organisation(id),
+  principal_id  TEXT NOT NULL REFERENCES principal(id),
+  reference     TEXT NOT NULL,        -- the insurer's own statement number
+  period_start  TEXT NOT NULL,
+  period_end    TEXT NOT NULL,
+  statement_date TEXT,
+  filename      TEXT,
+  /* What the insurer said it paid — the sum of the file, and the one figure
+     here that never changes. */
+  total_paid    REAL NOT NULL DEFAULT 0,
+  /* What the book says it owed. Recomputed whenever a line is moved by hand,
+     so the total on the list and the lines on the detail can never tell the
+     agency two different stories about the same statement. */
+  total_expected REAL NOT NULL DEFAULT 0,
+  line_count    INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL,        -- open | settled
+  imported_by   TEXT,
+  imported_at   TEXT NOT NULL,
+  settled_at    TEXT,
+  note          TEXT
+);
+
+CREATE TABLE IF NOT EXISTS statement_line (
+  id            TEXT PRIMARY KEY,
+  org_id        TEXT NOT NULL REFERENCES organisation(id),
+  statement_id  TEXT NOT NULL REFERENCES commission_statement(id) ON DELETE CASCADE,
+  row_no        INTEGER NOT NULL,     -- the line in the file it came from
+
+  -- As it appears on the insurer's paper, kept verbatim.
+  policy_no     TEXT,
+  cover_note_no TEXT,
+  insured       TEXT,
+  vehicle_no    TEXT,
+  effective_date TEXT,
+  gross_premium REAL,
+  commission_rate REAL,
+  commission    REAL NOT NULL DEFAULT 0,
+  reference     TEXT,
+
+  -- What it was matched to, and how sure that is.
+  policy_id     TEXT REFERENCES policy(id) ON DELETE SET NULL,
+  basis         TEXT NOT NULL,        -- policy_no | cover_note | vehicle | manual | none
+  /* Set when an agent has ruled on the line by hand. A re-match must not
+     overwrite a person's decision with a guess. */
+  decided       INTEGER NOT NULL DEFAULT 0,
+  /* An agreed difference: the agency has looked and accepted the insurer's
+     figure. Kept apart from a match so the reason survives. */
+  accepted      INTEGER NOT NULL DEFAULT 0,
+  accepted_note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_statement_org  ON commission_statement(org_id, period_end DESC);
+CREATE INDEX IF NOT EXISTS idx_stmt_line      ON statement_line(statement_id, row_no);
+CREATE INDEX IF NOT EXISTS idx_stmt_line_pol  ON statement_line(policy_id);
+
 CREATE TABLE IF NOT EXISTS commission_rate (
   id           TEXT PRIMARY KEY,
   org_id       TEXT NOT NULL REFERENCES organisation(id),

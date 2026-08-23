@@ -1,6 +1,7 @@
 import type { Database } from 'better-sqlite3';
 import { DEFAULT_TEMPLATES } from './messaging';
 import { calculateEndorsement } from './endorsements';
+import { readStatement, reconcile, type BookPolicy } from './statements';
 import { hashPassword } from './auth';
 import { inferClassOfBusiness } from './classes';
 import { today } from './format';
@@ -923,6 +924,109 @@ export function seed(db: Database) {
         remarks: e.remarks, created_at: e.effective, updated_at: e.effective,
       };
     }),
+  );
+
+  /*
+   * One insurer commission statement, and the reconciliation of it.
+   *
+   * Built by running the seeded policies back through the same reader and
+   * matcher the import uses, rather than typed out beside them, so the figures
+   * on the statement cannot drift from the book it is checked against.
+   *
+   * It is deliberately imperfect, because a reconciliation screen with nothing
+   * to reconcile demonstrates nothing. Berjaya Sompo paid one case to the sen;
+   * short-paid a fire policy by applying the 10% motor rate to it instead of
+   * the 25% the class earns, which is the commonest way commission goes
+   * missing; left a third case off the statement altogether; and paid a line
+   * for a policy this agency never wrote.
+   */
+  const STATEMENT_PRINCIPAL = 'pr-sompo';
+  const STATEMENT_FROM = '2026-04-01';
+  const STATEMENT_TO = '2026-06-30';
+
+  const clientNameById = new Map(CLIENTS.map((c) => [c.id as string, c.name as string]));
+  const vehicleByPolicy = new Map(motorRows.map((m) => [m.policy_id as string, m.vehicle_no as string]));
+
+  const statementBook: BookPolicy[] = policyRows
+    .filter(
+      (r) =>
+        r.org_id === 'org-exe' &&
+        r.principal_id === STATEMENT_PRINCIPAL &&
+        r.status !== 'quotation' &&
+        String(r.issue_date) >= STATEMENT_FROM &&
+        String(r.issue_date) <= STATEMENT_TO,
+    )
+    .map((r) => ({
+      id: r.id as string,
+      policy_no: r.policy_no as string,
+      cover_note_no: (r.cover_note_no as string) ?? null,
+      vehicle_no: vehicleByPolicy.get(r.id as string) ?? null,
+      insured: clientNameById.get(r.client_id as string) ?? '',
+      effective_date: (r.effective_date as string) ?? null,
+      commission_amt: r.commission_amt as number,
+      gross_premium: r.gross_premium as number,
+    }));
+
+  const paidLines = statementBook
+    // Left off the statement: the case the insurer has not paid for at all.
+    .filter((p) => p.policy_no !== 'XA082816')
+    .map((p) => {
+      // The fire policy, paid at the motor rate.
+      const shortPaid = p.policy_no === 'KG_Z0137577';
+      const rate = shortPaid ? 10 : round2((p.commission_amt / p.gross_premium) * 100);
+      const commission = shortPaid ? round2(p.gross_premium * 0.1) : p.commission_amt;
+      return [
+        // Written the way an insurer writes it, punctuation and all — the
+        // matcher has to get past KG-Z0137577 against KG_Z0137577 on its own.
+        p.policy_no.replace(/_/g, '-'),
+        `"${p.insured}"`,
+        p.vehicle_no ?? '',
+        p.effective_date ? p.effective_date.split('-').reverse().join('/') : '',
+        p.gross_premium.toFixed(2),
+        String(rate),
+        commission.toFixed(2),
+      ].join(',');
+    });
+
+  const strangerCommission = 96.3;
+  const statementCsv = [
+    'Policy No,Insured Name,Vehicle No,Effective Date,Gross Premium,Comm %,Commission',
+    ...paidLines,
+    // Business the agency never wrote. Somebody has to look at it and say so.
+    `SM-6620041,"LEE CHIN HOOI",SMW 6620,12/06/2026,963.00,10,${strangerCommission.toFixed(2)}`,
+    `TOTAL,,,,,,${round2(
+      paidLines.reduce((sum, l) => sum + Number(l.split(',').pop()), 0) + strangerCommission,
+    ).toFixed(2)}`,
+  ].join('\r\n');
+
+  const statementReading = readStatement(statementCsv);
+  const statementResult = reconcile(statementReading.rows, statementBook);
+  const statementId = 'stm-seed-sompo-q2';
+
+  insertAll(db, 'commission_statement', [
+    {
+      id: statementId, org_id: 'org-exe', principal_id: STATEMENT_PRINCIPAL,
+      reference: 'BS/COMM/2026/Q2', period_start: STATEMENT_FROM, period_end: STATEMENT_TO,
+      statement_date: '2026-07-10', filename: 'BS-COMM-2026-Q2.csv',
+      total_paid: statementResult.totals.paid, total_expected: statementResult.totals.expected,
+      line_count: statementResult.lines.length, status: 'open',
+      imported_by: 'Exe Master', imported_at: '2026-07-14T02:15:00.000Z',
+      note: 'Quarterly agency commission statement.',
+    },
+  ]);
+
+  insertAll(
+    db,
+    'statement_line',
+    statementResult.lines.map((l, i) => ({
+      id: `${statementId}-l${i + 1}`, org_id: 'org-exe', statement_id: statementId,
+      row_no: l.line, policy_no: l.policy_no || null, cover_note_no: l.cover_note_no || null,
+      insured: l.insured || null, vehicle_no: l.vehicle_no || null,
+      effective_date: l.effective_date || null, gross_premium: l.gross_premium,
+      commission_rate: l.commission_rate, commission: l.commission ?? 0,
+      reference: l.reference || null, policy_id: l.policy_id, basis: l.basis,
+      decided: 0, accepted: 0, accepted_note: null,
+    })),
   );
 
   const rates: Row[] = [];

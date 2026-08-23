@@ -2621,3 +2621,286 @@ export function linkRenewal(newPolicyId: string, previousPolicyId: string, orgId
     .prepare('UPDATE policy SET renewed_from_policy_id = ? WHERE id = ? AND org_id = ?')
     .run(previousPolicyId, newPolicyId, orgId).changes > 0;
 }
+
+/* -------------------------------------------- commission reconciliation */
+
+/**
+ * The cases this insurer booked over the period, with what the agency
+ * recorded as its own commission on each.
+ *
+ * Production date, not effective date: a statement pays for the month the
+ * policy was written, and a policy written in March to incept in May belongs
+ * on the March statement. Quotations are left out — nothing has been booked.
+ */
+export function bookForStatement(
+  orgId: string,
+  principalId: string,
+  from: string,
+  to: string,
+): BookPolicyRow[] {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.cover_note_no, p.effective_date,
+              p.commission_amt, p.gross_premium,
+              c.name AS insured, m.vehicle_no
+         FROM policy p
+         JOIN client c ON c.id = p.client_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.org_id = @org AND p.principal_id = @principal
+          AND p.status != 'quotation'
+          AND COALESCE(p.issue_date, p.created_date, p.effective_date) BETWEEN @from AND @to
+        ORDER BY COALESCE(p.issue_date, p.created_date, p.effective_date)`,
+    )
+    .all({ org: orgId, principal: principalId, from, to }) as BookPolicyRow[];
+}
+
+export type BookPolicyRow = {
+  id: string; policy_no: string; cover_note_no: string | null; vehicle_no: string | null;
+  insured: string; effective_date: string | null; commission_amt: number; gross_premium: number;
+};
+
+export type StatementRowRecord = {
+  id: string; org_id: string; principal_id: string; reference: string;
+  period_start: string; period_end: string; statement_date: string | null;
+  filename: string | null; total_paid: number; total_expected: number;
+  line_count: number; status: string; imported_by: string | null;
+  imported_at: string; settled_at: string | null; note: string | null;
+};
+
+export type StatementLineRecord = {
+  id: string; org_id: string; statement_id: string; row_no: number;
+  policy_no: string | null; cover_note_no: string | null; insured: string | null;
+  vehicle_no: string | null; effective_date: string | null;
+  gross_premium: number | null; commission_rate: number | null; commission: number;
+  reference: string | null; policy_id: string | null; basis: string;
+  decided: number; accepted: number; accepted_note: string | null;
+};
+
+export function listStatements(orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT s.*, pr.short_name AS principal
+         FROM commission_statement s
+         JOIN principal pr ON pr.id = s.principal_id
+        WHERE s.org_id = ?
+        ORDER BY s.period_end DESC, s.imported_at DESC`,
+    )
+    .all(orgId) as Array<StatementRowRecord & { principal: string }>;
+}
+
+export function getStatement(id: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT s.*, pr.short_name AS principal, pr.name AS principal_name
+         FROM commission_statement s
+         JOIN principal pr ON pr.id = s.principal_id
+        WHERE s.id = ? AND s.org_id = ?`,
+    )
+    .get(id, orgId) as (StatementRowRecord & { principal: string; principal_name: string }) | undefined;
+}
+
+export function statementLines(statementId: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT l.*, p.policy_no AS book_policy_no, p.class AS book_class,
+              p.commission_amt AS book_commission_amt, c.name AS book_insured
+         FROM statement_line l
+         LEFT JOIN policy p ON p.id = l.policy_id
+         LEFT JOIN client c ON c.id = p.client_id
+        WHERE l.statement_id = ? AND l.org_id = ?
+        ORDER BY l.row_no`,
+    )
+    .all(statementId, orgId) as Array<
+      StatementLineRecord & {
+        book_policy_no: string | null; book_class: string | null;
+        book_commission_amt: number | null; book_insured: string | null;
+      }
+    >;
+}
+
+/**
+ * Put the header's expected total back in step with the lines.
+ *
+ * Called after any hand assignment. A list showing a gap the detail page does
+ * not is worse than no list — the agency stops believing either of them.
+ */
+export function recomputeStatementTotals(id: string, orgId: string): void {
+  const db = getDb();
+  const sums = db
+    .prepare(
+      `SELECT COALESCE(SUM(l.commission),0) AS paid,
+              COALESCE((SELECT SUM(p.commission_amt)
+                          FROM policy p
+                         WHERE p.id IN (SELECT DISTINCT policy_id FROM statement_line
+                                         WHERE statement_id = @id AND policy_id IS NOT NULL)),0) AS expected
+         FROM statement_line l
+        WHERE l.statement_id = @id`,
+    )
+    .get({ id }) as { paid: number; expected: number };
+
+  db.prepare(
+    'UPDATE commission_statement SET total_paid = ?, total_expected = ? WHERE id = ? AND org_id = ?',
+  ).run(
+    Math.round(sums.paid * 100) / 100,
+    Math.round(sums.expected * 100) / 100,
+    id,
+    orgId,
+  );
+}
+
+export function saveStatement(
+  orgId: string,
+  header: {
+    principal_id: string; reference: string; period_start: string; period_end: string;
+    statement_date: string | null; filename: string | null; note: string | null;
+    total_paid: number; total_expected: number; imported_by: string | null;
+  },
+  lines: Array<Omit<StatementLineRecord, 'id' | 'org_id' | 'statement_id'>>,
+): string {
+  const db = getDb();
+  const id = `stm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO commission_statement
+         (id, org_id, principal_id, reference, period_start, period_end, statement_date,
+          filename, total_paid, total_expected, line_count, status, imported_by, imported_at, note)
+       VALUES
+         (@id, @org_id, @principal_id, @reference, @period_start, @period_end, @statement_date,
+          @filename, @total_paid, @total_expected, @line_count, 'open', @imported_by, @imported_at, @note)`,
+    ).run({
+      id, org_id: orgId, ...header,
+      line_count: lines.length,
+      imported_at: new Date().toISOString(),
+    });
+
+    const insert = db.prepare(
+      `INSERT INTO statement_line
+         (id, org_id, statement_id, row_no, policy_no, cover_note_no, insured, vehicle_no,
+          effective_date, gross_premium, commission_rate, commission, reference,
+          policy_id, basis, decided, accepted, accepted_note)
+       VALUES
+         (@id, @org_id, @statement_id, @row_no, @policy_no, @cover_note_no, @insured, @vehicle_no,
+          @effective_date, @gross_premium, @commission_rate, @commission, @reference,
+          @policy_id, @basis, @decided, @accepted, @accepted_note)`,
+    );
+    lines.forEach((l, i) => {
+      insert.run({ ...l, id: `${id}-l${i + 1}`, org_id: orgId, statement_id: id });
+    });
+  })();
+
+  return id;
+}
+
+/** Is this statement already in? Re-importing one doubles every figure on it. */
+export function findStatement(orgId: string, principalId: string, reference: string) {
+  return getDb()
+    .prepare(
+      `SELECT id, reference FROM commission_statement
+        WHERE org_id = ? AND principal_id = ? AND UPPER(REPLACE(reference,' ','')) = UPPER(REPLACE(?,' ',''))`,
+    )
+    .get(orgId, principalId, reference) as { id: string; reference: string } | undefined;
+}
+
+/**
+ * Point a line at a policy, or at nothing. Either way it is now a decision
+ * somebody made, and the matcher does not get to overrule it.
+ */
+export function assignStatementLine(
+  lineId: string, orgId: string, policyId: string | null,
+): boolean {
+  const db = getDb();
+  if (policyId) {
+    // The policy has to be this agency's; the id came off a form.
+    const owned = db
+      .prepare('SELECT id FROM policy WHERE id = ? AND org_id = ?')
+      .get(policyId, orgId) as { id: string } | undefined;
+    if (!owned) return false;
+  }
+  return db
+    .prepare(
+      `UPDATE statement_line SET policy_id = ?, basis = ?, decided = 1
+        WHERE id = ? AND org_id = ?`,
+    )
+    .run(policyId, policyId ? 'manual' : 'none', lineId, orgId).changes > 0;
+}
+
+export function acceptStatementLine(
+  lineId: string, orgId: string, note: string, accepted: boolean,
+): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE statement_line SET accepted = ?, accepted_note = ? WHERE id = ? AND org_id = ?`,
+    )
+    .run(accepted ? 1 : 0, accepted ? note || null : null, lineId, orgId).changes > 0;
+}
+
+export function getStatementLine(lineId: string, orgId: string) {
+  return getDb()
+    .prepare('SELECT * FROM statement_line WHERE id = ? AND org_id = ?')
+    .get(lineId, orgId) as StatementLineRecord | undefined;
+}
+
+export function setStatementStatus(id: string, orgId: string, status: 'open' | 'settled'): boolean {
+  return getDb()
+    .prepare('UPDATE commission_statement SET status = ?, settled_at = ? WHERE id = ? AND org_id = ?')
+    .run(status, status === 'settled' ? today() : null, id, orgId).changes > 0;
+}
+
+export function deleteStatement(id: string, orgId: string): boolean {
+  // Lines go with it: the schema cascades, and the org is checked on the
+  // parent so a posted id cannot reach another agency's statement.
+  return getDb()
+    .prepare('DELETE FROM commission_statement WHERE id = ? AND org_id = ?')
+    .run(id, orgId).changes > 0;
+}
+
+/**
+ * Every policy this agency holds, for the picker that assigns a line the
+ * matcher could not place. Narrowed to the insurer, because a line on
+ * Allianz's statement is not going to turn out to be an Etiqa policy.
+ */
+export function policyPickerFor(orgId: string, principalId: string, limit = 400) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.effective_date, p.commission_amt,
+              c.name AS insured, m.vehicle_no
+         FROM policy p
+         JOIN client c ON c.id = p.client_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.org_id = ? AND p.principal_id = ? AND p.status != 'quotation'
+        ORDER BY COALESCE(p.issue_date, p.created_date, p.effective_date) DESC
+        LIMIT ?`,
+    )
+    .all(orgId, principalId, limit) as Array<{
+      id: string; policy_no: string; effective_date: string | null;
+      commission_amt: number; insured: string; vehicle_no: string | null;
+    }>;
+}
+
+/** The headline the Accounts screen carries: what the insurers still owe. */
+export function statementExposure(orgId: string) {
+  const db = getDb();
+  const open = db
+    .prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(total_paid),0) paid, COALESCE(SUM(total_expected),0) expected
+         FROM commission_statement WHERE org_id = ? AND status = 'open'`,
+    )
+    .get(orgId) as { n: number; paid: number; expected: number };
+
+  const unresolved = db
+    .prepare(
+      `SELECT COUNT(*) n FROM statement_line l
+         JOIN commission_statement s ON s.id = l.statement_id
+        WHERE l.org_id = ? AND s.status = 'open' AND l.policy_id IS NULL AND l.accepted = 0`,
+    )
+    .get(orgId) as { n: number };
+
+  return {
+    open: open.n,
+    paid: open.paid,
+    expected: open.expected,
+    gap: Math.round((open.paid - open.expected) * 100) / 100,
+    unresolved: unresolved.n,
+  };
+}

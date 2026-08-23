@@ -71,6 +71,7 @@ export const NAV: NavSection[] = [
     count: 'accounts',
     children: [
       { href: '/accounting', label: 'Commission payout', hint: 'Approve and pay agents', count: 'accounts' },
+      { href: '/accounting/statements', label: 'Insurer statements', hint: 'What each insurer actually paid' },
       { href: '/insurance/reconcile', label: 'Reconcile', hint: 'Receivable against payable' },
     ],
   },

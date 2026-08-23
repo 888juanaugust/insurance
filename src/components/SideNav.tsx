@@ -26,6 +26,17 @@ const COLLAPSE_KEY = 'insurhelp:nav-collapsed';
 
 export type NavCounts = Record<CountKey, number> & { notifications: number };
 
+/** Which child of a section the current path belongs to, if any. */
+function activeChild(pathname: string, children: { href: string }[]): string | null {
+  let best: string | null = null;
+  for (const c of children) {
+    if ((pathname === c.href || pathname.startsWith(c.href + '/')) && c.href.length > (best?.length ?? 0)) {
+      best = c.href;
+    }
+  }
+  return best;
+}
+
 export default function SideNav({
   user,
   orgName,
@@ -154,7 +165,10 @@ export default function SideNav({
               {expanded && s.children && (
                 <div className="mb-1 ml-[19px] border-l border-[#39404b] pl-2">
                   {s.children.map((c) => {
-                    const childOn = pathname === c.href || pathname.startsWith(c.href + '/');
+                    /* Longest match, not any match: /accounting/statements sits
+                       under /accounting, and a plain prefix test lights up both
+                       entries at once. */
+                    const childOn = activeChild(pathname, s.children!) === c.href;
                     const childCount = c.count ? counts[c.count] : 0;
                     return (
                       <Link

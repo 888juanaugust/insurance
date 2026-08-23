@@ -60,6 +60,7 @@ invented.
 | Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page, and a policy nothing has been paid on can be deleted — see below. |
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
+| Insurer statements | `/accounting/statements`, `/accounting/statements/new`, `/accounting/statements/[id]` | Check what an insurer actually paid against what the register booked. |
 | Setting | `/settings` | Per-user e-Invoice billing identity and password change. Organisation-wide settings sit under `/settings/global` (editable commission rates per insurer and class, the letterhead, the insurer list), `/settings/renewal` and `/settings/notifications`. |
 | Endorsements | `/endorsements`, `/endorsements/new`, `/endorsements/[id]`, `/endorsements/[id]/edit` | Mid-term changes to cover, with the additional or return premium worked out and shown before saving. |
 | Claims | `/claims`, `/claims/new`, `/claims/[id]`, `/claims/[id]/edit` | Motor and non-motor claims from the first phone call to settlement, with the no-claim-discount consequence stated on every one. |
@@ -169,6 +170,56 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Checking an insurer's statement
+
+An agency books its commission when it writes the policy. The insurer pays a month or two
+later, on a statement of its own, and the two disagree more often than anyone would like: a
+case is left off, a rate is applied at the motor 10% when the class earns 25%, a cancellation
+claws back a case that was never paid in the first place. Nobody notices, because reading a
+three-hundred-line statement against a register by eye is a day's work that pays nothing on
+the days it agrees.
+
+`/accounting/statements/new` takes the statement as CSV, sets every line against the register
+and shows the result before anything is stored. Headers are matched loosely and in both
+languages — `Policy No.`, `No Polisi` and `Certificate No` all find the same column. A
+statement needs two things to be worth reading: something to identify the case by (policy
+number, cover note or vehicle registration) and the commission paid. Amounts in brackets are
+read as negative, because that is how a clawback is written.
+
+Lines are matched on the strongest identifier available, in that order. Punctuation is
+ignored, so the register's `KG_Z0137577` and the insurer's `KG-Z0137577` are the same case. A
+registration alone is the last resort and is refused when two years of cover sit on one plate
+and nothing separates them — booking the money against the wrong year hides both.
+
+The comparison is **per case, not per line**: an instalment statement that pays one policy
+twice is judged on the sum of both. Four things can come out of it:
+
+| | What it means |
+| --- | --- |
+| **Agreed** | Paid what the register expected, to the sen. |
+| **Short paid** | Paid less. This is the money to chase, and the reason to open the page. |
+| **Overpaid** | Paid more — usually a commission rate on file that is out of date. |
+| **Left off** | Business the register says this insurer booked over the period, that no line pays for. |
+| **Not on the register** | The insurer paid for a case Insurhelp cannot find. |
+
+Short payments and business left off are added together as what is outstanding.
+Overpayments are deliberately **not** netted against them: an insurer that overpaid one case
+takes it back on a later statement of its own, and setting the two off against each other
+hides the shortfall that has to be chased this week.
+
+A line the matcher could not place is imported anyway and waits for a person: assign it to a
+case by hand, or set it aside with a reason. The reason is required — a written-off difference
+nobody can answer for three months later is worse than an open one. Both decisions stick: a
+re-match does not overrule them.
+
+Importing a statement changes nothing on the register. It is a reading of the two side by
+side, kept so it can be shown to the insurer.
+
+The period is the months of business the statement answers for, matched on production date
+(issue date, falling back to created and then effective) rather than when the money arrived.
+The same statement cannot be imported twice under one reference — doing so would double every
+figure on it.
 
 ## Renewal notices
 
@@ -451,6 +502,15 @@ A second organisation, **BS Agency Sdn Bhd**, holds four policies transcribed fr
 policy documents — Liberty `WQK100`, Lonpac `DDS 7898`, Allianz `MDW9185` and Liberty
 `NCF9240` — including their extensions and exact premium breakdowns. Switch to it with the
 organisation selector on the dashboard, or sign in as `boonseng_agent@yahoo.com`.
+
+One insurer commission statement is seeded with it — Berjaya Sompo's quarter to 30 June
+2026 — and it is deliberately imperfect, because a reconciliation screen with nothing to
+reconcile demonstrates nothing. One case is paid to the sen, one fire policy is short by
+RM 283.33 because the 10% motor rate was applied to it instead of 25%, one case worth
+RM 93.96 is left off the statement altogether, and one line of RM 96.30 is for a policy the
+agency never wrote. The statement is built by running the seeded policies back through the
+same reader and matcher the import uses, so its figures cannot drift from the book it is
+checked against.
 
 Everything else is fabricated demo data.
 
