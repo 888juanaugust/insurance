@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { getClient, listClientPolicies, listLifePlans } from '@/lib/queries';
+import { getClient, listClientPolicies, listLifePlans, portalAccess } from '@/lib/queries';
 import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { Crumb, StatusBadge } from '@/components/ui';
 import { deleteClientAction } from '@/lib/client-actions';
+import PortalAccess from '@/components/PortalAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   if (!client || client.org_id !== user.org_id) notFound();
 
   const policies = listClientPolicies(id);
+  const access = portalAccess(id, user.org_id);
   const plans = listLifePlans(user.org_id).filter((p) => p.client_id === id);
   const premium = policies.reduce((s, p) => s + p.total_premium, 0);
 
@@ -163,6 +165,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       )}
+
+      <PortalAccess clientId={client.id} clientName={client.name} access={access} />
     </div>
   );
 }

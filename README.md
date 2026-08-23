@@ -41,6 +41,7 @@ invented.
 
 | Module | Route | Notes |
 | --- | --- | --- |
+| Client portal | `/portal`, `/portal/login`, `/portal/policy/[id]` | What a client sees of their own insurance. Separate sign-in, separate session, separate queries. |
 | Import | `/import` | Bring an existing book across from a spreadsheet. Every row is checked and shown before anything is written. |
 | Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
@@ -166,6 +167,44 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## The client portal
+
+`/portal` is what a client sees of their own insurance: their policies, what
+they still owe, their claims, their documents, and a button asking the agency to
+renew. The agency issues an access code from the client's page; there is no
+self-registration, because anyone could otherwise type a stranger's NRIC and be
+told whether it is on file.
+
+Everything about it is built around one question — what must a client never
+see?
+
+- **Its own queries.** Every read the portal makes lives in its own set of
+  functions, none of which select a commission, a sub agent, or another client's
+  row. Reusing the agency's `getPolicy` would hand the client the commission the
+  agency earns on them; one careless field on one page would leak it and nobody
+  would notice.
+- **Its own session.** A different cookie, and the signed payload carries a
+  `portal:` purpose. The two surfaces share a secret, so without that purpose a
+  valid agency cookie would also be a valid portal cookie. Both directions are
+  tested.
+- **Its own document route.** The lookup joins through the policy to this client
+  *and* restricts the kind, so an adjuster's report filed against a claim is not
+  found rather than refused. A schedule on their own policy is served.
+- **Sessions are two hours**, not the agency's eight — a client signs in from a
+  phone more likely to be shared or left unlocked — and the client row is read on
+  every request, so withdrawing access takes effect at the next one rather than
+  the next sign-in.
+
+The access code is generated from an alphabet without ambiguous characters,
+because it gets read down a telephone, and it is stored hashed: an agency
+employee reading the database should not be able to sign in as a client. It is
+shown once and cannot be recovered — the audit trail records that a code was
+issued, never the code.
+
+One failed sign-in looks exactly like another. A wrong code and an unknown NRIC
+produce the same sentence, so the portal cannot be used to find out whether a
+given person is insured here.
 
 ## Importing a book
 

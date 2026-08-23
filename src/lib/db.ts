@@ -110,7 +110,12 @@ CREATE TABLE IF NOT EXISTS client (
   dob            TEXT,
   occupation     TEXT,
   portal_enabled INTEGER NOT NULL DEFAULT 0,
-  created_at     TEXT
+  created_at     TEXT,
+  -- Portal access. The code is hashed like a password: an agency that reads
+  -- its own database still should not be able to sign in as a client.
+  portal_code_hash TEXT,
+  portal_code_set  TEXT,
+  portal_last_seen TEXT
 );
 
 CREATE TABLE IF NOT EXISTS principal (
@@ -498,6 +503,15 @@ function migrate(db: Database.Database) {
    * `client` is left alone: it is the role the (unbuilt) client portal will
    * use, and those accounts were never meant to reach the agency screens.
    */
+  const clientColumns = new Set(
+    (db.prepare('PRAGMA table_info(client)').all() as { name: string }[]).map((c) => c.name),
+  );
+  for (const [name, decl] of [
+    ['portal_code_hash', 'TEXT'], ['portal_code_set', 'TEXT'], ['portal_last_seen', 'TEXT'],
+  ] as [string, string][]) {
+    if (!clientColumns.has(name)) db.exec(`ALTER TABLE client ADD COLUMN ${name} ${decl}`);
+  }
+
   const docColumns = new Set(
     (db.prepare('PRAGMA table_info(policy_document)').all() as { name: string }[]).map((c) => c.name),
   );

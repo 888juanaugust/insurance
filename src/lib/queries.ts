@@ -2287,3 +2287,139 @@ export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
   });
   return tx(rows);
 }
+
+/* -------------------------------------------------------------- portal */
+
+/**
+ * Everything the portal reads lives here, and nothing here selects a
+ * commission, an agent, or another client's row.
+ *
+ * Keeping the portal's queries apart from the agency's is the whole defence.
+ * Reusing `getPolicy` would hand a client the commission rate the agency earns
+ * on them and the sub agent's name — one careless field on a page would leak
+ * it, and nobody would notice.
+ */
+
+export function findClientForPortal(identification: string) {
+  const bare = identification.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return getDb()
+    .prepare(
+      `SELECT id, org_id, name, portal_enabled, portal_code_hash
+         FROM client
+        WHERE upper(replace(replace(COALESCE(nric,''),'-',''),' ','')) = ?
+           OR upper(replace(replace(COALESCE(business_reg,''),'-',''),' ','')) = ?`,
+    )
+    .get(bare, bare) as
+    | { id: string; org_id: string; name: string; portal_enabled: number; portal_code_hash: string | null }
+    | undefined;
+}
+
+export function setPortalCode(clientId: string, orgId: string, hash: string | null): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE client SET portal_code_hash = ?, portal_code_set = ?, portal_enabled = ?
+        WHERE id = ? AND org_id = ?`,
+    )
+    .run(hash, hash ? today() : null, hash ? 1 : 0, clientId, orgId).changes > 0;
+}
+
+export function touchPortalSeen(clientId: string): void {
+  getDb().prepare('UPDATE client SET portal_last_seen = ? WHERE id = ?').run(today(), clientId);
+}
+
+export function portalAccess(clientId: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT portal_enabled, portal_code_set, portal_last_seen,
+              CASE WHEN portal_code_hash IS NULL THEN 0 ELSE 1 END AS has_code
+         FROM client WHERE id = ? AND org_id = ?`,
+    )
+    .get(clientId, orgId) as
+    | { portal_enabled: number; portal_code_set: string | null; portal_last_seen: string | null; has_code: number }
+    | undefined;
+}
+
+/** The client's own policies. No commission, no agent, no principal remittance. */
+export function portalPolicies(clientId: string) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.class, p.product, p.type_of_cover, p.status,
+              p.effective_date, p.expiry_date, p.sum_insured, p.ncd_pct,
+              p.gross_premium, p.service_tax, p.stamp_duty, p.total_premium, p.excess,
+              pr.short_name AS principal, pr.name AS principal_name,
+              m.vehicle_no, m.make_model,
+              pay.paid_amount AS paid, pay.status AS payment_status, pay.due_date
+         FROM policy p
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+         LEFT JOIN payment pay ON pay.policy_id = p.id AND pay.kind = 'client'
+        WHERE p.client_id = ? AND p.status != 'quotation'
+        ORDER BY p.expiry_date DESC`,
+    )
+    .all(clientId) as Array<Record<string, any>>;
+}
+
+export function portalPolicy(policyId: string, clientId: string) {
+  const rows = portalPolicies(clientId);
+  return rows.find((r) => r.id === policyId);
+}
+
+export function portalClaims(clientId: string) {
+  return getDb()
+    .prepare(
+      `SELECT cl.id, cl.claim_no, cl.type, cl.status, cl.incident_date, cl.description,
+              cl.estimate_amount, cl.approved_amount, cl.settled_amount, cl.excess_borne,
+              cl.affects_ncd, cl.workshop, p.policy_no, m.vehicle_no
+         FROM claim cl
+         JOIN policy p ON p.id = cl.policy_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.client_id = ?
+        ORDER BY cl.incident_date DESC`,
+    )
+    .all(clientId) as Array<Record<string, any>>;
+}
+
+/** Documents on the client's own policies, and only kinds meant for them. */
+const CLIENT_VISIBLE_KINDS = ['schedule', 'cover_note', 'receipt', 'endorsement'];
+
+export function portalDocuments(clientId: string) {
+  const marks = CLIENT_VISIBLE_KINDS.map(() => '?').join(',');
+  return getDb()
+    .prepare(
+      `SELECT d.id, d.filename, d.kind, d.byte_size, d.content_type, d.uploaded_at, p.policy_no
+         FROM policy_document d
+         JOIN policy p ON p.id = d.policy_id
+        WHERE p.client_id = ? AND d.storage_key IS NOT NULL AND d.claim_id IS NULL
+          AND COALESCE(d.kind,'') IN (${marks})
+        ORDER BY d.uploaded_at DESC`,
+    )
+    .all(clientId, ...CLIENT_VISIBLE_KINDS) as Array<Record<string, any>>;
+}
+
+export function portalDocument(docId: string, clientId: string) {
+  const marks = CLIENT_VISIBLE_KINDS.map(() => '?').join(',');
+  return getDb()
+    .prepare(
+      `SELECT d.id, d.filename, d.storage_key, d.content_type
+         FROM policy_document d
+         JOIN policy p ON p.id = d.policy_id
+        WHERE d.id = ? AND p.client_id = ? AND d.storage_key IS NOT NULL AND d.claim_id IS NULL
+          AND COALESCE(d.kind,'') IN (${marks})`,
+    )
+    .get(docId, clientId, ...CLIENT_VISIBLE_KINDS) as
+    | { id: string; filename: string; storage_key: string; content_type: string | null }
+    | undefined;
+}
+
+/** Does this policy belong to this client, and is a renewal already asked for? */
+export function portalRenewalState(policyId: string, clientId: string) {
+  const db = getDb();
+  const owned = db
+    .prepare('SELECT id, org_id, policy_no FROM policy WHERE id = ? AND client_id = ?')
+    .get(policyId, clientId) as { id: string; org_id: string; policy_no: string } | undefined;
+  if (!owned) return null;
+  const existing = db
+    .prepare("SELECT id FROM renewal_request WHERE policy_id = ? AND status IN ('inbox','processing')")
+    .get(policyId) as { id: string } | undefined;
+  return { policy: owned, pending: Boolean(existing) };
+}
