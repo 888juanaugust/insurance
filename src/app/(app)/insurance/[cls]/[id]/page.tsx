@@ -1,13 +1,16 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { getPolicy, policyDeleteBlock, listPolicyDocuments, claimsForPolicy } from '@/lib/queries';
+import {
+  getPolicy, policyDeleteBlock, listPolicyDocuments, claimsForPolicy, endorsementsForPolicy,
+} from '@/lib/queries';
 import { money, longDate, num, classLabel } from '@/lib/format';
 import { Crumb, StatusBadge, Help } from '@/components/ui';
 import { recordPaymentAction } from '@/lib/actions';
 import { deletePolicyAction } from '@/lib/policy-actions';
 import DocumentsPanel from '@/components/DocumentsPanel';
 import { TYPE_LABEL as CLAIM_TYPE_LABEL, STATUS_LABEL as CLAIM_STATUS_LABEL, isClosed as claimClosed } from '@/lib/claims';
+import { TYPE_LABEL as END_TYPE_LABEL, STATUS_LABEL as END_STATUS_LABEL } from '@/lib/endorsements';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +70,7 @@ export default async function PolicyDetailPage({
   const deleteBlock = policyDeleteBlock(id, user.org_id);
   const documents = listPolicyDocuments(id, user.org_id);
   const claims = claimsForPolicy(id, user.org_id);
+  const endorsements = endorsementsForPolicy(id, user.org_id);
 
   return (
     <div className="space-y-4">
@@ -368,6 +372,66 @@ export default async function PolicyDetailPage({
         ) : (
           <p className="px-6 py-5 text-[13px] text-muted">
             No claims against this policy. A clean year is what earns the no-claim discount.
+          </p>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          Endorsements
+          <Link href={`/endorsements/new?policy=${policy.id}`} className="ml-auto text-[12.5px] link-red">
+            Raise an endorsement
+          </Link>
+        </div>
+        {endorsements.length ? (
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Endorsement</th>
+                  <th>Change</th>
+                  <th>Effective</th>
+                  <th className="num">Total</th>
+                  <th>Stage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {endorsements.map((en) => (
+                  <tr key={en.id}>
+                    <td>
+                      <Link href={`/endorsements/${en.id}`} className="link-red font-semibold">
+                        {en.endorsement_no}
+                      </Link>
+                    </td>
+                    <td className="text-ink-soft">
+                      {END_TYPE_LABEL[en.type] ?? en.type}
+                      {en.description && (
+                        <span className="block max-w-[320px] truncate text-[12px] text-muted" title={en.description}>
+                          {en.description}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-ink-soft">{longDate(en.effective_date)}</td>
+                    <td className={`num font-semibold ${en.total_amount < 0 ? 'text-danger' : 'text-ink'}`}>
+                      {en.total_amount
+                        ? en.total_amount < 0
+                          ? `(${money(Math.abs(en.total_amount))})`
+                          : money(en.total_amount)
+                        : '—'}
+                    </td>
+                    <td>
+                      <span className={`badge ${en.status === 'issued' ? 'badge-green' : 'badge-amber'}`}>
+                        {END_STATUS_LABEL[en.status] ?? en.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="px-6 py-5 text-[13px] text-muted">
+            No endorsements. Cover is as it was written.
           </p>
         )}
       </div>

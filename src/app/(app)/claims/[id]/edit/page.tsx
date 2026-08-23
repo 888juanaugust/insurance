@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireAdmin } from '@/lib/guard';
-import { getClaim, claimPolicyOptions } from '@/lib/queries';
+import { getClaim, policyOptions } from '@/lib/queries';
 import { Crumb, PageHeader } from '@/components/ui';
 import ClaimForm from '@/components/ClaimForm';
 
@@ -41,7 +41,7 @@ export default async function EditClaimPage({
 
       <ClaimForm
         mode="edit"
-        policies={claimPolicyOptions(user.org_id)}
+        policies={policyOptions(user.org_id)}
         closing={closing}
         initial={{ ...claim, claim_id: claim.id }}
       />

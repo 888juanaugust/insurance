@@ -1440,6 +1440,9 @@ export function navCounts(orgId: string) {
     claims: one(
       "SELECT COUNT(*) v FROM claim WHERE org_id = ? AND status NOT IN ('settled','rejected','withdrawn')",
     ),
+    endorsements: one(
+      "SELECT COUNT(*) v FROM endorsement WHERE org_id = ? AND status IN ('draft','submitted')",
+    ),
     notifications: one('SELECT COUNT(*) v FROM notification WHERE org_id = ? AND read_flag = 0'),
   };
 }
@@ -1907,12 +1910,17 @@ export function claimStorageKeys(claimId: string): string[] {
   ).map((r) => r.storage_key);
 }
 
-/** Policies a claim can be made against, newest cover first. */
-export function claimPolicyOptions(orgId: string) {
+/**
+ * Policies a claim or an endorsement can be raised against, newest cover
+ * first. Everything the pickers need comes back in one query — fetching each
+ * policy in turn to read its premium would pull its payments, extensions and
+ * commission along with it, once per row of a dropdown.
+ */
+export function policyOptions(orgId: string) {
   return getDb()
     .prepare(
       `SELECT p.id, p.policy_no, p.effective_date, p.expiry_date, p.ncd_pct,
-              c.name AS client_name, m.vehicle_no
+              p.gross_premium, c.name AS client_name, m.vehicle_no
          FROM policy p
          JOIN client c ON c.id = p.client_id
          LEFT JOIN motor_detail m ON m.policy_id = p.id
@@ -1921,7 +1929,7 @@ export function claimPolicyOptions(orgId: string) {
     )
     .all(orgId) as Array<{
       id: string; policy_no: string; effective_date: string | null; expiry_date: string | null;
-      ncd_pct: number; client_name: string; vehicle_no: string | null;
+      ncd_pct: number; gross_premium: number; client_name: string; vehicle_no: string | null;
     }>;
 }
 
@@ -1929,4 +1937,155 @@ export function setDocumentClaim(id: string, orgId: string, claimId: string): vo
   getDb()
     .prepare('UPDATE policy_document SET claim_id = ? WHERE id = ? AND org_id = ?')
     .run(claimId, id, orgId);
+}
+
+/* ----------------------------------------------------------- endorsements */
+
+export type EndorsementRow = {
+  id: string; org_id: string; policy_id: string; endorsement_no: string;
+  insurer_ref: string | null; type: string; status: string; effective_date: string;
+  description: string | null; annual_difference: number; basis: string | null;
+  days_on_risk: number; days_unexpired: number; cover_days: number;
+  gross_amount: number; service_tax: number; stamp_duty: number; total_amount: number;
+  issued_date: string | null; remarks: string | null; created_at: string; updated_at: string | null;
+};
+
+export type EndorsementListRow = EndorsementRow & {
+  policy_no: string; class: string; vehicle_no: string | null;
+  client_name: string; client_id: string; principal: string;
+};
+
+export function listEndorsements(
+  orgId: string,
+  f: { status?: string; type?: string; search?: string; effect?: string } = {},
+): EndorsementListRow[] {
+  const params = {
+    org: orgId,
+    status: f.status ?? '',
+    type: f.type ?? '',
+    // additional = money in, refund = money out, nil = a record only
+    effect: f.effect === 'additional' || f.effect === 'refund' || f.effect === 'nil' ? f.effect : '',
+    search: f.search ?? '',
+    like: `%${(f.search ?? '').toLowerCase()}%`,
+  };
+  return getDb()
+    .prepare(
+      `SELECT e.*, p.policy_no, p.class, m.vehicle_no,
+              c.name AS client_name, c.id AS client_id, pr.short_name AS principal
+         FROM endorsement e
+         JOIN policy p     ON p.id = e.policy_id
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE e.org_id = @org
+          AND (@status = '' OR e.status = @status)
+          AND (@type   = '' OR e.type   = @type)
+          AND (@effect = ''
+               OR (@effect = 'additional' AND e.total_amount > 0)
+               OR (@effect = 'refund'     AND e.total_amount < 0)
+               OR (@effect = 'nil'        AND e.total_amount = 0))
+          AND (@search = ''
+               OR lower(e.endorsement_no) LIKE @like
+               OR lower(COALESCE(e.insurer_ref,'')) LIKE @like
+               OR lower(p.policy_no) LIKE @like
+               OR lower(COALESCE(m.vehicle_no,'')) LIKE @like
+               OR lower(c.name) LIKE @like
+               OR lower(COALESCE(e.description,'')) LIKE @like)
+        ORDER BY e.effective_date DESC, e.rowid DESC`,
+    )
+    .all(params) as EndorsementListRow[];
+}
+
+export function getEndorsement(id: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT e.*, p.policy_no, p.class, p.effective_date AS policy_start,
+              p.expiry_date AS policy_end, p.gross_premium, p.total_premium,
+              m.vehicle_no, m.make_model,
+              c.name AS client_name, c.id AS client_id,
+              pr.short_name AS principal
+         FROM endorsement e
+         JOIN policy p     ON p.id = e.policy_id
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE e.id = ? AND e.org_id = ?`,
+    )
+    .get(id, orgId) as (EndorsementListRow & Record<string, any>) | undefined;
+}
+
+export function endorsementsForPolicy(policyId: string, orgId: string): EndorsementRow[] {
+  return getDb()
+    .prepare('SELECT * FROM endorsement WHERE policy_id = ? AND org_id = ? ORDER BY effective_date DESC, rowid DESC')
+    .all(policyId, orgId) as EndorsementRow[];
+}
+
+export type EndorsementInput = Omit<EndorsementRow, 'id' | 'org_id' | 'created_at' | 'updated_at'>;
+
+export function createEndorsement(orgId: string, input: EndorsementInput): string {
+  const id = newId('end');
+  getDb()
+    .prepare(
+      `INSERT INTO endorsement (id, org_id, policy_id, endorsement_no, insurer_ref, type, status,
+         effective_date, description, annual_difference, basis, days_on_risk, days_unexpired,
+         cover_days, gross_amount, service_tax, stamp_duty, total_amount, issued_date, remarks,
+         created_at, updated_at)
+       VALUES (@id, @org_id, @policy_id, @endorsement_no, @insurer_ref, @type, @status,
+         @effective_date, @description, @annual_difference, @basis, @days_on_risk, @days_unexpired,
+         @cover_days, @gross_amount, @service_tax, @stamp_duty, @total_amount, @issued_date, @remarks,
+         @created_at, @updated_at)`,
+    )
+    .run({ ...input, id, org_id: orgId, created_at: today(), updated_at: today() });
+  return id;
+}
+
+export function updateEndorsement(id: string, orgId: string, input: EndorsementInput): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE endorsement SET policy_id=@policy_id, endorsement_no=@endorsement_no,
+         insurer_ref=@insurer_ref, type=@type, status=@status, effective_date=@effective_date,
+         description=@description, annual_difference=@annual_difference, basis=@basis,
+         days_on_risk=@days_on_risk, days_unexpired=@days_unexpired, cover_days=@cover_days,
+         gross_amount=@gross_amount, service_tax=@service_tax, stamp_duty=@stamp_duty,
+         total_amount=@total_amount, issued_date=@issued_date, remarks=@remarks,
+         updated_at=@updated_at
+       WHERE id=@id AND org_id=@org_id`,
+    )
+    .run({ ...input, id, org_id: orgId, updated_at: today() }).changes > 0;
+}
+
+export function deleteEndorsement(id: string, orgId: string): EndorsementRow | undefined {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT * FROM endorsement WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as EndorsementRow | undefined;
+  if (!row) return undefined;
+  db.prepare('DELETE FROM endorsement WHERE id = ? AND org_id = ?').run(id, orgId);
+  return row;
+}
+
+export function findEndorsementByNumber(orgId: string, no: string, excludeId = '') {
+  return getDb()
+    .prepare('SELECT id, endorsement_no FROM endorsement WHERE org_id = ? AND upper(endorsement_no) = upper(?) AND id != ?')
+    .get(orgId, no, excludeId) as { id: string; endorsement_no: string } | undefined;
+}
+
+/** The agency's own sequence, e.g. END-2026-0007. */
+export function nextEndorsementNo(orgId: string): string {
+  const year = today().slice(0, 4);
+  const row = getDb()
+    .prepare('SELECT endorsement_no FROM endorsement WHERE org_id = ? AND endorsement_no LIKE ? ORDER BY endorsement_no DESC LIMIT 1')
+    .get(orgId, `END-${year}-%`) as { endorsement_no: string } | undefined;
+  const last = row ? Number(row.endorsement_no.split('-')[2]) || 0 : 0;
+  return `END-${year}-${String(last + 1).padStart(4, '0')}`;
+}
+
+export function endorsementCounts(orgId: string) {
+  const db = getDb();
+  const one = (sql: string) => (db.prepare(sql).get(orgId) as { v: number }).v;
+  return {
+    open: one("SELECT COUNT(*) v FROM endorsement WHERE org_id = ? AND status IN ('draft','submitted')"),
+    additional: one("SELECT COALESCE(SUM(total_amount),0) v FROM endorsement WHERE org_id = ? AND status = 'issued' AND total_amount > 0"),
+    refunded: one("SELECT COALESCE(SUM(total_amount),0) v FROM endorsement WHERE org_id = ? AND status = 'issued' AND total_amount < 0"),
+  };
 }

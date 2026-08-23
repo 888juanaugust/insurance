@@ -16,7 +16,7 @@ export type NavSection = {
 };
 
 /** Which live figure, if any, this entry carries. */
-export type CountKey = 'renewals' | 'accounts' | 'quotations' | 'claims';
+export type CountKey = 'renewals' | 'accounts' | 'quotations' | 'claims' | 'endorsements';
 
 export type IconKey =
   | 'overview' | 'clients' | 'policies' | 'renewals'
@@ -46,6 +46,7 @@ export const NAV: NavSection[] = [
       { href: '/insurance/non-motor', label: 'Non-motor', hint: 'Fire, PA, medical, liability' },
       { href: '/insurance/quotations', label: 'Quotations', hint: 'Quote pipeline', count: 'quotations' },
       { href: '/claims', label: 'Claims', hint: 'From the first call to settlement', count: 'claims' },
+      { href: '/endorsements', label: 'Endorsements', hint: 'Mid-term changes to cover', count: 'endorsements' },
       { href: '/insurance/endorsement', label: 'Employee benefits', hint: 'Group schemes' },
     ],
   },

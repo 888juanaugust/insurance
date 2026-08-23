@@ -183,6 +183,7 @@ export default function ClaimForm({
             defaultValue={policyId}
             onChange={(e) => setPolicyId(e.target.value)}
             aria-invalid={err('policy_id') ? true : undefined}
+            aria-describedby={err('policy_id') ? 'policy_id-error' : undefined}
             className={`inp cursor-pointer ${err('policy_id') ? 'border-brand' : ''}`}
           >
             <option value="">Choose the policy…</option>
@@ -194,7 +195,7 @@ export default function ClaimForm({
             ))}
           </select>
           {err('policy_id') ? (
-            <p className="mt-1 text-[12px] font-medium text-brand">{err('policy_id')}</p>
+            <p id="policy_id-error" className="mt-1 text-[12px] font-medium text-brand">{err('policy_id')}</p>
           ) : policy ? (
             <p className="mt-1 text-[12px] text-muted">
               Cover {policy.effective_date} to {policy.expiry_date}
@@ -219,7 +220,7 @@ export default function ClaimForm({
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
-          {err('type') && <p className="mt-1 text-[12px] font-medium text-brand">{err('type')}</p>}
+          {err('type') && <p id="type-error" className="mt-1 text-[12px] font-medium text-brand">{err('type')}</p>}
         </div>
 
         <div>
@@ -233,7 +234,7 @@ export default function ClaimForm({
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-          {err('status') && <p className="mt-1 text-[12px] font-medium text-brand">{err('status')}</p>}
+          {err('status') && <p id="status-error" className="mt-1 text-[12px] font-medium text-brand">{err('status')}</p>}
         </div>
       </Section>
 

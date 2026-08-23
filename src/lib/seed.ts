@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3';
+import { calculateEndorsement } from './endorsements';
 import { hashPassword } from './auth';
 import { inferClassOfBusiness } from './classes';
 
@@ -821,6 +822,71 @@ export function seed(db: Database) {
   insertAll(db, 'quotation', QUOTATIONS);
   insertAll(db, 'renewal_request', RENEWAL_REQUESTS);
   insertAll(db, 'claim', CLAIMS);
+
+  /*
+   * Endorsements are seeded from their inputs and costed with the same
+   * function the application uses, so the stored figures can never drift from
+   * what the screen would calculate for them.
+   */
+  const policyById = new Map(policyRows.map((r) => [r.id as string, r]));
+  const endorsementSeeds = [
+    {
+      id: 'end-2026-0001', no: 'END-2026-0001', policy: 'pol-j6519648',
+      insurerRef: 'GEN/END/26/33108', type: 'sum_insured', status: 'issued',
+      effective: '2026-05-01', annualDifference: 420,
+      description: 'Sum insured increased from RM 62,000 to RM 68,000 following the market valuation.',
+      remarks: 'Client asked for the higher figure after a valuation for the hire purchase company.',
+    },
+    {
+      id: 'end-2026-0002', no: 'END-2026-0002', policy: 'pol-t6169235',
+      insurerRef: null, type: 'extension', status: 'submitted',
+      effective: '2026-07-01', annualDifference: 186,
+      description: 'Strike, Riot and Civil Commotion extension added at the client\u2019s request.',
+      remarks: 'Waiting on the insurer to issue.',
+    },
+    {
+      id: 'end-2026-0003', no: 'END-2026-0003', policy: 'pol-kg-l0031',
+      insurerRef: 'BS/END/26/09912', type: 'cancellation', status: 'issued',
+      effective: '2026-06-20', annualDifference: 0,
+      description: 'Policy cancelled from 20 June 2026 \u2014 the vehicle was sold.',
+      remarks: 'Refund is on the short-period scale, not pro-rata. Client was told the figure before cancelling.',
+    },
+    {
+      id: 'end-2026-0004', no: 'END-2026-0004', policy: 'pol-v7226410',
+      insurerRef: null, type: 'address', status: 'draft',
+      effective: '2026-08-01', annualDifference: 0,
+      description: 'Correspondence address changed to 14 Jalan SS15/4D, Subang Jaya.',
+      remarks: null,
+    },
+  ];
+
+  insertAll(
+    db,
+    'endorsement',
+    endorsementSeeds.map((e) => {
+      const pol = policyById.get(e.policy)!;
+      const working = calculateEndorsement({
+        type: e.type,
+        effectiveDate: e.effective,
+        policyStart: String(pol.effective_date),
+        policyEnd: String(pol.expiry_date),
+        annualDifference: e.annualDifference,
+        annualPremium: Number(pol.gross_premium),
+      });
+      return {
+        id: e.id, org_id: 'org-exe', policy_id: e.policy, endorsement_no: e.no,
+        insurer_ref: e.insurerRef, type: e.type, status: e.status,
+        effective_date: e.effective, description: e.description,
+        annual_difference: e.annualDifference, basis: working.basis,
+        days_on_risk: working.daysOnRisk, days_unexpired: working.daysUnexpired,
+        cover_days: working.coverDays, gross_amount: working.gross,
+        service_tax: working.serviceTax, stamp_duty: working.stampDuty,
+        total_amount: working.total,
+        issued_date: e.status === 'issued' ? e.effective : null,
+        remarks: e.remarks, created_at: e.effective, updated_at: e.effective,
+      };
+    }),
+  );
 
   const rates: Row[] = [];
   for (const org of ORGS) {

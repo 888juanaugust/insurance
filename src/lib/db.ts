@@ -338,6 +338,40 @@ CREATE TABLE IF NOT EXISTS commission_rate (
   rate         REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS endorsement (
+  id             TEXT PRIMARY KEY,
+  org_id         TEXT NOT NULL REFERENCES organisation(id),
+  policy_id      TEXT NOT NULL REFERENCES policy(id) ON DELETE CASCADE,
+  endorsement_no TEXT NOT NULL,
+  insurer_ref    TEXT,
+  type           TEXT NOT NULL,   -- vehicle_change | sum_insured | named_driver | extension | …
+  status         TEXT NOT NULL,   -- draft | submitted | issued | cancelled
+  effective_date TEXT NOT NULL,
+  description    TEXT,
+
+  -- The change in ANNUAL premium the endorsement causes. The charged figure is
+  -- worked out from it and the unexpired period, so both are kept: the second
+  -- cannot be re-derived once the policy is renewed or altered again.
+  annual_difference REAL NOT NULL DEFAULT 0,
+  basis          TEXT,            -- pro_rata | short_period | nil
+  days_on_risk   INTEGER NOT NULL DEFAULT 0,
+  days_unexpired INTEGER NOT NULL DEFAULT 0,
+  cover_days     INTEGER NOT NULL DEFAULT 0,
+
+  gross_amount   REAL NOT NULL DEFAULT 0,   -- negative for a return premium
+  service_tax    REAL NOT NULL DEFAULT 0,
+  stamp_duty     REAL NOT NULL DEFAULT 0,
+  total_amount   REAL NOT NULL DEFAULT 0,
+
+  issued_date    TEXT,
+  remarks        TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_endorsement_org    ON endorsement(org_id, status);
+CREATE INDEX IF NOT EXISTS idx_endorsement_policy ON endorsement(policy_id);
+
 CREATE TABLE IF NOT EXISTS claim (
   id              TEXT PRIMARY KEY,
   org_id          TEXT NOT NULL REFERENCES organisation(id),

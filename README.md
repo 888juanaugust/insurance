@@ -56,6 +56,7 @@ invented.
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
 | Setting | `/settings` | Per-user e-Invoice billing identity and password change. Organisation-wide settings sit under `/settings/global` (editable commission rates per insurer and class, the letterhead, the insurer list), `/settings/renewal` and `/settings/notifications`. |
+| Endorsements | `/endorsements`, `/endorsements/new`, `/endorsements/[id]`, `/endorsements/[id]/edit` | Mid-term changes to cover, with the additional or return premium worked out and shown before saving. |
 | Claims | `/claims`, `/claims/new`, `/claims/[id]`, `/claims/[id]/edit` | Motor and non-motor claims from the first phone call to settlement, with the no-claim-discount consequence stated on every one. |
 | Quotations | `/insurance/quotations` | Quote pipeline: drafts, sent, accepted, rejected, converted. |
 | Renewals | `/insurance/renewals` | Inbox, expiring and history, with create-quotation / process / reject. |
@@ -163,6 +164,38 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Endorsements
+
+A policy changes mid-term — the sum insured goes up, an extension is added, the
+vehicle is sold. `/endorsements` records the change and works out the money.
+
+The arithmetic is the point, and there are two different rules:
+
+- **Additional or return premium is pro-rata on the unexpired period.** The
+  change in *annual* premium is what gets entered; what the client pays now is
+  `annual difference × unexpired days ÷ cover days`, plus 8% service tax, plus
+  RM 10 stamp duty on an additional premium (a return premium carries none).
+- **A cancellation is refunded on the short-period scale, not pro-rata.** Cancel
+  after four months and the insurer keeps 50%, not the 33% the calendar
+  suggests — most of a year's risk sits in its early months and the
+  administration is already done. Quoting the client the pro-rata figure and
+  paying the short-period one is a complaint every time, so the screen shows the
+  band, the retained percentage and the resulting refund in words before
+  anything is saved. Stamp duty is not refundable.
+
+The form calculates live using the same function the server does, and the server
+recomputes on save rather than trusting the posted figures — a total cannot end
+up disagreeing with the policy dates it was derived from. Both the inputs
+(annual difference) and the outputs (gross, tax, duty, days) are stored, because
+the second cannot be re-derived once the policy is renewed or altered again.
+
+An endorsement must fall inside the period it alters, and an issued one cannot
+be deleted — the cover has already changed, so the way back is a cancelling
+endorsement, not a quiet removal.
+
+The seeded endorsements are costed by calling the same calculator at seed time,
+so the fixtures cannot drift from the code.
 
 ## Claims
 
