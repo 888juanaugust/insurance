@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from 'react';
 import { attachDocumentAction, deleteDocumentAction, type DocumentState } from '@/lib/document-actions';
-import { DOCUMENT_KINDS, KIND_LABEL } from '@/lib/document-kinds';
+import { DOCUMENT_KINDS, CLAIM_DOCUMENT_KINDS, KIND_LABEL } from '@/lib/document-kinds';
 
 export type DocRow = {
   id: string;
@@ -37,13 +37,20 @@ function FileGlyph({ type }: { type: string | null }) {
   );
 }
 
-export default function PolicyDocuments({
-  policyId, policyNo, docs, back,
+/**
+ * The same store serves policies and claims: a schedule filed against the
+ * policy, a police report and repair photos against the claim. Only the owner
+ * differs, so the panel takes it rather than existing twice.
+ */
+export default function DocumentsPanel({
+  owner, ownerId, ownerLabel, docs, back, emptyHint,
 }: {
-  policyId: string;
-  policyNo: string;
+  owner: 'policy' | 'claim';
+  ownerId: string;
+  ownerLabel: string;
   docs: DocRow[];
   back: string;
+  emptyHint: string;
 }) {
   const [state, action, pending] = useActionState(attachDocumentAction, null as DocumentState | null);
   const [adding, setAdding] = useState(false);
@@ -96,8 +103,7 @@ export default function PolicyDocuments({
         </ul>
       ) : (
         <p className="px-5 py-5 text-[13px] text-muted">
-          Nothing on file for {policyNo}. Attach the schedule, cover note or receipt so it can be
-          sent to the client without going back to the insurer.
+          Nothing on file for {ownerLabel}. {emptyHint}
         </p>
       )}
 
@@ -112,7 +118,8 @@ export default function PolicyDocuments({
             onSubmit={() => setAdding(true)}
             className="flex flex-wrap items-end gap-3"
           >
-            <input type="hidden" name="policy_id" value={policyId} />
+            <input type="hidden" name="owner" value={owner} />
+            <input type="hidden" name="owner_id" value={ownerId} />
             <div className="min-w-[220px] flex-1">
               <label htmlFor="file" className="sec-label mb-1 block">File</label>
               <input
@@ -127,8 +134,13 @@ export default function PolicyDocuments({
             </div>
             <div className="w-[170px]">
               <label htmlFor="kind" className="sec-label mb-1 block">What it is</label>
-              <select id="kind" name="kind" defaultValue="schedule" className="inp cursor-pointer text-[13px]">
-                {DOCUMENT_KINDS.map((k) => (
+              <select
+                id="kind"
+                name="kind"
+                defaultValue={owner === 'claim' ? 'police_report' : 'schedule'}
+                className="inp cursor-pointer text-[13px]"
+              >
+                {(owner === 'claim' ? CLAIM_DOCUMENT_KINDS : DOCUMENT_KINDS).map((k) => (
                   <option key={k.value} value={k.value}>{k.label}</option>
                 ))}
               </select>

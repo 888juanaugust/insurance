@@ -56,6 +56,7 @@ invented.
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
 | Setting | `/settings` | Per-user e-Invoice billing identity and password change. Organisation-wide settings sit under `/settings/global` (editable commission rates per insurer and class, the letterhead, the insurer list), `/settings/renewal` and `/settings/notifications`. |
+| Claims | `/claims`, `/claims/new`, `/claims/[id]`, `/claims/[id]/edit` | Motor and non-motor claims from the first phone call to settlement, with the no-claim-discount consequence stated on every one. |
 | Quotations | `/insurance/quotations` | Quote pipeline: drafts, sent, accepted, rejected, converted. |
 | Renewals | `/insurance/renewals` | Inbox, expiring and history, with create-quotation / process / reject. |
 | Documents | `/documents/loc/[id]`, `/documents/receipt/[id]` | Letter of collection and receipt, laid out for printing to PDF. |
@@ -162,6 +163,44 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Claims
+
+The register tracks policies and money; what clients actually telephone about is
+a crash. `/claims` runs one from the first call to settlement — nine stages, with
+the closing three (settled, rejected, withdrawn) reachable only through the form,
+because closing a claim needs the figure or the reason and a one-click control
+cannot ask for either.
+
+What the module is really for is telling the insured the truth before they
+decide:
+
+- **The no-claim discount.** An own-damage claim resets it to zero at renewal. On
+  a 55% discount that is the most expensive consequence of the whole claim —
+  frequently more than the repair — so the screen states it in money, not as a
+  flag. A **windscreen** claim made under the windscreen extension does not
+  affect it: that is what the extension is for. Neither does a claim where the
+  **third party was at fault**, since nothing is claimed off our policy. The form
+  applies that rule as you pick the type and the fault, and stops applying it the
+  moment someone overrides it by hand.
+- **The police report.** Every Malaysian motor policy requires one within 24
+  hours. A claim with none is flagged, and one reported later shows the gap in
+  days — the insurer has grounds to decline, and the insured's explanation is
+  wanted before they ask.
+- **Panel versus off-panel.** Panel workshops are paid direct with no betterment;
+  off-panel is reimbursed, and betterment on replaced parts is charged to the
+  insured. Say so before the car goes in.
+
+Refusals worth knowing about: a claim cannot be dated outside the cover it is
+made under (picking the renewal by mistake is the commonest way a claim gets
+rejected), a settlement cannot exceed what the insurer approved, and a settled
+claim cannot be deleted — the settlement is the record that money was paid, the
+same rule as a paid policy.
+
+Claim paperwork uses the same document store as policies: the police report, the
+claim form, photographs, the repair quotation, the adjuster's report and the
+discharge voucher. The rows carry both the claim and the policy underneath it, so
+deleting either takes the files.
 
 ## Keeping the documents
 
@@ -306,4 +345,12 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
   `src/lib/document-kinds.ts` is one.
 - Playwright's `waitForURL` waits for the `load` event, which an App Router soft navigation
   never fires. Poll `location` instead, and don't wait on page text that also exists on the
-  page you are leaving.
+  page you are leaving. Nor wait on an error selector that is already on screen from the
+  previous attempt — wait for the text to *change*, or a submission that never happened
+  reads as a pass.
+- **React resets the form after a server action, and that reset blanks a controlled
+  `<select>`** while React's own value stays put: the control goes empty and the next
+  submission posts nothing. Every select that has to survive a validation error is therefore
+  uncontrolled, keyed on the echoed value so it remounts with what was submitted, with state
+  re-synced from the echo. The same applies to radios and checkboxes — see `ClaimForm`,
+  `SubAgentForm` and `ClientForm`.

@@ -6,7 +6,7 @@ import { authorise, forbid } from './guard';
 import { audit } from './audit';
 import {
   recordUpload, setDocumentStorageKey, deleteDocumentRow, getPolicy,
-  findDocumentByHash,
+  findDocumentByHash, getClaim, setDocumentClaim,
 } from './queries';
 import {
   contentTypeFor, storageKeyFor, writeDocument, deleteDocument, sha256, ACCEPTED,
@@ -23,17 +23,36 @@ function kindOf(value: string): string {
   return isKind(value) ? value : 'other';
 }
 
-/** Attach a document to a policy that already exists. */
+/** Attach a document to a policy or a claim that already exists. */
 export async function attachDocumentAction(_prev: unknown, fd: FormData): Promise<DocumentState> {
-  const policyId = String(fd.get('policy_id') ?? '');
+  const owner = String(fd.get('owner') ?? 'policy') === 'claim' ? 'claim' : 'policy';
+  const ownerId = String(fd.get('owner_id') ?? '');
   const guard = await authorise({
-    action: 'document.attach', entity: 'policy_document', entityId: policyId,
+    action: 'document.attach', entity: 'policy_document', entityId: ownerId,
   });
   if (!guard.ok) return { error: guard.message };
   const user = guard.user;
 
-  const data = getPolicy(policyId);
-  if (!data || data.policy.org_id !== user.org_id) return { error: 'That policy could not be found.' };
+  // A claim's papers hang off the claim, but they still belong to the policy
+  // underneath it, so the row carries both — deleting either takes them.
+  let policyId = ownerId;
+  let claimId: string | null = null;
+  let label: string;
+  let back: string;
+
+  if (owner === 'claim') {
+    const claim = getClaim(ownerId, user.org_id);
+    if (!claim) return { error: 'That claim could not be found.' };
+    policyId = claim.policy_id;
+    claimId = claim.id;
+    label = claim.claim_no;
+    back = `/claims/${claim.id}`;
+  } else {
+    const data = getPolicy(ownerId);
+    if (!data || data.policy.org_id !== user.org_id) return { error: 'That policy could not be found.' };
+    label = data.policy.policy_no as string;
+    back = `/insurance/${classSlug(data.policy.class as string)}/${ownerId}`;
+  }
 
   const file = fd.get('file');
   if (!(file instanceof File) || file.size === 0) return { error: 'Choose a file to attach.' };
@@ -81,12 +100,14 @@ export async function attachDocumentAction(_prev: unknown, fd: FormData): Promis
     return { error: 'The file could not be stored. Check the server has room and try again.' };
   }
 
+  if (claimId) setDocumentClaim(id, user.org_id, claimId);
+
   await audit(user, {
     action: 'document.attach', entity: 'policy_document', entityId: id, entityLabel: file.name,
-    summary: `${file.name} attached to ${data.policy.policy_no}.`,
+    summary: `${file.name} attached to ${label}.`,
   });
 
-  revalidatePath(`/insurance/${classSlug(data.policy.class)}/${policyId}`);
+  revalidatePath(back);
   return {
     ok: true,
     note: same

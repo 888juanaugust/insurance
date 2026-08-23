@@ -182,7 +182,8 @@ CREATE TABLE IF NOT EXISTS policy_document (
   content_type  TEXT,
   sha256        TEXT,
   kind          TEXT,          -- schedule | cover_note | receipt | endorsement | correspondence | other
-  note          TEXT
+  note          TEXT,
+  claim_id      TEXT REFERENCES claim(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS motor_detail (
@@ -337,6 +338,54 @@ CREATE TABLE IF NOT EXISTS commission_rate (
   rate         REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS claim (
+  id              TEXT PRIMARY KEY,
+  org_id          TEXT NOT NULL REFERENCES organisation(id),
+  policy_id       TEXT NOT NULL REFERENCES policy(id) ON DELETE CASCADE,
+  claim_no        TEXT NOT NULL,          -- the agency's reference
+  insurer_claim_no TEXT,                  -- the one the insurer assigns later
+  type            TEXT NOT NULL,          -- own_damage | third_party | theft | windscreen | flood | act_of_god | other
+  status          TEXT NOT NULL,          -- notified | documents | submitted | surveyed | approved | repairing | settled | rejected | withdrawn
+  fault           TEXT,                   -- own | third_party | shared | undetermined
+
+  incident_date   TEXT,
+  incident_time   TEXT,
+  location        TEXT,
+  description     TEXT,
+  driver_name     TEXT,
+  driver_nric     TEXT,
+  driver_licence  TEXT,
+
+  -- A police report within 24 hours is a condition of the policy in Malaysia.
+  police_report_no   TEXT,
+  police_report_date TEXT,
+  police_station     TEXT,
+
+  workshop        TEXT,
+  workshop_panel  INTEGER NOT NULL DEFAULT 1,   -- panel workshops avoid betterment
+  adjuster        TEXT,
+  survey_date     TEXT,
+
+  estimate_amount REAL NOT NULL DEFAULT 0,
+  approved_amount REAL NOT NULL DEFAULT 0,
+  settled_amount  REAL NOT NULL DEFAULT 0,
+  excess_borne    REAL NOT NULL DEFAULT 0,
+
+  -- An own-damage claim normally resets the no-claim discount at renewal.
+  affects_ncd     INTEGER NOT NULL DEFAULT 1,
+
+  notified_date   TEXT,
+  submitted_date  TEXT,
+  settled_date    TEXT,
+  closed_reason   TEXT,
+  remarks         TEXT,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_org    ON claim(org_id, status);
+CREATE INDEX IF NOT EXISTS idx_claim_policy ON claim(policy_id);
+
 CREATE TABLE IF NOT EXISTS audit_event (
   id         TEXT PRIMARY KEY,
   org_id     TEXT NOT NULL REFERENCES organisation(id),
@@ -420,7 +469,7 @@ function migrate(db: Database.Database) {
   );
   for (const [name, decl] of [
     ['storage_key', 'TEXT'], ['content_type', 'TEXT'], ['sha256', 'TEXT'],
-    ['kind', 'TEXT'], ['note', 'TEXT'],
+    ['kind', 'TEXT'], ['note', 'TEXT'], ['claim_id', 'TEXT'],
   ] as [string, string][]) {
     if (!docColumns.has(name)) db.exec(`ALTER TABLE policy_document ADD COLUMN ${name} ${decl}`);
   }

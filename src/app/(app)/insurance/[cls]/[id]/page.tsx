@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { getPolicy, policyDeleteBlock, listPolicyDocuments } from '@/lib/queries';
+import { getPolicy, policyDeleteBlock, listPolicyDocuments, claimsForPolicy } from '@/lib/queries';
 import { money, longDate, num, classLabel } from '@/lib/format';
 import { Crumb, StatusBadge, Help } from '@/components/ui';
 import { recordPaymentAction } from '@/lib/actions';
 import { deletePolicyAction } from '@/lib/policy-actions';
-import PolicyDocuments from '@/components/PolicyDocuments';
+import DocumentsPanel from '@/components/DocumentsPanel';
+import { TYPE_LABEL as CLAIM_TYPE_LABEL, STATUS_LABEL as CLAIM_STATUS_LABEL, isClosed as claimClosed } from '@/lib/claims';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export default async function PolicyDetailPage({
   const principalPay = payments.find((p) => p.kind === 'principal');
   const deleteBlock = policyDeleteBlock(id, user.org_id);
   const documents = listPolicyDocuments(id, user.org_id);
+  const claims = claimsForPolicy(id, user.org_id);
 
   return (
     <div className="space-y-4">
@@ -319,9 +321,62 @@ export default async function PolicyDetailPage({
         </div>
       </div>
 
-      <PolicyDocuments
-        policyId={policy.id}
-        policyNo={policy.policy_no}
+      <div className="panel">
+        <div className="panel-head">
+          Claims
+          <Link href={`/claims/new?policy=${policy.id}`} className="ml-auto text-[12.5px] link-red">
+            Open a claim
+          </Link>
+        </div>
+        {claims.length ? (
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Claim</th>
+                  <th>Type</th>
+                  <th>Incident</th>
+                  <th className="num">Settled</th>
+                  <th>NCD</th>
+                  <th>Stage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link href={`/claims/${c.id}`} className="link-red font-semibold">{c.claim_no}</Link>
+                    </td>
+                    <td className="text-ink-soft">{CLAIM_TYPE_LABEL[c.type] ?? c.type}</td>
+                    <td className="text-ink-soft">{longDate(c.incident_date)}</td>
+                    <td className="num">{c.settled_amount ? money(c.settled_amount) : '—'}</td>
+                    <td>
+                      <span className={`badge ${c.affects_ncd === 1 ? 'badge-amber' : 'badge-green'}`}>
+                        {c.affects_ncd === 1 ? 'resets' : 'kept'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${claimClosed(c.status) ? 'badge-grey' : 'badge-blue'}`}>
+                        {CLAIM_STATUS_LABEL[c.status] ?? c.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="px-6 py-5 text-[13px] text-muted">
+            No claims against this policy. A clean year is what earns the no-claim discount.
+          </p>
+        )}
+      </div>
+
+      <DocumentsPanel
+        owner="policy"
+        ownerId={policy.id}
+        ownerLabel={policy.policy_no}
+        emptyHint="Attach the schedule, cover note or receipt so it can be sent to the client without going back to the insurer."
         docs={documents.map((d) => ({
           id: d.id,
           filename: d.filename,

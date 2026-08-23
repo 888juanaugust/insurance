@@ -129,6 +129,109 @@ const PRINCIPALS: Row[] = [
 ];
 
 /* ------------------------------------------------------------------ *
+ * Claims
+ *
+ * Five against EXE Cheras policies, chosen to show the cases that behave
+ * differently rather than five of the same thing: a windscreen claim that
+ * keeps the discount, a third-party-at-fault claim that also keeps it, an
+ * own-damage claim that does not, one still waiting on the police report,
+ * and one the insurer declined.
+ * ------------------------------------------------------------------ */
+
+const CLAIMS: Row[] = [
+  {
+    id: 'clm-2026-0001', org_id: 'org-exe', policy_id: 'pol-j6519648',
+    claim_no: 'CLM-2026-0001', insurer_claim_no: 'GEN/MT/26/114820',
+    type: 'own_damage', status: 'repairing', fault: 'own',
+    incident_date: '2026-06-11', incident_time: '18:40',
+    location: 'Jalan Cheras, near the Taman Connaught traffic light',
+    description: 'Rear-ended the car in front in slow traffic. Front bumper, bonnet and radiator support damaged. No injuries.',
+    driver_name: 'POR CHEE KEONG', driver_nric: '810322-14-5119', driver_licence: 'D 8103221451',
+    police_report_no: 'CHERAS/003821/26', police_report_date: '2026-06-11', police_station: 'IPD Cheras',
+    workshop: 'Soon Seng Auto Sdn Bhd', workshop_panel: 1,
+    adjuster: 'Perunding Adjusters (M) Sdn Bhd', survey_date: '2026-06-14',
+    estimate_amount: 8420.00, approved_amount: 7650.00, settled_amount: 0, excess_borne: 400.00,
+    affects_ncd: 1,
+    notified_date: '2026-06-11', submitted_date: '2026-06-12', settled_date: null,
+    closed_reason: null,
+    remarks: 'Insured told the 30% NCD resets at renewal. Still chose to claim \u2014 repair is well above the excess.',
+    created_at: '2026-06-11', updated_at: '2026-06-16',
+  },
+  {
+    id: 'clm-2026-0002', org_id: 'org-exe', policy_id: 'pol-v7226410',
+    claim_no: 'CLM-2026-0002', insurer_claim_no: 'TM/WS/26/88213',
+    type: 'windscreen', status: 'settled', fault: null,
+    incident_date: '2026-07-02', incident_time: '09:15',
+    location: 'KL\u2013Seremban Expressway, KM24 northbound',
+    description: 'Stone thrown up by a lorry cracked the windscreen across the driver\u2019s line of sight.',
+    driver_name: 'QUAH SIEW LING', driver_nric: '900718-08-5442', driver_licence: 'D 9007180854',
+    police_report_no: null, police_report_date: null, police_station: null,
+    workshop: 'Autoglass Express Sri Petaling', workshop_panel: 1,
+    adjuster: null, survey_date: null,
+    estimate_amount: 1350.00, approved_amount: 1350.00, settled_amount: 1350.00, excess_borne: 0,
+    affects_ncd: 0,
+    notified_date: '2026-07-02', submitted_date: '2026-07-02', settled_date: '2026-07-09',
+    closed_reason: null,
+    remarks: 'Claimed under the windscreen extension, so the no-claim discount is untouched. No police report needed for glass only.',
+    created_at: '2026-07-02', updated_at: '2026-07-09',
+  },
+  {
+    id: 'clm-2026-0003', org_id: 'org-exe', policy_id: 'pol-t6169235',
+    claim_no: 'CLM-2026-0003', insurer_claim_no: null,
+    type: 'third_party', status: 'documents', fault: 'third_party',
+    incident_date: '2026-08-14', incident_time: '07:50',
+    location: 'Jalan Ampang, outside the Gleneagles entrance',
+    description: 'Hit from the side by a van changing lanes. The van driver admitted fault at the scene and gave his details.',
+    driver_name: 'ADAM HAKIMI BIN ROSLI', driver_nric: '950214-10-5533', driver_licence: 'D 9502141055',
+    police_report_no: null, police_report_date: null, police_station: null,
+    workshop: null, workshop_panel: 1,
+    adjuster: null, survey_date: null,
+    estimate_amount: 4900.00, approved_amount: 0, settled_amount: 0, excess_borne: 0,
+    affects_ncd: 0,
+    notified_date: '2026-08-14', submitted_date: null, settled_date: null,
+    closed_reason: null,
+    remarks: 'Chasing the police report \u2014 the 24-hour window has passed. Recovering from the third party\u2019s insurer, so our NCD is not touched.',
+    created_at: '2026-08-14', updated_at: '2026-08-18',
+  },
+  {
+    id: 'clm-2026-0004', org_id: 'org-exe', policy_id: 'pol-vb909032e3',
+    claim_no: 'CLM-2026-0004', insurer_claim_no: 'GEN/MT/26/109774',
+    type: 'flood', status: 'settled', fault: null,
+    incident_date: '2026-04-07', incident_time: '22:30',
+    location: 'Basement car park, Pandan Indah',
+    description: 'Flash flood after heavy rain. Water reached the sills; engine did not restart.',
+    driver_name: 'LOOK MEI YIN', driver_nric: '870909-14-5228', driver_licence: 'D 8709091452',
+    police_report_no: 'PANDAN/001129/26', police_report_date: '2026-04-08', police_station: 'IPD Ampang Jaya',
+    workshop: 'Kuan Motor Works', workshop_panel: 0,
+    adjuster: 'Perunding Adjusters (M) Sdn Bhd', survey_date: '2026-04-11',
+    estimate_amount: 12800.00, approved_amount: 11200.00, settled_amount: 11200.00, excess_borne: 500.00,
+    affects_ncd: 1,
+    notified_date: '2026-04-08', submitted_date: '2026-04-09', settled_date: '2026-05-02',
+    closed_reason: null,
+    remarks: 'Covered by the special perils extension. Off-panel workshop, so betterment on the replaced parts was charged to the insured.',
+    created_at: '2026-04-08', updated_at: '2026-05-02',
+  },
+  {
+    id: 'clm-2026-0005', org_id: 'org-exe', policy_id: 'pol-kg-l0031',
+    claim_no: 'CLM-2026-0005', insurer_claim_no: 'BS/MT/26/44120',
+    type: 'own_damage', status: 'rejected', fault: 'own',
+    incident_date: '2026-05-19', incident_time: '23:05',
+    location: 'Jalan Kuching, southbound',
+    description: 'Single-vehicle collision with the central divider.',
+    driver_name: 'NOT THE NAMED DRIVER', driver_nric: null, driver_licence: null,
+    police_report_no: 'SENTUL/000774/26', police_report_date: '2026-05-22', police_station: 'IPD Sentul',
+    workshop: null, workshop_panel: 1,
+    adjuster: 'Perunding Adjusters (M) Sdn Bhd', survey_date: '2026-05-25',
+    estimate_amount: 15600.00, approved_amount: 0, settled_amount: 0, excess_borne: 0,
+    affects_ncd: 0,
+    notified_date: '2026-05-20', submitted_date: '2026-05-21', settled_date: null,
+    closed_reason: 'Declined: the driver was not covered under the policy, and the police report was made three days after the incident.',
+    remarks: 'Both grounds were enough on their own. Insured has been advised of the appeal route to the Ombudsman for Financial Services.',
+    created_at: '2026-05-20', updated_at: '2026-06-04',
+  },
+];
+
+/* ------------------------------------------------------------------ *
  * Users and sub agents
  * ------------------------------------------------------------------ */
 
@@ -717,6 +820,7 @@ export function seed(db: Database) {
   insertAll(db, 'renewal_setting', RENEWAL_SETTINGS);
   insertAll(db, 'quotation', QUOTATIONS);
   insertAll(db, 'renewal_request', RENEWAL_REQUESTS);
+  insertAll(db, 'claim', CLAIMS);
 
   const rates: Row[] = [];
   for (const org of ORGS) {

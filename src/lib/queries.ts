@@ -1437,6 +1437,9 @@ export function navCounts(orgId: string) {
     quotations: one(
       "SELECT COUNT(*) v FROM quotation WHERE org_id = ? AND status IN ('draft','sent')",
     ),
+    claims: one(
+      "SELECT COUNT(*) v FROM claim WHERE org_id = ? AND status NOT IN ('settled','rejected','withdrawn')",
+    ),
     notifications: one('SELECT COUNT(*) v FROM notification WHERE org_id = ? AND read_flag = 0'),
   };
 }
@@ -1716,4 +1719,214 @@ export function setDocumentStorageKey(id: string, orgId: string, key: string): v
   getDb()
     .prepare('UPDATE policy_document SET storage_key = ? WHERE id = ? AND org_id = ?')
     .run(key, id, orgId);
+}
+
+/* ----------------------------------------------------------------- claims */
+
+export type ClaimRow = {
+  id: string; org_id: string; policy_id: string; claim_no: string;
+  insurer_claim_no: string | null; type: string; status: string; fault: string | null;
+  incident_date: string | null; incident_time: string | null; location: string | null;
+  description: string | null; driver_name: string | null; driver_nric: string | null;
+  driver_licence: string | null; police_report_no: string | null;
+  police_report_date: string | null; police_station: string | null;
+  workshop: string | null; workshop_panel: number; adjuster: string | null;
+  survey_date: string | null; estimate_amount: number; approved_amount: number;
+  settled_amount: number; excess_borne: number; affects_ncd: number;
+  notified_date: string | null; submitted_date: string | null; settled_date: string | null;
+  closed_reason: string | null; remarks: string | null; created_at: string; updated_at: string | null;
+};
+
+export type ClaimListRow = ClaimRow & {
+  policy_no: string; class: string; vehicle_no: string | null;
+  client_name: string; client_id: string; principal: string; ncd_pct: number;
+};
+
+export function listClaims(
+  orgId: string,
+  f: { status?: string; type?: string; search?: string; open?: string } = {},
+): ClaimListRow[] {
+  const params = {
+    org: orgId,
+    status: f.status ?? '',
+    type: f.type ?? '',
+    // Only 'open' and 'closed' filter; anything else — including 'all' — means
+    // no filter. Matching on 'all' as a fourth value returned nothing at all.
+    open: f.open === 'open' || f.open === 'closed' ? f.open : '',
+    search: f.search ?? '',
+    like: `%${(f.search ?? '').toLowerCase()}%`,
+  };
+  return getDb()
+    .prepare(
+      `SELECT cl.*, p.policy_no, p.class, p.ncd_pct, m.vehicle_no,
+              c.name AS client_name, c.id AS client_id, pr.short_name AS principal
+         FROM claim cl
+         JOIN policy p     ON p.id = cl.policy_id
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE cl.org_id = @org
+          AND (@status = '' OR cl.status = @status)
+          AND (@type   = '' OR cl.type   = @type)
+          AND (@open   = ''
+               OR (@open = 'open'   AND cl.status NOT IN ('settled','rejected','withdrawn'))
+               OR (@open = 'closed' AND cl.status IN ('settled','rejected','withdrawn')))
+          AND (@search = ''
+               OR lower(cl.claim_no) LIKE @like
+               OR lower(COALESCE(cl.insurer_claim_no,'')) LIKE @like
+               OR lower(p.policy_no) LIKE @like
+               OR lower(COALESCE(m.vehicle_no,'')) LIKE @like
+               OR lower(c.name) LIKE @like
+               OR lower(COALESCE(cl.police_report_no,'')) LIKE @like)
+        ORDER BY cl.incident_date DESC, cl.rowid DESC`,
+    )
+    .all(params) as ClaimListRow[];
+}
+
+export function getClaim(id: string, orgId: string) {
+  const db = getDb();
+  const claim = db
+    .prepare(
+      `SELECT cl.*, p.policy_no, p.class, p.ncd_pct, p.expiry_date, p.excess AS policy_excess,
+              p.gross_premium, p.total_premium,
+              m.vehicle_no, m.make_model, m.windscreen_si,
+              c.name AS client_name, c.id AS client_id, c.phone AS client_phone,
+              pr.short_name AS principal, pr.name AS principal_name
+         FROM claim cl
+         JOIN policy p     ON p.id = cl.policy_id
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE cl.id = ? AND cl.org_id = ?`,
+    )
+    .get(id, orgId) as (ClaimListRow & Record<string, any>) | undefined;
+  return claim;
+}
+
+export function claimsForPolicy(policyId: string, orgId: string): ClaimRow[] {
+  return getDb()
+    .prepare('SELECT * FROM claim WHERE policy_id = ? AND org_id = ? ORDER BY incident_date DESC, rowid DESC')
+    .all(policyId, orgId) as ClaimRow[];
+}
+
+export type ClaimInput = Omit<ClaimRow, 'id' | 'org_id' | 'created_at' | 'updated_at'>;
+
+export function createClaim(orgId: string, input: ClaimInput): string {
+  const id = newId('clm');
+  getDb()
+    .prepare(
+      `INSERT INTO claim (id, org_id, policy_id, claim_no, insurer_claim_no, type, status, fault,
+         incident_date, incident_time, location, description, driver_name, driver_nric, driver_licence,
+         police_report_no, police_report_date, police_station, workshop, workshop_panel, adjuster,
+         survey_date, estimate_amount, approved_amount, settled_amount, excess_borne, affects_ncd,
+         notified_date, submitted_date, settled_date, closed_reason, remarks, created_at, updated_at)
+       VALUES (@id, @org_id, @policy_id, @claim_no, @insurer_claim_no, @type, @status, @fault,
+         @incident_date, @incident_time, @location, @description, @driver_name, @driver_nric, @driver_licence,
+         @police_report_no, @police_report_date, @police_station, @workshop, @workshop_panel, @adjuster,
+         @survey_date, @estimate_amount, @approved_amount, @settled_amount, @excess_borne, @affects_ncd,
+         @notified_date, @submitted_date, @settled_date, @closed_reason, @remarks, @created_at, @updated_at)`,
+    )
+    .run({ ...input, id, org_id: orgId, created_at: today(), updated_at: today() });
+  return id;
+}
+
+export function updateClaim(id: string, orgId: string, input: ClaimInput): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE claim SET policy_id=@policy_id, claim_no=@claim_no, insurer_claim_no=@insurer_claim_no,
+         type=@type, status=@status, fault=@fault, incident_date=@incident_date,
+         incident_time=@incident_time, location=@location, description=@description,
+         driver_name=@driver_name, driver_nric=@driver_nric, driver_licence=@driver_licence,
+         police_report_no=@police_report_no, police_report_date=@police_report_date,
+         police_station=@police_station, workshop=@workshop, workshop_panel=@workshop_panel,
+         adjuster=@adjuster, survey_date=@survey_date, estimate_amount=@estimate_amount,
+         approved_amount=@approved_amount, settled_amount=@settled_amount, excess_borne=@excess_borne,
+         affects_ncd=@affects_ncd, notified_date=@notified_date, submitted_date=@submitted_date,
+         settled_date=@settled_date, closed_reason=@closed_reason, remarks=@remarks,
+         updated_at=@updated_at
+       WHERE id=@id AND org_id=@org_id`,
+    )
+    .run({ ...input, id, org_id: orgId, updated_at: today() }).changes > 0;
+}
+
+export function deleteClaim(id: string, orgId: string): ClaimRow | undefined {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM claim WHERE id = ? AND org_id = ?').get(id, orgId) as ClaimRow | undefined;
+  if (!row) return undefined;
+  db.prepare('DELETE FROM claim WHERE id = ? AND org_id = ?').run(id, orgId);
+  return row;
+}
+
+export function findClaimByNumber(orgId: string, claimNo: string, excludeId = '') {
+  return getDb()
+    .prepare('SELECT id, claim_no FROM claim WHERE org_id = ? AND upper(claim_no) = upper(?) AND id != ?')
+    .get(orgId, claimNo, excludeId) as { id: string; claim_no: string } | undefined;
+}
+
+/** The next reference in the agency's own sequence, e.g. CLM-2026-0007. */
+export function nextClaimNo(orgId: string): string {
+  const year = today().slice(0, 4);
+  const row = getDb()
+    .prepare("SELECT claim_no FROM claim WHERE org_id = ? AND claim_no LIKE ? ORDER BY claim_no DESC LIMIT 1")
+    .get(orgId, `CLM-${year}-%`) as { claim_no: string } | undefined;
+  const last = row ? Number(row.claim_no.split('-')[2]) || 0 : 0;
+  return `CLM-${year}-${String(last + 1).padStart(4, '0')}`;
+}
+
+export function claimCounts(orgId: string) {
+  const db = getDb();
+  const open = db
+    .prepare("SELECT COUNT(*) n FROM claim WHERE org_id = ? AND status NOT IN ('settled','rejected','withdrawn')")
+    .get(orgId) as { n: number };
+  const awaitingReport = db
+    .prepare("SELECT COUNT(*) n FROM claim WHERE org_id = ? AND status = 'documents'")
+    .get(orgId) as { n: number };
+  const settledValue = db
+    .prepare("SELECT COALESCE(SUM(settled_amount),0) v FROM claim WHERE org_id = ? AND status = 'settled'")
+    .get(orgId) as { v: number };
+  return { open: open.n, awaitingReport: awaitingReport.n, settledValue: settledValue.v };
+}
+
+/** Documents filed against a claim rather than a policy. */
+export function listClaimDocuments(claimId: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT d.*, u.name AS uploaded_by_name FROM policy_document d
+         LEFT JOIN app_user u ON u.id = d.uploaded_by
+        WHERE d.claim_id = ? AND d.org_id = ? AND d.storage_key IS NOT NULL
+        ORDER BY d.uploaded_at DESC, d.rowid DESC`,
+    )
+    .all(claimId, orgId) as Array<DocumentRow & { uploaded_by_name: string | null; claim_id: string }>;
+}
+
+export function claimStorageKeys(claimId: string): string[] {
+  return (
+    getDb()
+      .prepare('SELECT storage_key FROM policy_document WHERE claim_id = ? AND storage_key IS NOT NULL')
+      .all(claimId) as Array<{ storage_key: string }>
+  ).map((r) => r.storage_key);
+}
+
+/** Policies a claim can be made against, newest cover first. */
+export function claimPolicyOptions(orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.effective_date, p.expiry_date, p.ncd_pct,
+              c.name AS client_name, m.vehicle_no
+         FROM policy p
+         JOIN client c ON c.id = p.client_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.org_id = ? AND p.status != 'quotation'
+        ORDER BY p.effective_date DESC, p.policy_no`,
+    )
+    .all(orgId) as Array<{
+      id: string; policy_no: string; effective_date: string | null; expiry_date: string | null;
+      ncd_pct: number; client_name: string; vehicle_no: string | null;
+    }>;
+}
+
+export function setDocumentClaim(id: string, orgId: string, claimId: string): void {
+  getDb()
+    .prepare('UPDATE policy_document SET claim_id = ? WHERE id = ? AND org_id = ?')
+    .run(claimId, id, orgId);
 }
