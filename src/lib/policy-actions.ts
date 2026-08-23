@@ -2,14 +2,15 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { currentUser } from './session';
+import { authorise, forbid } from './guard';
+import { audit, diff } from './audit';
 import { extractPolicy, type ExtractionResult, type FieldKey } from './extract';
 import {
   createPolicy, updatePolicy, deletePolicy, policyDeleteBlock, bulkMarkPaid, recordUpload,
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
-  listPrincipals, type PolicyInput,
+  listPrincipals, getPolicy, type PolicyInput,
 } from './queries';
-import { classSlug, today } from './format';
+import { classSlug, today, money } from './format';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
@@ -24,8 +25,9 @@ export type UploadState = {
 
 /** Read an uploaded policy document and return what it contains for review. */
 export async function uploadPolicyAction(_prev: unknown, formData: FormData): Promise<UploadState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('policy.write', { action: 'policy.upload', entity: 'policy' });
+  if (!guard.ok) return { ok: false, error: guard.message };
+  const user = guard.user;
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) {
@@ -199,8 +201,14 @@ function submitted(fd: FormData): Record<string, string> {
 
 /** Persist a reviewed policy — from the upload review form or Create Policy. */
 export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<SaveState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('policy.write', {
+    action: str(fd, 'policy_id') ? 'policy.update' : 'policy.create',
+    entity: 'policy',
+    entityId: str(fd, 'policy_id') || null,
+    entityLabel: str(fd, 'policy_no') || null,
+  });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
 
   const policyNo = str(fd, 'policy_no');
   if (!policyNo) return { error: 'Policy number is required.' , values: submitted(fd) };
@@ -242,8 +250,16 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   const input = buildInput(fd, user.org_id, clientId, principalId);
 
   if (editingId) {
+    const previous = getPolicy(editingId)?.policy as Record<string, unknown> | undefined;
     const ok = updatePolicy(editingId, user.org_id, input);
     if (!ok) return { error: 'That policy could not be found.' , values: submitted(fd) };
+    await audit(user, {
+      action: 'policy.update', entity: 'policy', entityId: editingId, entityLabel: policyNo,
+      summary: `Policy ${policyNo} edited.`,
+      changes: previous
+        ? diff(previous, input as unknown as Record<string, unknown>, Object.keys(input as object))
+        : null,
+    });
     revalidatePath('/insurance/general-motor');
     revalidatePath('/insurance/non-motor');
     redirect(`/insurance/${classSlug(input.class)}/${editingId}`);
@@ -257,6 +273,10 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
 
   const id = createPolicy(input, { uploadedAt: today() });
+  await audit(user, {
+    action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,
+    summary: `Policy ${policyNo} created — ${money(input.total_premium)} total payable.`,
+  });
   revalidatePath('/insurance/general-motor');
   revalidatePath('/insurance/non-motor');
   revalidatePath('/');
@@ -264,32 +284,51 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
 }
 
 export async function deletePolicyAction(fd: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
   const id = String(fd.get('id') ?? '');
   const cls = String(fd.get('cls') ?? 'motor');
+  const guard = await authorise('policy.delete', { action: 'policy.delete', entity: 'policy', entityId: id });
+  if (!guard.ok) forbid(guard.message);
+  const user = guard.user;
   if (!id) redirect(`/insurance/${cls}`);
 
   // The page hides the button when the policy cannot go, but the page it was
   // rendered from may be minutes old — a collection recorded in between has to
   // stop the delete, not be discovered afterwards.
+  const existing = getPolicy(id)?.policy as { policy_no: string; total_premium: number } | undefined;
   const blocked = policyDeleteBlock(id, user.org_id);
   if (blocked) {
+    await audit(user, {
+      action: 'policy.delete', entity: 'policy', entityId: id,
+      entityLabel: existing?.policy_no ?? null, outcome: 'refused', summary: blocked,
+    });
     redirect(`/insurance/${cls}/${id}?blocked=${encodeURIComponent(blocked)}`);
   }
 
   deletePolicy(id, user.org_id);
+  await audit(user, {
+    action: 'policy.delete', entity: 'policy', entityId: id, entityLabel: existing?.policy_no ?? null,
+    summary: `Policy ${existing?.policy_no ?? id} deleted, with its payment and commission records.`,
+  });
   revalidatePath(`/insurance/${cls}`);
   revalidatePath('/');
   redirect(`/insurance/${cls}?deleted=1`);
 }
 
 export async function bulkPaidAction(fd: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
   const kind = String(fd.get('kind') ?? '') === 'principal' ? 'principal' : 'client';
+  const guard = await authorise('payment.record', {
+    action: `payment.bulk_${kind}`, entity: 'payment',
+  });
+  if (!guard.ok) forbid(guard.message);
+
   const ids = fd.getAll('selected').map(String).filter(Boolean);
-  bulkMarkPaid(ids, user.org_id, kind);
+  const n = bulkMarkPaid(ids, guard.user.org_id, kind);
+  if (n > 0) {
+    await audit(guard.user, {
+      action: `payment.bulk_${kind}`, entity: 'payment',
+      summary: `${n} ${kind === 'client' ? 'client collection' : 'principal remittance'}${n === 1 ? '' : 's'} marked settled across ${ids.length} ${ids.length === 1 ? 'policy' : 'policies'}.`,
+    });
+  }
   revalidatePath(String(fd.get('back') ?? '/insurance/general-motor'));
   revalidatePath('/');
 }

@@ -52,13 +52,15 @@ const TOTALLED = [
 ];
 
 export default function RegisterTable({
-  rows, slug, page, perPage, isMotor,
+  rows, slug, page, perPage, isMotor, maySettle = false,
 }: {
   rows: RegisterRow[];
   slug: string;
   page: number;
   perPage: number;
   isMotor: boolean;
+  /** Bulk settlement moves money, so the buttons follow the same permission. */
+  maySettle?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -109,29 +111,31 @@ export default function RegisterTable({
         <input key={id} type="hidden" name="selected" value={id} />
       ))}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2.5">
-        <button
-          type="submit"
-          name="kind"
-          value="client"
-          disabled={selected.length === 0}
-          className="btn btn-ghost disabled:opacity-50"
-        >
-          Bulk client paid
-        </button>
-        <button
-          type="submit"
-          name="kind"
-          value="principal"
-          disabled={selected.length === 0}
-          className="btn btn-ghost disabled:opacity-50"
-        >
-          Bulk principal paid
-        </button>
-        {selected.length > 0 && (
-          <span className="text-[12.5px] text-muted">{selected.length} selected</span>
-        )}
-      </div>
+      {maySettle && (
+        <div className="mb-3 flex flex-wrap items-center gap-2.5">
+          <button
+            type="submit"
+            name="kind"
+            value="client"
+            disabled={selected.length === 0}
+            className="btn btn-ghost disabled:opacity-50"
+          >
+            Bulk client paid
+          </button>
+          <button
+            type="submit"
+            name="kind"
+            value="principal"
+            disabled={selected.length === 0}
+            className="btn btn-ghost disabled:opacity-50"
+          >
+            Bulk principal paid
+          </button>
+          {selected.length > 0 && (
+            <span className="text-[12.5px] text-muted">{selected.length} selected</span>
+          )}
+        </div>
+      )}
 
       <div className="scroll-x rounded border border-line">
         <table className="tbl">

@@ -2,7 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { currentUser } from './session';
+import { authorise, forbid } from './guard';
+import { audit, diff } from './audit';
 import {
   createSubAgent, updateSubAgent, getSubAgent, setSubAgentStatus, deleteSubAgent,
   findSubAgentByCode, subAgentPolicyCount, principalRateCeiling, type SubAgentInput,
@@ -41,10 +42,13 @@ function reject(fd: FormData, field: string, error: string): SubAgentFormState {
 }
 
 export async function saveSubAgentAction(_prev: unknown, fd: FormData): Promise<SubAgentFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const id = str(fd, 'agent_id');
+  const guard = await authorise('agent.write', {
+    action: id ? 'agent.update' : 'agent.create', entity: 'sub_agent', entityId: id || null,
+  });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
+
   const name = str(fd, 'name');
   const code = str(fd, 'agent_code').toUpperCase();
   const email = str(fd, 'email');
@@ -132,38 +136,74 @@ export async function saveSubAgentAction(_prev: unknown, fd: FormData): Promise<
       return { error: 'That agent could not be found.', values: submitted(fd) };
     }
     updateSubAgent(id, user.org_id, input);
+    await audit(user, {
+      action: 'agent.update', entity: 'sub_agent', entityId: id, entityLabel: name,
+      summary: `Sub agent ${name} edited.`,
+      changes: diff(existing as Record<string, unknown>, input as Record<string, unknown>, Object.keys(input)),
+    });
     revalidatePath('/team');
     redirect('/team');
   }
 
-  createSubAgent(user.org_id, input);
+  const newId = createSubAgent(user.org_id, input);
+  await audit(user, {
+    action: 'agent.create', entity: 'sub_agent', entityId: newId, entityLabel: name,
+    summary: `Sub agent ${name} added on ${input.motor_rate}% motor and ${input.non_motor_rate}% non-motor.`,
+  });
   revalidatePath('/team');
   redirect('/team');
 }
 
 export async function setSubAgentStatusAction(fd: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const id = String(fd.get('id') ?? '');
   const status = String(fd.get('status') ?? '') === 'inactive' ? 'inactive' : 'active';
-  if (id) setSubAgentStatus(id, user.org_id, status);
+
+  const guard = await authorise('agent.write', {
+    action: `agent.${status === 'inactive' ? 'deactivate' : 'activate'}`, entity: 'sub_agent', entityId: id,
+  });
+  if (!guard.ok) forbid(guard.message);
+
+  if (id) {
+    const existing = getSubAgent(id);
+    setSubAgentStatus(id, guard.user.org_id, status);
+    if (existing && existing.org_id === guard.user.org_id) {
+      await audit(guard.user, {
+        action: `agent.${status === 'inactive' ? 'deactivate' : 'activate'}`,
+        entity: 'sub_agent', entityId: id, entityLabel: existing.name,
+        summary: `Sub agent ${existing.name} set ${status}.`,
+        changes: { status: [existing.status, status] },
+      });
+    }
+  }
 
   revalidatePath('/team');
 }
 
 export async function deleteSubAgentAction(fd: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const id = String(fd.get('id') ?? '');
+  const guard = await authorise('agent.delete', { action: 'agent.delete', entity: 'sub_agent', entityId: id });
+  if (!guard.ok) forbid(guard.message);
+  const user = guard.user;
+
   if (!id) redirect('/team');
 
   const existing = getSubAgent(id);
   if (!existing || existing.org_id !== user.org_id) redirect('/team');
 
   // An agent with policies against their name is part of the record.
-  if (subAgentPolicyCount(id) === 0) deleteSubAgent(id, user.org_id);
+  if (subAgentPolicyCount(id) === 0) {
+    deleteSubAgent(id, user.org_id);
+    await audit(user, {
+      action: 'agent.delete', entity: 'sub_agent', entityId: id, entityLabel: existing.name,
+      summary: `Sub agent ${existing.name} deleted.`,
+    });
+  } else {
+    await audit(user, {
+      action: 'agent.delete', entity: 'sub_agent', entityId: id, entityLabel: existing.name,
+      outcome: 'refused',
+      summary: `Deletion of ${existing.name} refused — policies are written against their name.`,
+    });
+  }
 
   revalidatePath('/team');
   redirect('/team');

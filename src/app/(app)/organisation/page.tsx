@@ -4,6 +4,7 @@ import { getOrg, orgUsage } from '@/lib/queries';
 import { money, longDate } from '@/lib/format';
 import { PageHeader, Help } from '@/components/ui';
 import { OrgProfilePanel, OrgInvoicePanel, OrgBankPanel } from '@/components/OrgForms';
+import { can } from '@/lib/permissions';
 import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,7 @@ export default async function OrganisationPage() {
     .prepare('SELECT name, email, role, agent_code, phone, status FROM app_user WHERE org_id = ? ORDER BY role, name')
     .all(user.org_id) as Array<Record<string, string>>;
 
+  const readOnly = !can(user.role, 'org.settings');
   const gross = org.plan_price;
   const sst = Math.round(gross * (org.plan_sst_pct / 100) * 100) / 100;
 
@@ -40,11 +42,11 @@ export default async function OrganisationPage() {
         />
       </div>
 
-      <OrgProfilePanel org={org} />
+      <OrgProfilePanel org={org} readOnly={readOnly} />
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <OrgInvoicePanel org={org} />
-        <OrgBankPanel org={org} />
+        <OrgInvoicePanel org={org} readOnly={readOnly} />
+        <OrgBankPanel org={org} readOnly={readOnly} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

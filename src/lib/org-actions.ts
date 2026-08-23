@@ -1,12 +1,12 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { currentUser } from './session';
 import {
   updateOrg, updateCommissionRates, listCommissionRatesWithCeiling,
-  ORG_FIELDS, type OrgPanel,
+  getOrg, ORG_FIELDS, type OrgPanel,
 } from './queries';
+import { authorise } from './guard';
+import { audit, diff } from './audit';
 
 export type OrgFormState = {
   ok?: boolean;
@@ -68,8 +68,9 @@ function collect(fd: FormData, panel: OrgPanel): Record<string, string> {
 /* ------------------------------------------------- company particulars */
 
 export async function saveOrgProfileAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('org.settings', { action: 'org.profile', entity: 'organisation' });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
 
   const values = collect(fd, 'profile');
 
@@ -100,7 +101,14 @@ export async function saveOrgProfileAction(_prev: unknown, fd: FormData): Promis
   values.tin_no = values.tin_no.toUpperCase();
   values.sst_no = values.sst_no.toUpperCase();
 
+  const before = getOrg(user.org_id) as unknown as Record<string, unknown>;
   updateOrg(user.org_id, 'profile', values);
+  await audit(user, {
+    action: 'org.profile', entity: 'organisation', entityId: user.org_id,
+    entityLabel: String(before?.name ?? ''),
+    summary: 'Organisation company particulars saved.',
+    changes: diff(before ?? {}, values, Object.keys(values)),
+  });
   revalidatePath('/organisation');
   revalidatePath('/settings/global');
   return { ok: true, values: submitted(fd) };
@@ -109,8 +117,9 @@ export async function saveOrgProfileAction(_prev: unknown, fd: FormData): Promis
 /* --------------------------------------------------- invoice letterhead */
 
 export async function saveOrgInvoiceAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('org.settings', { action: 'org.invoice', entity: 'organisation' });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
 
   const values = collect(fd, 'invoice');
 
@@ -137,7 +146,14 @@ export async function saveOrgInvoiceAction(_prev: unknown, fd: FormData): Promis
   values.ssm_no = values.ssm_no.toUpperCase();
   values.sst_no = values.sst_no.toUpperCase();
 
+  const before = getOrg(user.org_id) as unknown as Record<string, unknown>;
   updateOrg(user.org_id, 'invoice', values);
+  await audit(user, {
+    action: 'org.invoice', entity: 'organisation', entityId: user.org_id,
+    entityLabel: String(before?.name ?? ''),
+    summary: 'Organisation invoice letterhead saved.',
+    changes: diff(before ?? {}, values, Object.keys(values)),
+  });
   revalidatePath('/organisation');
   revalidatePath('/settings/global');
   return { ok: true, values: submitted(fd) };
@@ -146,8 +162,9 @@ export async function saveOrgInvoiceAction(_prev: unknown, fd: FormData): Promis
 /* ------------------------------------- collection account and numbering */
 
 export async function saveOrgBankAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('org.settings', { action: 'org.bank', entity: 'organisation' });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
 
   const values = collect(fd, 'bank');
   const account = values.bank_account_number.replace(/[\s-]/g, '');
@@ -177,7 +194,14 @@ export async function saveOrgBankAction(_prev: unknown, fd: FormData): Promise<O
   values.loc_prefix = values.loc_prefix.toUpperCase();
   values.pos_prefix = values.pos_prefix.toUpperCase();
 
+  const before = getOrg(user.org_id) as unknown as Record<string, unknown>;
   updateOrg(user.org_id, 'bank', values);
+  await audit(user, {
+    action: 'org.bank', entity: 'organisation', entityId: user.org_id,
+    entityLabel: String(before?.name ?? ''),
+    summary: 'Organisation collection account saved.',
+    changes: diff(before ?? {}, values, Object.keys(values)),
+  });
   revalidatePath('/organisation');
   return { ok: true, values: submitted(fd) };
 }
@@ -185,8 +209,9 @@ export async function saveOrgBankAction(_prev: unknown, fd: FormData): Promise<O
 /* ------------------------------------------------------ commission rates */
 
 export async function saveCommissionRatesAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const guard = await authorise('rates.write', { action: 'rates.update', entity: 'commission_rate' });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
 
   const current = listCommissionRatesWithCeiling(user.org_id);
   const changes: Array<{ id: string; rate: number }> = [];
@@ -215,6 +240,22 @@ export async function saveCommissionRatesAction(_prev: unknown, fd: FormData): P
   if (!changes.length) return { ok: true, note: 'Nothing changed.', values: submitted(fd) };
 
   updateCommissionRates(user.org_id, changes);
+  const byId = new Map(current.map((r) => [r.id, r]));
+  await audit(user, {
+    action: 'rates.update', entity: 'commission_rate',
+    summary: changes
+      .map((c) => {
+        const row = byId.get(c.id)!;
+        return `${row.short_name} ${row.class === 'motor' ? 'motor' : 'non-motor'} ${row.rate}% → ${c.rate}%`;
+      })
+      .join(', '),
+    changes: Object.fromEntries(
+      changes.map((c) => [
+        `${byId.get(c.id)!.short_name}.${byId.get(c.id)!.class}`,
+        [byId.get(c.id)!.rate, c.rate] as [number, number],
+      ]),
+    ),
+  });
   revalidatePath('/settings/global');
   return {
     ok: true,

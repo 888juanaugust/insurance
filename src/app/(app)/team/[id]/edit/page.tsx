@@ -1,5 +1,5 @@
-import { notFound, redirect } from 'next/navigation';
-import { currentUser } from '@/lib/session';
+import { notFound } from 'next/navigation';
+import { requirePermission } from '@/lib/guard';
 import { getSubAgent, subAgentPolicyCount, principalRateCeiling } from '@/lib/queries';
 import { Crumb, PageHeader } from '@/components/ui';
 import SubAgentForm from '@/components/SubAgentForm';
@@ -7,8 +7,7 @@ import SubAgentForm from '@/components/SubAgentForm';
 export const dynamic = 'force-dynamic';
 
 export default async function EditSubAgentPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const user = await requirePermission('agent.write');
 
   const { id } = await params;
   const agent = getSubAgent(id);

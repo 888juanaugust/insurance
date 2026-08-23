@@ -7,7 +7,12 @@ import { verifyPassword } from './auth';
 import { createSession, destroySession, currentUser } from './session';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
 import { headers } from 'next/headers';
-import { setCommissionStatus, recordPayment } from './queries';
+import {
+  setCommissionStatus, recordPayment, getCommissionForOrg, getPaymentForOrg,
+} from './queries';
+import { authorise, forbid } from './guard';
+import { audit, auditAuth } from './audit';
+import { money } from './format';
 
 export async function loginAction(_prev: unknown, formData: FormData) {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
@@ -30,44 +35,94 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   }
 
   const user = getDb()
-    .prepare('SELECT id, password_hash, status FROM app_user WHERE lower(email) = ?')
-    .get(email) as { id: string; password_hash: string; status: string } | undefined;
+    .prepare('SELECT id, org_id, name, role, password_hash, status FROM app_user WHERE lower(email) = ?')
+    .get(email) as
+    | { id: string; org_id: string; name: string; role: string; password_hash: string; status: string }
+    | undefined;
 
   if (!user || !verifyPassword(password, user.password_hash)) {
     for (const key of keys) recordFailure(key);
+    // A failed attempt against a real account is the one worth keeping — an
+    // unknown address has no organisation to file it under.
+    if (user) {
+      await auditAuth(user.org_id, { id: user.id, name: user.name, role: user.role },
+        'auth.login_failed', `Failed sign-in for ${email} from ${ip}.`);
+    }
     return { error: 'Invalid login ID or password.' };
   }
   if (user.status !== 'active') {
+    await auditAuth(user.org_id, { id: user.id, name: user.name, role: user.role },
+      'auth.login_failed', `Sign-in refused for ${email}: the account is ${user.status}.`);
     return { error: 'This account is not active. Please contact your administrator.' };
   }
 
   for (const key of keys) clearFailures(key);
+  await auditAuth(user.org_id, { id: user.id, name: user.name, role: user.role },
+    'auth.login', `Signed in from ${ip}.`);
   await createSession(user.id);
   redirect('/');
 }
 
 export async function logoutAction() {
+  const user = await currentUser();
+  if (user) {
+    await auditAuth(user.org_id, { id: user.id, name: user.name, role: user.role },
+      'auth.logout', 'Signed out.');
+  }
   await destroySession();
   redirect('/login');
 }
 
 export async function approveCommissionAction(formData: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
   const id = String(formData.get('id') ?? '');
   const status = String(formData.get('status') ?? '');
-  if (id && ['pending', 'approved', 'paid'].includes(status)) setCommissionStatus(id, status);
+  if (!id || !['pending', 'approved', 'paid'].includes(status)) redirect('/accounting');
+
+  // Approving and paying out are separate permissions: a manager signs the
+  // commission off, finance releases the money.
+  const permission = status === 'paid' ? 'commission.pay' : 'commission.approve';
+  const guard = await authorise(permission, { action: `commission.${status}`, entity: 'commission', entityId: id });
+  if (!guard.ok) forbid(guard.message);
+
+  const before = getCommissionForOrg(id, guard.user.org_id);
+  if (!before) redirect('/accounting');
+
+  if (setCommissionStatus(id, status, guard.user.org_id)) {
+    await audit(guard.user, {
+      action: `commission.${status}`,
+      entity: 'commission',
+      entityId: id,
+      entityLabel: before.policy_no,
+      summary: `${before.agent_name ?? 'Agency'} commission of ${money(before.net_amount)} on ${before.policy_no} set to ${status}.`,
+      changes: { status: [before.status, status] },
+    });
+  }
   revalidatePath('/accounting');
 }
 
 export async function recordPaymentAction(formData: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
   const id = String(formData.get('payment_id') ?? '');
   const amount = Number(formData.get('amount') ?? 0);
   const method = String(formData.get('method') ?? '');
   const reference = String(formData.get('reference') ?? '');
-  if (id && amount > 0) recordPayment(id, amount, method, reference);
+
+  const guard = await authorise('payment.record', { action: 'payment.record', entity: 'payment', entityId: id });
+  if (!guard.ok) forbid(guard.message);
+  if (!id || !(amount > 0)) redirect(String(formData.get('back') ?? '/'));
+
+  const before = getPaymentForOrg(id, guard.user.org_id);
+  const result = recordPayment(id, amount, method, reference, guard.user.org_id);
+  if (before && result) {
+    const leg = before.kind === 'client' ? 'from the client' : 'to the principal';
+    await audit(guard.user, {
+      action: 'payment.record',
+      entity: 'payment',
+      entityId: id,
+      entityLabel: before.policy_no,
+      summary: `${money(amount)} recorded ${leg} on ${before.policy_no}${reference ? ` (${method || 'payment'} ${reference})` : ''}.`,
+      changes: { paid_amount: [before.paid_amount, result.paid], status: [before.status, result.status] },
+    });
+  }
   revalidatePath('/');
   revalidatePath(String(formData.get('back') ?? '/'));
 }
@@ -75,6 +130,8 @@ export async function recordPaymentAction(formData: FormData) {
 export async function markNotificationsReadAction() {
   const user = await currentUser();
   if (!user) redirect('/login');
+  // Reading your own notifications changes nothing anyone would audit, and
+  // needs no permission — everyone who can sign in has notifications.
   getDb().prepare('UPDATE notification SET read_flag = 1 WHERE org_id = ?').run(user.org_id);
   revalidatePath('/setting/notifications');
 }
@@ -84,14 +141,29 @@ export async function markNotificationsReadAction() {
  * commission at once; the report actions recompute the payout run.
  */
 export async function bulkCommissionAction(formData: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const op = String(formData.get('op') ?? '');
+  const guard = await authorise('commission.approve', {
+    action: `commission.bulk_${op || 'unknown'}`, entity: 'commission',
+  });
+  if (!guard.ok) forbid(guard.message);
+  const user = guard.user;
+
   const { bulkSetCommissionStatus } = await import('./queries');
 
-  if (op === 'approve') bulkSetCommissionStatus(user.org_id, 'pending', 'approved');
-  if (op === 'reject') bulkSetCommissionStatus(user.org_id, 'approved', 'pending');
+  if (op === 'approve') {
+    const n = bulkSetCommissionStatus(user.org_id, 'pending', 'approved');
+    await audit(user, {
+      action: 'commission.bulk_approve', entity: 'commission',
+      summary: `${n} pending commission ${n === 1 ? 'entry' : 'entries'} approved in bulk.`,
+    });
+  }
+  if (op === 'reject') {
+    const n = bulkSetCommissionStatus(user.org_id, 'approved', 'pending');
+    await audit(user, {
+      action: 'commission.bulk_reject', entity: 'commission',
+      summary: `${n} approved commission ${n === 1 ? 'entry' : 'entries'} sent back to pending.`,
+    });
+  }
   // "Generate" and "Force regenerate" recompute the same figures the payout
   // table already derives, so there is nothing to persist for them here.
 

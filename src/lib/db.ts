@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS app_user (
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   name          TEXT NOT NULL,
-  role          TEXT NOT NULL,          -- master | agent | client
+  role          TEXT NOT NULL,          -- master | manager | finance | agent | viewer
   agent_code    TEXT,
   phone         TEXT,
   status        TEXT NOT NULL DEFAULT 'active'
@@ -331,6 +331,28 @@ CREATE TABLE IF NOT EXISTS commission_rate (
   rate         REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS audit_event (
+  id         TEXT PRIMARY KEY,
+  org_id     TEXT NOT NULL REFERENCES organisation(id),
+  at         TEXT NOT NULL,          -- ISO 8601, UTC
+  -- The actor is denormalised on purpose. An audit trail that reads
+  -- "(deleted user) approved RM 4,200" has lost the thing it exists to
+  -- record, so the name and role are kept as they stood at the time.
+  user_id    TEXT,
+  user_name  TEXT NOT NULL,
+  user_role  TEXT NOT NULL,
+  action     TEXT NOT NULL,          -- policy.create, commission.approve, …
+  entity     TEXT NOT NULL,          -- policy | client | commission | …
+  entity_id  TEXT,
+  entity_label TEXT,                 -- policy number, client name, …
+  outcome    TEXT NOT NULL,          -- ok | denied | refused
+  summary    TEXT NOT NULL,
+  changes    TEXT,                   -- JSON: { field: [before, after] }
+  ip         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_org  ON audit_event(org_id, at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_event(user_id);
 CREATE INDEX IF NOT EXISTS idx_policy_org     ON policy(org_id);
 CREATE INDEX IF NOT EXISTS idx_policy_client  ON policy(client_id);
 CREATE INDEX IF NOT EXISTS idx_policy_created ON policy(created_date);

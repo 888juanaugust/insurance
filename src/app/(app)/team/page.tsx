@@ -6,12 +6,16 @@ import Link from 'next/link';
 import { PageHeader, StatusBadge, Help } from '@/components/ui';
 import { setSubAgentStatusAction, deleteSubAgentAction } from '@/lib/subagent-actions';
 import { subAgentPolicyCount } from '@/lib/queries';
+import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SubAgentsPage() {
   const user = await currentUser();
   if (!user) redirect('/login');
+
+  const mayWrite = can(user.role, 'agent.write');
+  const mayDelete = can(user.role, 'agent.delete');
 
   const agents = listSubAgents(user.org_id);
   const orgName = getOrg(user.org_id)?.name ?? '';
@@ -26,9 +30,11 @@ export default async function SubAgentsPage() {
           subtitle="Downline agent roster with commission structure, activation control and e-Invoice details for self-billed payouts."
           meta={`${agents.length} agent${agents.length === 1 ? '' : 's'} · ${active} active · ${money(commission)} commission earned to date`}
           actions={
-            <Link href="/team/new" className="btn btn-primary">
-              <span className="text-[15px] leading-none">+</span> Add agent
-            </Link>
+            mayWrite ? (
+              <Link href="/team/new" className="btn btn-primary">
+                <span className="text-[15px] leading-none">+</span> Add agent
+              </Link>
+            ) : null
           }
         />
 
@@ -77,15 +83,21 @@ export default async function SubAgentsPage() {
                   <td className="text-ink-soft">{longDate(a.join_date)}</td>
                   <td>
                     <span className="flex flex-wrap items-center gap-2.5 text-[12.5px]">
-                      <Link href={`/team/${a.id}/edit`} className="text-link hover:underline">Edit</Link>
-                      <form action={setSubAgentStatusAction}>
-                        <input type="hidden" name="id" value={a.id} />
-                        <input type="hidden" name="status" value={a.status === 'active' ? 'inactive' : 'active'} />
-                        <button type="submit" className="text-link hover:underline">
-                          {a.status === 'active' ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </form>
-                      {subAgentPolicyCount(a.id) === 0 && (
+                      {mayWrite ? (
+                        <>
+                          <Link href={`/team/${a.id}/edit`} className="text-link hover:underline">Edit</Link>
+                          <form action={setSubAgentStatusAction}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <input type="hidden" name="status" value={a.status === 'active' ? 'inactive' : 'active'} />
+                            <button type="submit" className="text-link hover:underline">
+                              {a.status === 'active' ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </form>
+                        </>
+                      ) : (
+                        <span className="text-muted">View only</span>
+                      )}
+                      {mayDelete && subAgentPolicyCount(a.id) === 0 && (
                         <form action={deleteSubAgentAction}>
                           <input type="hidden" name="id" value={a.id} />
                           <button type="submit" className="text-danger hover:underline">Delete</button>

@@ -1,5 +1,5 @@
-import { notFound, redirect } from 'next/navigation';
-import { currentUser } from '@/lib/session';
+import { notFound } from 'next/navigation';
+import { requirePermission } from '@/lib/guard';
 import { policyFormOptions, CLASS_BY_SLUG } from '@/lib/form-data';
 import { Crumb, PageHeader } from '@/components/ui';
 import PolicyForm from '@/components/PolicyForm';
@@ -7,8 +7,7 @@ import PolicyForm from '@/components/PolicyForm';
 export const dynamic = 'force-dynamic';
 
 export default async function NewPolicyPage({ params }: { params: Promise<{ cls: string }> }) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const user = await requirePermission('policy.write');
 
   const { cls: slug } = await params;
   const cls = CLASS_BY_SLUG[slug];

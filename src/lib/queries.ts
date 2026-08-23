@@ -438,31 +438,76 @@ export function commissionTotals(orgId: string) {
     .get(orgId) as { pending: number; approved: number; paid: number };
 }
 
-export function setCommissionStatus(id: string, status: string) {
-  const t = today();
-  const db = getDb();
-  if (status === 'approved') {
-    db.prepare('UPDATE commission SET status = ?, approved_date = ? WHERE id = ?').run(status, t, id);
-  } else if (status === 'paid') {
-    db.prepare(
-      `UPDATE commission SET status = ?, payout_date = ?, approved_date = COALESCE(approved_date, ?) WHERE id = ?`,
-    ).run(status, t, t, id);
-  } else {
-    db.prepare('UPDATE commission SET status = ?, approved_date = NULL, payout_date = NULL WHERE id = ?').run(status, id);
-  }
+/**
+ * Commission rows carry no org_id of their own — they hang off a policy — so
+ * the organisation has to be reached through the join. Without it the id
+ * posted by the form is the only thing deciding which agency's money moves.
+ */
+export function getCommissionForOrg(id: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT cm.*, p.policy_no, s.name AS agent_name
+         FROM commission cm
+         JOIN policy p ON p.id = cm.policy_id
+         LEFT JOIN sub_agent s ON s.id = cm.sub_agent_id
+        WHERE cm.id = ? AND p.org_id = ?`,
+    )
+    .get(id, orgId) as
+    | { id: string; status: string; net_amount: number; policy_no: string; agent_name: string | null }
+    | undefined;
 }
 
-export function recordPayment(paymentId: string, amount: number, method: string, reference: string) {
+export function setCommissionStatus(id: string, status: string, orgId: string): boolean {
+  const t = today();
   const db = getDb();
-  const row = db.prepare('SELECT * FROM payment WHERE id = ?').get(paymentId) as
-    | { amount: number; paid_amount: number }
+  const scope = "AND policy_id IN (SELECT id FROM policy WHERE org_id = ?)";
+
+  if (status === 'approved') {
+    return db
+      .prepare(`UPDATE commission SET status = ?, approved_date = ? WHERE id = ? ${scope}`)
+      .run(status, t, id, orgId).changes > 0;
+  }
+  if (status === 'paid') {
+    return db
+      .prepare(
+        `UPDATE commission SET status = ?, payout_date = ?, approved_date = COALESCE(approved_date, ?)
+          WHERE id = ? ${scope}`,
+      )
+      .run(status, t, t, id, orgId).changes > 0;
+  }
+  return db
+    .prepare(`UPDATE commission SET status = ?, approved_date = NULL, payout_date = NULL WHERE id = ? ${scope}`)
+    .run(status, id, orgId).changes > 0;
+}
+
+/** Payments hang off a policy too, so the same join decides whose money it is. */
+export function getPaymentForOrg(paymentId: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT pm.*, p.policy_no, p.class FROM payment pm
+         JOIN policy p ON p.id = pm.policy_id
+        WHERE pm.id = ? AND p.org_id = ?`,
+    )
+    .get(paymentId, orgId) as
+    | {
+        id: string; kind: string; amount: number; paid_amount: number;
+        status: string; policy_no: string; class: string;
+      }
     | undefined;
-  if (!row) return;
+}
+
+export function recordPayment(
+  paymentId: string, amount: number, method: string, reference: string, orgId: string,
+): { paid: number; status: string } | null {
+  const db = getDb();
+  const row = getPaymentForOrg(paymentId, orgId);
+  if (!row) return null;
   const paid = Math.min(row.amount, Math.round((row.paid_amount + amount) * 100) / 100);
   const status = paid >= row.amount - 0.005 ? 'paid' : paid > 0 ? 'partial' : 'outstanding';
   db.prepare(
     `UPDATE payment SET paid_amount = ?, status = ?, paid_date = ?, method = ?, reference = ? WHERE id = ?`,
   ).run(paid, status, status === 'paid' ? today() : null, method || null, reference || null, paymentId);
+  return { paid, status };
 }
 
 /* -------------------------------------------------------------- settings */
@@ -1492,5 +1537,122 @@ export function policiesAtRate(orgId: string, principalId: string, cls: string):
   const row = getDb()
     .prepare('SELECT COUNT(*) n FROM policy WHERE org_id = ? AND principal_id = ? AND class = ?')
     .get(orgId, principalId, cls) as { n: number };
+  return row.n;
+}
+
+/* ------------------------------------------------------------ audit trail */
+
+export type AuditRow = {
+  id: string; at: string; user_id: string | null; user_name: string; user_role: string;
+  action: string; entity: string; entity_id: string | null; entity_label: string | null;
+  outcome: string; summary: string; changes: string | null; ip: string | null;
+};
+
+export type AuditFilter = {
+  user?: string;      // user_id, '' = everyone
+  entity?: string;    // '' = every kind
+  outcome?: string;   // ok | denied | refused
+  from?: string;      // yyyy-mm-dd
+  to?: string;
+  search?: string;
+};
+
+export function listAuditEvents(orgId: string, f: AuditFilter = {}, limit = 100, offset = 0) {
+  const params = {
+    org: orgId,
+    user: f.user ?? '',
+    entity: f.entity ?? '',
+    outcome: f.outcome ?? '',
+    // `at` holds a full ISO timestamp, so the upper bound has to cover the
+    // whole day rather than stopping at midnight.
+    from: f.from ? `${f.from}T00:00:00.000Z` : '',
+    to: f.to ? `${f.to}T23:59:59.999Z` : '',
+    search: f.search ?? '',
+    like: `%${(f.search ?? '').toLowerCase()}%`,
+    limit,
+    offset,
+  };
+  const where = `
+     WHERE org_id = @org
+       AND (@user    = '' OR user_id = @user)
+       AND (@entity  = '' OR entity  = @entity)
+       AND (@outcome = '' OR outcome = @outcome)
+       AND (@from    = '' OR at >= @from)
+       AND (@to      = '' OR at <= @to)
+       AND (@search  = '' OR lower(summary) LIKE @like OR lower(user_name) LIKE @like
+                          OR lower(action) LIKE @like OR lower(COALESCE(entity_label,'')) LIKE @like)`;
+
+  const db = getDb();
+  const rows = db
+    .prepare(`SELECT * FROM audit_event ${where} ORDER BY at DESC, rowid DESC LIMIT @limit OFFSET @offset`)
+    .all(params) as AuditRow[];
+  const total = (db.prepare(`SELECT COUNT(*) n FROM audit_event ${where}`).get(params) as { n: number }).n;
+  return { rows, total };
+}
+
+/** The distinct actors and entity kinds actually present, for the filter menus. */
+export function auditFacets(orgId: string) {
+  const db = getDb();
+  return {
+    users: db
+      .prepare(
+        `SELECT user_id AS id, user_name AS name, COUNT(*) n FROM audit_event
+          WHERE org_id = ? AND user_id IS NOT NULL AND user_id != ''
+          GROUP BY user_id, user_name ORDER BY name`,
+      )
+      .all(orgId) as Array<{ id: string; name: string; n: number }>,
+    entities: db
+      .prepare(
+        `SELECT entity, COUNT(*) n FROM audit_event WHERE org_id = ? GROUP BY entity ORDER BY entity`,
+      )
+      .all(orgId) as Array<{ entity: string; n: number }>,
+  };
+}
+
+/** Everything that has happened to one record, for the trail on its own page. */
+export function auditForEntity(orgId: string, entity: string, entityId: string, limit = 20) {
+  return getDb()
+    .prepare(
+      `SELECT * FROM audit_event WHERE org_id = ? AND entity = ? AND entity_id = ?
+        ORDER BY at DESC, rowid DESC LIMIT ?`,
+    )
+    .all(orgId, entity, entityId, limit) as AuditRow[];
+}
+
+/* ------------------------------------------------------------------ users */
+
+export function listUsers(orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT id, name, email, role, agent_code, phone, status FROM app_user
+        WHERE org_id = ? ORDER BY name`,
+    )
+    .all(orgId) as Array<{
+      id: string; name: string; email: string; role: string;
+      agent_code: string | null; phone: string | null; status: string;
+    }>;
+}
+
+export function getUser(id: string, orgId: string) {
+  return getDb()
+    .prepare('SELECT id, name, email, role, status FROM app_user WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as { id: string; name: string; email: string; role: string; status: string } | undefined;
+}
+
+export function setUserRole(id: string, orgId: string, role: string): boolean {
+  return getDb()
+    .prepare('UPDATE app_user SET role = ? WHERE id = ? AND org_id = ?')
+    .run(role, id, orgId).changes > 0;
+}
+
+/**
+ * An agency with no Master can never grant the role back — every screen that
+ * could do it is behind the permission only a Master holds. Counting first is
+ * what stops someone locking the whole organisation out of its own settings.
+ */
+export function countMasters(orgId: string, excludeId = ''): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) n FROM app_user WHERE org_id = ? AND role = 'master' AND status = 'active' AND id != ?")
+    .get(orgId, excludeId) as { n: number };
   return row.n;
 }

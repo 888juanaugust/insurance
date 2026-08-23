@@ -5,6 +5,7 @@ import { listCommissions, commissionTotals } from '@/lib/queries';
 import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { PageHeader, StatusBadge, Help } from '@/components/ui';
 import { approveCommissionAction, bulkCommissionAction } from '@/lib/actions';
+import { can } from '@/lib/permissions';
 import FilterSelect from '@/components/FilterSelect';
 import { commissionByAgent } from '@/lib/queries';
 
@@ -55,6 +56,11 @@ export default async function AccountingPage({
   const sp = await searchParams;
   const status = typeof sp.status === 'string' ? sp.status : '';
   const tab = sp.tab === 'einvoice' ? 'einvoice' : 'monthly';
+  // Approving commission and releasing the money are different jobs, and the
+  // buttons follow that split rather than one blanket "accounting" flag.
+  const mayApprove = can(user.role, 'commission.approve');
+  const mayPay = can(user.role, 'commission.pay');
+
   const rows = listCommissions(user.org_id, status);
   const totals = commissionTotals(user.org_id);
   const byAgent = commissionByAgent(user.org_id);
@@ -122,8 +128,12 @@ export default async function AccountingPage({
         <div className="flex flex-wrap items-center gap-2.5 py-3">
           <BulkButton op="regenerate" label="Generate / update reports" />
           <BulkButton op="force" label="Force regenerate…" />
-          <BulkButton op="approve" label="Bulk approve (all pending)" primary />
-          <BulkButton op="reject" label="Bulk reject (all pending)" />
+          {mayApprove && (
+            <>
+              <BulkButton op="approve" label="Bulk approve (all pending)" primary />
+              <BulkButton op="reject" label="Bulk reject (all pending)" />
+            </>
+          )}
         </div>
       </div>
 
@@ -236,16 +246,19 @@ export default async function AccountingPage({
                   <td className="text-ink-soft">{r.payout_date ? longDate(r.payout_date) : '—'}</td>
                   <td>
                     <div className="flex gap-1.5">
-                      {r.status === 'pending' && (
+                      {r.status === 'pending' && mayApprove && (
                         <StatusButton id={r.id} status="approved" label="Approve" />
                       )}
                       {r.status === 'approved' && (
                         <>
-                          <StatusButton id={r.id} status="paid" label="Mark paid" />
-                          <StatusButton id={r.id} status="pending" label="Revert" ghost />
+                          {mayPay && <StatusButton id={r.id} status="paid" label="Mark paid" />}
+                          {mayApprove && <StatusButton id={r.id} status="pending" label="Revert" ghost />}
                         </>
                       )}
                       {r.status === 'paid' && <span className="text-[12px] text-muted">Settled</span>}
+                      {r.status !== 'paid' && !mayApprove && !mayPay && (
+                        <span className="text-[12px] text-muted">—</span>
+                      )}
                     </div>
                   </td>
                 </tr>

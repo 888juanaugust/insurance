@@ -2,7 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { currentUser } from './session';
+import { authorise, forbid } from './guard';
+import { audit, diff } from './audit';
 import {
   createClient, updateClient, deleteClient, getClient, clientPolicyCount,
   findClientByIdentification, dobFromNric, type ClientInput,
@@ -43,10 +44,13 @@ function reject(fd: FormData, field: string, error: string): ClientFormState {
 }
 
 export async function saveClientAction(_prev: unknown, fd: FormData): Promise<ClientFormState> {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const id = str(fd, 'client_id');
+  const guard = await authorise('client.write', {
+    action: id ? 'client.update' : 'client.create', entity: 'client', entityId: id || null,
+  });
+  if (!guard.ok) return { error: guard.message, values: submitted(fd) };
+  const user = guard.user;
+
   const type = str(fd, 'client_type') === 'company' ? 'company' : 'individual';
   const name = str(fd, 'name');
   const nric = str(fd, 'nric').toUpperCase();
@@ -122,21 +126,31 @@ export async function saveClientAction(_prev: unknown, fd: FormData): Promise<Cl
       return { error: 'That client could not be found.', values: submitted(fd) };
     }
     updateClient(id, user.org_id, input);
+    await audit(user, {
+      action: 'client.update', entity: 'client', entityId: id, entityLabel: name,
+      summary: `Client ${name} edited.`,
+      changes: diff(existing as Record<string, unknown>, input as Record<string, unknown>, Object.keys(input)),
+    });
     revalidatePath('/clients');
     revalidatePath(`/clients/${id}`);
     redirect(`/clients/${id}`);
   }
 
   const newId = createClient(user.org_id, input);
+  await audit(user, {
+    action: 'client.create', entity: 'client', entityId: newId, entityLabel: name,
+    summary: `Client ${name} added as ${type === 'company' ? 'a company' : 'an individual'}.`,
+  });
   revalidatePath('/clients');
   redirect(`/clients/${newId}`);
 }
 
 export async function deleteClientAction(fd: FormData) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
-
   const id = String(fd.get('id') ?? '');
+  const guard = await authorise('client.delete', { action: 'client.delete', entity: 'client', entityId: id });
+  if (!guard.ok) forbid(guard.message);
+  const user = guard.user;
+
   if (!id) redirect('/clients');
 
   const existing = getClient(id);
@@ -144,10 +158,19 @@ export async function deleteClientAction(fd: FormData) {
 
   // A client carrying policies is history, not a mistake — keep it.
   if (clientPolicyCount(id) > 0) {
+    await audit(user, {
+      action: 'client.delete', entity: 'client', entityId: id, entityLabel: existing.name,
+      outcome: 'refused',
+      summary: `Deletion of ${existing.name} refused — the client still carries policies.`,
+    });
     redirect(`/clients/${id}?error=has-policies`);
   }
 
   deleteClient(id, user.org_id);
+  await audit(user, {
+    action: 'client.delete', entity: 'client', entityId: id, entityLabel: existing.name,
+    summary: `Client ${existing.name} deleted.`,
+  });
   revalidatePath('/clients');
   redirect('/clients');
 }

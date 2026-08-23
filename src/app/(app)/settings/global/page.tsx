@@ -5,6 +5,7 @@ import { num } from '@/lib/format';
 import { Crumb, PageHeader } from '@/components/ui';
 import CommissionRatesForm from '@/components/CommissionRatesForm';
 import { OrgInvoicePanel } from '@/components/OrgForms';
+import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ export default async function GlobalSettingPage() {
     policies: policiesAtRate(user.org_id, r.principal_id, r.class),
   }));
   const principals = listPrincipals();
+  const mayEditRates = can(user.role, 'rates.write');
 
   return (
     <div className="space-y-4">
@@ -29,9 +31,9 @@ export default async function GlobalSettingPage() {
         />
       </div>
 
-      <CommissionRatesForm rows={rates} />
+      <CommissionRatesForm rows={rates} readOnly={!mayEditRates} />
 
-      <OrgInvoicePanel org={org} />
+      <OrgInvoicePanel org={org} readOnly={!can(user.role, 'org.settings')} />
 
       <div className="panel">
         <div className="panel-head">Insurance companies setting</div>

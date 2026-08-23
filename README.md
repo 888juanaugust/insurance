@@ -19,10 +19,14 @@ npm run dev          # http://localhost:3000
 
 Sign in with:
 
-| Login ID | Password |
-| --- | --- |
-| `exemaster3@gmail.com` | `12345Abcdefg` |
-| `boonseng_agent@yahoo.com` | `12345Abcdefg` |
+| Login ID | Password | Role |
+| --- | --- | --- |
+| `exemaster3@gmail.com` | `12345Abcdefg` | Master |
+| `manager@exeagency.my` | `12345Abcdefg` | Manager |
+| `finance@exeagency.my` | `12345Abcdefg` | Finance |
+| `exemaster1@gmail.com` | `12345Abcdefg` | Agent |
+| `auditor@exeagency.my` | `12345Abcdefg` | Viewer |
+| `boonseng_agent@yahoo.com` | `12345Abcdefg` | Master, second organisation |
 
 The SQLite database is created and seeded automatically at `data/insurhelp.db` on first
 request. `npm run db:reset` deletes it so the next request reseeds from scratch.
@@ -41,6 +45,8 @@ invented.
 | Module | Route | Notes |
 | --- | --- | --- |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
+| Users and roles | `/team/users` | Who may do what. Master only. |
+| Audit trail | `/audit` | Every change, refusal and sign-in. Master only. |
 | Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
 | Organisation | `/organisation` | Editable company particulars, invoice letterhead and collection account, plus subscription terms and quota usage. Each panel saves on its own, so a shared field edited in either place lands in the same column. |
 | Clients | `/clients`, `/clients/new`, `/clients/[id]`, `/clients/[id]/edit` | Add, edit and delete clients — individual or company. NRIC fills the date of birth, duplicate identification is refused, and a client carrying policies cannot be deleted. |
@@ -91,6 +97,55 @@ more blanks to fill in. Configure the model pass with:
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
 export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
 ```
+
+## Roles
+
+Five roles, split the way a small agency divides work rather than as an
+admin/user ladder. The rule doing the most work: **an agent cannot approve their
+own commission** — they are paid by it, so the approval has to come from someone
+else. Everything else follows from the same idea.
+
+| Role | Meant for |
+| --- | --- |
+| **Master** | The agency principal. Everything, including organisation particulars, commission rates, user roles and the audit trail. |
+| **Manager** | Runs the book: clients, policies, renewals, sub agents, and approves commission. Writes no business of their own, so the approval is not self-approval. Cannot change settings or rates. |
+| **Finance** | Records collections and remittances, approves commission and releases the payout. Writes no policies. |
+| **Agent** | Writes and services business: clients, policies, renewals, client collections. Cannot approve commission. |
+| **Viewer** | Reads the registers and reports. Changes nothing. |
+
+Approving commission and paying it out are separate permissions, so a manager can
+sign a payout off without being able to release the money.
+
+**Every action checks its permission on the server**, in `authorise()`. The
+interface hides what a role cannot use — the rail drops whole sections, forms
+render read-only, buttons disappear — but that is presentation. A hidden button
+is not access control, and the check that matters runs where the mutation does.
+Removing the last Master is refused: every screen that could grant the role back
+is behind the permission only a Master holds, so the organisation would be locked
+out of its own settings for good.
+
+## Audit trail
+
+`/audit` records every mutation, every refusal, and every sign-in — who, what,
+when, from where, and which fields changed.
+
+Refusals are the point. A trail that only records successes cannot answer the
+question people actually bring to it, so a role-blocked attempt is written before
+it is turned away, and page-level refusals are recorded too — someone walking the
+URL space looking for a screen that forgot to check is exactly what should show
+up. Rules that refuse on their own terms — deleting a policy that has been paid,
+deleting a client that still carries cover — are recorded the same way, marked
+`refused` rather than `blocked`.
+
+The actor's name and role are stored as they stood at the time. An audit trail
+that reads *"(deleted user) approved RM 4,200"* has lost the thing it exists to
+record.
+
+Field-level changes are stored as a before/after diff of **only what moved** —
+storing the whole record on every save buries the one changed field under thirty
+that stayed the same, which is how a trail stops being read. Writing an entry can
+never fail a save: a broken audit write is logged to the server and swallowed,
+because a trail that can break the application is worse than no trail.
 
 ## Deleting a policy
 
@@ -210,6 +265,10 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
   without it — see `src/instrumentation.ts`.
 - Sign-in allows 8 failures per 15 minutes, per address and per email. The counter is
   in memory, so it resets on restart and does not span multiple instances.
-- Passwords are hashed with scrypt. This is a demo application, not a production system —
-  it has no audit trail, role permissions, or multi-tenant hardening beyond scoping every
-  query to the signed-in user's organisation.
+- Passwords are hashed with scrypt.
+- Commission and payment rows carry no `org_id` of their own — they hang off a policy — so
+  every statement that touches them reaches the organisation through the join. Without it the
+  id posted by a form is the only thing deciding whose money moves.
+- A plain POST does not invoke a Next.js Server Action; it needs the `Next-Action` header. An
+  HTTP probe that forges a form post therefore proves nothing about a server-side check,
+  either way. Test the query layer instead.

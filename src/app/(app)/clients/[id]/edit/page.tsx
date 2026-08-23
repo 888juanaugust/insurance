@@ -1,5 +1,5 @@
-import { notFound, redirect } from 'next/navigation';
-import { currentUser } from '@/lib/session';
+import { notFound } from 'next/navigation';
+import { requirePermission } from '@/lib/guard';
 import { getClient, listGroupOptions, clientPolicyCount } from '@/lib/queries';
 import { Crumb, PageHeader } from '@/components/ui';
 import ClientForm from '@/components/ClientForm';
@@ -7,8 +7,7 @@ import ClientForm from '@/components/ClientForm';
 export const dynamic = 'force-dynamic';
 
 export default async function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const user = await requirePermission('client.write');
 
   const { id } = await params;
   const client = getClient(id);

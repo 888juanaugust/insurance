@@ -16,7 +16,13 @@ export type RateRow = {
   policies: number;
 };
 
-export default function CommissionRatesForm({ rows }: { rows: RateRow[] }) {
+export default function CommissionRatesForm({
+  rows, readOnly = false,
+}: {
+  rows: RateRow[];
+  /** Everyone can see what the agency earns; only a Master can change it. */
+  readOnly?: boolean;
+}) {
   const [state, action, pending] = useActionState(saveCommissionRatesAction, null as OrgFormState | null);
   const [filter, setFilter] = useState('');
 
@@ -90,6 +96,9 @@ export default function CommissionRatesForm({ rows }: { rows: RateRow[] }) {
                   </td>
                   <td className="text-ink-soft">{classLabel(row.class)}</td>
                   <td className="num">
+                    {readOnly ? (
+                      <span className="font-semibold tabular-nums">{Number(v(row)).toFixed(2)}</span>
+                    ) : (
                     <input
                       name={`rate_${row.id}`}
                       type="number"
@@ -102,6 +111,7 @@ export default function CommissionRatesForm({ rows }: { rows: RateRow[] }) {
                       aria-invalid={error ? true : undefined}
                       className={`inp h-8 w-24 text-right text-[13px] ${error ? 'border-brand' : ''}`}
                     />
+                    )}
                     {error && <p className="mt-1 text-[12px] font-medium text-brand">{error}</p>}
                   </td>
                   <td className="num text-muted">{row.ceiling.toFixed(2)}</td>
@@ -121,9 +131,15 @@ export default function CommissionRatesForm({ rows }: { rows: RateRow[] }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-3.5">
-        <button type="submit" disabled={pending} className="btn btn-primary disabled:opacity-60">
-          {pending ? 'Saving…' : 'Save rates'}
-        </button>
+        {readOnly ? (
+          <span className="text-[12.5px] text-muted">
+            Rates are set by a Master. These are what the agency currently earns.
+          </span>
+        ) : (
+          <button type="submit" disabled={pending} className="btn btn-primary disabled:opacity-60">
+            {pending ? 'Saving…' : 'Save rates'}
+          </button>
+        )}
         {needle && (
           <span className="text-[12.5px] text-muted">
             Filtering hides rows but still saves all {rows.length} of them.

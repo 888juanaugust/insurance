@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { currentUser } from '@/lib/session';
+import { requirePermission } from '@/lib/guard';
 import { principalRateCeiling } from '@/lib/queries';
 import { Crumb, PageHeader } from '@/components/ui';
 import SubAgentForm from '@/components/SubAgentForm';
@@ -7,8 +6,7 @@ import SubAgentForm from '@/components/SubAgentForm';
 export const dynamic = 'force-dynamic';
 
 export default async function NewSubAgentPage() {
-  const user = await currentUser();
-  if (!user) redirect('/login');
+  const user = await requirePermission('agent.write');
 
   return (
     <div className="space-y-4">

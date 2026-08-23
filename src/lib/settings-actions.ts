@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { currentUser } from './session';
+import { audit, diff } from './audit';
 import { hashPassword, verifyPassword } from './auth';
 import { saveBillingProfile, changePassword, getUserPasswordHash } from './queries';
 
@@ -27,7 +28,12 @@ export async function saveBillingProfileAction(_prev: unknown, fd: FormData): Pr
   }
 
   saveBillingProfile(user.id, values);
-  revalidatePath('/settings');
+  // Billing identity is per user and needs no permission — it is the person's
+  // own e-Invoice details — but it belongs in the trail all the same.
+  await audit(user, {
+    action: 'settings.billing', entity: 'billing_profile', entityId: user.id, entityLabel: user.name,
+    summary: `${user.name} saved their e-Invoice billing identity.`,
+  });
   return { ok: true };
 }
 
@@ -50,5 +56,9 @@ export async function changePasswordAction(_prev: unknown, fd: FormData): Promis
   }
 
   changePassword(user.id, hashPassword(next));
+  await audit(user, {
+    action: 'settings.password', entity: 'app_user', entityId: user.id, entityLabel: user.name,
+    summary: `${user.name} changed their own password.`,
+  });
   return { ok: true };
 }
