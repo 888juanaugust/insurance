@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { navFor, sectionFor, type CountKey, type IconKey, type NavSection } from '@/lib/nav';
+import { NAV, sectionFor, type CountKey, type IconKey, type NavSection } from '@/lib/nav';
 import {
   Logo, IconHome, IconClients, IconShield, IconClipboard, IconAccounting,
   IconReports, IconUsers, IconSetting, IconChevron, IconBell, IconLogout,
@@ -37,10 +37,7 @@ export default function SideNav({
   logout: () => Promise<void>;
 }) {
   const pathname = usePathname();
-  // The rail is built from the signed-in role, so a section this person could
-  // only be refused from never appears.
-  const sections = navFor(user.role);
-  const active = sectionFor(pathname, sections);
+  const active = sectionFor(pathname);
 
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -106,7 +103,7 @@ export default function SideNav({
       </div>
 
       <nav aria-label="Sections" className="flex-1 overflow-y-auto px-2 pb-3">
-        {sections.map((s) => {
+        {NAV.map((s) => {
           const Icon = ICONS[s.icon];
           const on = active?.key === s.key;
           const sectionCount = s.count ? counts[s.count] : 0;

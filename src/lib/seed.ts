@@ -133,14 +133,9 @@ const PRINCIPALS: Row[] = [
  * ------------------------------------------------------------------ */
 
 const USERS = [
-  { id: 'usr-exe3',   org_id: 'org-exe', email: 'exemaster3@gmail.com', password: '12345Abcdefg', name: 'EXE MASTER 3',  role: 'master', agent_code: 'EXE-M3',   phone: '012-576 2417', status: 'active' },
-  { id: 'usr-exe1',   org_id: 'org-exe', email: 'exemaster1@gmail.com', password: '12345Abcdefg', name: 'EXE MASTER 1',  role: 'agent',  agent_code: 'EXE-M1',   phone: '012-576 2418', status: 'active' },
-  { id: 'usr-bs',     org_id: 'org-bs',  email: 'boonseng_agent@yahoo.com', password: '12345Abcdefg', name: 'BOON SENG AGENT', role: 'master', agent_code: 'A02100-00', phone: '014-994 4313', status: 'active' },
-  // One of each remaining role, so the permission model can actually be seen
-  // working rather than only described.
-  { id: 'usr-exe-mgr', org_id: 'org-exe', email: 'manager@exeagency.my',  password: '12345Abcdefg', name: 'SITI RAHAYU',   role: 'manager', agent_code: 'EXE-MG1', phone: '012-441 9082', status: 'active' },
-  { id: 'usr-exe-fin', org_id: 'org-exe', email: 'finance@exeagency.my',  password: '12345Abcdefg', name: 'KAMALESH NAIR', role: 'finance', agent_code: null,      phone: '011-2277 4413', status: 'active' },
-  { id: 'usr-exe-view',org_id: 'org-exe', email: 'auditor@exeagency.my',  password: '12345Abcdefg', name: 'CHEAH MEI LING',role: 'viewer',  agent_code: null,      phone: '019-880 6614', status: 'active' },
+  { id: 'usr-exe3',   org_id: 'org-exe', email: 'exemaster3@gmail.com', password: '12345Abcdefg', name: 'EXE MASTER 3',  role: 'admin', agent_code: 'EXE-M3',   phone: '012-576 2417', status: 'active' },
+  { id: 'usr-exe1',   org_id: 'org-exe', email: 'exemaster1@gmail.com', password: '12345Abcdefg', name: 'EXE MASTER 1',  role: 'admin', agent_code: 'EXE-M1',   phone: '012-576 2418', status: 'active' },
+  { id: 'usr-bs',     org_id: 'org-bs',  email: 'boonseng_agent@yahoo.com', password: '12345Abcdefg', name: 'BOON SENG AGENT', role: 'admin', agent_code: 'A02100-00', phone: '014-994 4313', status: 'active' },
 ];
 
 const SUB_AGENTS: Row[] = [

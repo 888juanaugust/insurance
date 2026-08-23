@@ -45,7 +45,7 @@ function reject(fd: FormData, field: string, error: string): ClientFormState {
 
 export async function saveClientAction(_prev: unknown, fd: FormData): Promise<ClientFormState> {
   const id = str(fd, 'client_id');
-  const guard = await authorise('client.write', {
+  const guard = await authorise({
     action: id ? 'client.update' : 'client.create', entity: 'client', entityId: id || null,
   });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
@@ -147,7 +147,7 @@ export async function saveClientAction(_prev: unknown, fd: FormData): Promise<Cl
 
 export async function deleteClientAction(fd: FormData) {
   const id = String(fd.get('id') ?? '');
-  const guard = await authorise('client.delete', { action: 'client.delete', entity: 'client', entityId: id });
+  const guard = await authorise({ action: 'client.delete', entity: 'client', entityId: id });
   if (!guard.ok) forbid(guard.message);
   const user = guard.user;
 

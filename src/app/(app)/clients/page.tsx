@@ -6,7 +6,6 @@ import { money, longDate } from '@/lib/format';
 import { PageHeader } from '@/components/ui';
 import SearchBox from '@/components/SearchBox';
 import FilterSelect from '@/components/FilterSelect';
-import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +20,6 @@ export default async function ClientsPage({
   const sp = await searchParams;
   const q = typeof sp.q === 'string' ? sp.q : '';
   const type = typeof sp.type === 'string' ? sp.type : '';
-  const mayWrite = can(user.role, 'client.write');
   const rows = listClients(user.org_id, q, type);
 
   const outstanding = rows.reduce((s, r) => s + Number(r.outstanding ?? 0), 0);
@@ -34,11 +32,9 @@ export default async function ClientsPage({
         meta={`${rows.length} client${rows.length === 1 ? '' : 's'} · ${money(outstanding)} premium outstanding`}
         actions={
           <>
-            {mayWrite && (
-              <Link href="/clients/new" className="btn btn-primary">
-                <span className="text-[15px] leading-none">+</span> Add client
-              </Link>
-            )}
+            <Link href="/clients/new" className="btn btn-primary">
+              <span className="text-[15px] leading-none">+</span> Add client
+            </Link>
             <FilterSelect
               name="type"
               label="Client type"
@@ -112,13 +108,8 @@ export default async function ClientsPage({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={12} className="py-12 text-center text-[13px] text-muted">
-                  No clients match your search.
-                  {mayWrite && (
-                    <>
-                      {' '}
-                      <Link href="/clients/new" className="text-link hover:underline">Add one</Link>.
-                    </>
-                  )}
+                  No clients match your search.{' '}
+                  <Link href="/clients/new" className="text-link hover:underline">Add one</Link>.
                 </td>
               </tr>
             )}

@@ -1,4 +1,4 @@
-import { requirePermission } from '@/lib/guard';
+import { requireAdmin } from '@/lib/guard';
 import { listGroupOptions } from '@/lib/queries';
 import { Crumb, PageHeader } from '@/components/ui';
 import ClientForm from '@/components/ClientForm';
@@ -6,7 +6,7 @@ import ClientForm from '@/components/ClientForm';
 export const dynamic = 'force-dynamic';
 
 export default async function NewClientPage() {
-  const user = await requirePermission('client.write');
+  const user = await requireAdmin();
 
   return (
     <div className="space-y-4">

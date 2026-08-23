@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { requirePermission } from '@/lib/guard';
+import { requireAdmin } from '@/lib/guard';
 import { getPolicy } from '@/lib/queries';
 import { policyFormOptions, CLASS_BY_SLUG } from '@/lib/form-data';
 import { Crumb, PageHeader } from '@/components/ui';
@@ -12,7 +12,7 @@ export default async function EditPolicyPage({
 }: {
   params: Promise<{ cls: string; id: string }>;
 }) {
-  const user = await requirePermission('policy.write');
+  const user = await requireAdmin();
 
   const { cls: slug, id } = await params;
   if (!CLASS_BY_SLUG[slug]) notFound();

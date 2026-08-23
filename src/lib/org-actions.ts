@@ -68,7 +68,7 @@ function collect(fd: FormData, panel: OrgPanel): Record<string, string> {
 /* ------------------------------------------------- company particulars */
 
 export async function saveOrgProfileAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const guard = await authorise('org.settings', { action: 'org.profile', entity: 'organisation' });
+  const guard = await authorise({ action: 'org.profile', entity: 'organisation' });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
   const user = guard.user;
 
@@ -117,7 +117,7 @@ export async function saveOrgProfileAction(_prev: unknown, fd: FormData): Promis
 /* --------------------------------------------------- invoice letterhead */
 
 export async function saveOrgInvoiceAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const guard = await authorise('org.settings', { action: 'org.invoice', entity: 'organisation' });
+  const guard = await authorise({ action: 'org.invoice', entity: 'organisation' });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
   const user = guard.user;
 
@@ -162,7 +162,7 @@ export async function saveOrgInvoiceAction(_prev: unknown, fd: FormData): Promis
 /* ------------------------------------- collection account and numbering */
 
 export async function saveOrgBankAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const guard = await authorise('org.settings', { action: 'org.bank', entity: 'organisation' });
+  const guard = await authorise({ action: 'org.bank', entity: 'organisation' });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
   const user = guard.user;
 
@@ -209,7 +209,7 @@ export async function saveOrgBankAction(_prev: unknown, fd: FormData): Promise<O
 /* ------------------------------------------------------ commission rates */
 
 export async function saveCommissionRatesAction(_prev: unknown, fd: FormData): Promise<OrgFormState> {
-  const guard = await authorise('rates.write', { action: 'rates.update', entity: 'commission_rate' });
+  const guard = await authorise({ action: 'rates.update', entity: 'commission_rate' });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
   const user = guard.user;
 

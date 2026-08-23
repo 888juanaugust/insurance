@@ -5,7 +5,6 @@ import { getClient, listClientPolicies, listLifePlans } from '@/lib/queries';
 import { classLabel, longDate, money, policyHref } from '@/lib/format';
 import { Crumb, StatusBadge } from '@/components/ui';
 import { deleteClientAction } from '@/lib/client-actions';
-import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,10 +44,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             <span className={`badge ${client.portal_enabled ? 'badge-green' : 'badge-grey'}`}>
               Client portal {client.portal_enabled ? 'marked' : 'not marked'}
             </span>
-            {can(user.role, 'client.write') && (
-              <Link href={`/clients/${client.id}/edit`} className="btn btn-ghost">Edit</Link>
-            )}
-            {can(user.role, 'client.delete') && policies.length === 0 && (
+            <Link href={`/clients/${client.id}/edit`} className="btn btn-ghost">Edit</Link>
+            {policies.length === 0 && (
               <form action={deleteClientAction}>
                 <input type="hidden" name="id" value={client.id} />
                 <button type="submit" className="btn btn-ghost text-danger hover:bg-danger-wash">

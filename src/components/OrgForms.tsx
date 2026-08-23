@@ -26,8 +26,8 @@ type Spec = {
 };
 
 function Field({
-  spec, value, error, prefix, readOnly,
-}: { spec: Spec; value: string; error?: string; prefix: string; readOnly?: boolean }) {
+  spec, value, error, prefix,
+}: { spec: Spec; value: string; error?: string; prefix: string }) {
   const { name, label, type = 'text', span = 1, required, placeholder, hint, maxLength, rows, options } = spec;
   /*
    * The panels share columns — the company name and phone sit on the
@@ -42,12 +42,8 @@ function Field({
     <div className={span === 2 ? 'sm:col-span-2' : span === 4 ? 'sm:col-span-2 xl:col-span-4' : ''}>
       <label htmlFor={id} className="mb-1 block text-[12px] font-semibold text-ink-soft">
         {label}
-        {required && !readOnly && <span className="ml-0.5 text-brand">*</span>}
+        {required && <span className="ml-0.5 text-brand">*</span>}
       </label>
-      {readOnly ? (
-        <p className="text-[13.5px] text-ink">{value || '—'}</p>
-      ) : (
-      <>
       {options ? (
         <select
           id={id}
@@ -97,8 +93,6 @@ function Field({
       ) : hint ? (
         <p id={`${id}-hint`} className="mt-1 text-[12px] text-muted">{hint}</p>
       ) : null}
-      </>
-      )}
     </div>
   );
 }
@@ -110,7 +104,7 @@ function Field({
  * to be showing.
  */
 function Panel({
-  title, note, fields, initial, action, label, prefix, readOnly,
+  title, note, fields, initial, action, label, prefix,
 }: {
   title: string;
   note?: string;
@@ -119,8 +113,6 @@ function Panel({
   action: (prev: unknown, fd: FormData) => Promise<OrgFormState>;
   label: string;
   prefix: string;
-  /** Without org.settings the panel still shows — the figures are useful — but nothing posts. */
-  readOnly?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, null as OrgFormState | null);
 
@@ -139,20 +131,14 @@ function Panel({
 
       <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">
         {fields.map((f) => (
-          <Field key={f.name} spec={f} value={v(f.name)} error={err(f.name)} prefix={prefix} readOnly={readOnly} />
+          <Field key={f.name} spec={f} value={v(f.name)} error={err(f.name)} prefix={prefix} />
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-3.5">
-        {readOnly ? (
-          <span className="text-[12.5px] text-muted">
-            Only a Master can change this. Ask one if it needs correcting.
-          </span>
-        ) : (
-          <button type="submit" disabled={pending} className="btn btn-primary disabled:opacity-60">
-            {pending ? 'Saving…' : label}
-          </button>
-        )}
+        <button type="submit" disabled={pending} className="btn btn-primary disabled:opacity-60">
+          {pending ? 'Saving…' : label}
+        </button>
         {state?.error && (
           <span role="alert" className="text-[12.5px] font-medium text-danger">{state.error}</span>
         )}
@@ -216,7 +202,7 @@ const BANK: Spec[] = [
 
 type OrgRow = Record<string, string | number | null>;
 
-export function OrgProfilePanel({ org, readOnly }: { org: OrgRow; readOnly?: boolean }) {
+export function OrgProfilePanel({ org }: { org: OrgRow }) {
   return (
     <Panel
       title="Company particulars"
@@ -224,14 +210,13 @@ export function OrgProfilePanel({ org, readOnly }: { org: OrgRow; readOnly?: boo
       fields={PROFILE}
       initial={org}
       action={saveOrgProfileAction}
-      readOnly={readOnly}
       label="Save particulars"
       prefix="org"
     />
   );
 }
 
-export function OrgInvoicePanel({ org, readOnly }: { org: OrgRow; readOnly?: boolean }) {
+export function OrgInvoicePanel({ org }: { org: OrgRow }) {
   return (
     <Panel
       title="Invoice company info"
@@ -239,14 +224,13 @@ export function OrgInvoicePanel({ org, readOnly }: { org: OrgRow; readOnly?: boo
       fields={INVOICE}
       initial={org}
       action={saveOrgInvoiceAction}
-      readOnly={readOnly}
       label="Save letterhead"
       prefix="inv"
     />
   );
 }
 
-export function OrgBankPanel({ org, readOnly }: { org: OrgRow; readOnly?: boolean }) {
+export function OrgBankPanel({ org }: { org: OrgRow }) {
   return (
     <Panel
       title="Collection account and numbering"
@@ -254,7 +238,6 @@ export function OrgBankPanel({ org, readOnly }: { org: OrgRow; readOnly?: boolea
       fields={BANK}
       initial={org}
       action={saveOrgBankAction}
-      readOnly={readOnly}
       label="Save account"
       prefix="bank"
     />

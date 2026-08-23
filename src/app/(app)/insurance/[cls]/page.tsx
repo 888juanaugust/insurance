@@ -9,7 +9,6 @@ import { CLASS_BY_SLUG } from '@/lib/form-data';
 import FilterSelect from '@/components/FilterSelect';
 import RegisterFilters from '@/components/RegisterFilters';
 import RegisterTable from '@/components/RegisterTable';
-import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,16 +88,12 @@ export default async function RegisterPage({
               ...agents.map((a) => ({ value: a.id, label: a.name })),
             ]}
           />
-          {can(user.role, 'policy.write') && (
-            <>
-              <Link href={`/insurance/${slug}/new`} className="btn btn-ghost">
-                <span className="text-[15px] leading-none">+</span> Create Policy
-              </Link>
-              <Link href={`/insurance/${slug}/upload`} className="btn btn-primary">
-                <UploadGlyph /> Upload PDF
-              </Link>
-            </>
-          )}
+          <Link href={`/insurance/${slug}/new`} className="btn btn-ghost">
+            <span className="text-[15px] leading-none">+</span> Create Policy
+          </Link>
+          <Link href={`/insurance/${slug}/upload`} className="btn btn-primary">
+            <UploadGlyph /> Upload PDF
+          </Link>
         </div>
       </div>
 
@@ -109,14 +104,7 @@ export default async function RegisterPage({
       <RegisterFilters chips={chips} slug={slug} />
 
       <div className="mt-4">
-        <RegisterTable
-          rows={rows}
-          slug={slug}
-          page={page}
-          perPage={perPage}
-          isMotor={cls === 'motor'}
-          maySettle={can(user.role, 'payment.record')}
-        />
+        <RegisterTable rows={rows} slug={slug} page={page} perPage={perPage} isMotor={cls === 'motor'} />
       </div>
 
       <p className="mt-3 text-[12px] text-muted">

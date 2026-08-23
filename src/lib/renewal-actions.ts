@@ -14,7 +14,7 @@ export async function renewalActionForm(fd: FormData) {
   const cls = String(fd.get('cls') ?? 'motor');
   const op = String(fd.get('op') ?? '');
 
-  const guard = await authorise('renewal.process', {
+  const guard = await authorise({
     action: `renewal.${op || 'unknown'}`, entity: 'renewal_request', entityId: id || policyId || null,
   });
   if (!guard.ok) forbid(guard.message);

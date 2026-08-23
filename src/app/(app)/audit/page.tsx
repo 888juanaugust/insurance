@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requirePermission } from '@/lib/guard';
+import { requireAdmin } from '@/lib/guard';
 import { listAuditEvents, auditFacets, type AuditRow } from '@/lib/queries';
 import { PageHeader, Help } from '@/components/ui';
 import FilterSelect from '@/components/FilterSelect';
@@ -42,7 +42,7 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ [k: string]: string | string[] | undefined }>;
 }) {
-  const user = await requirePermission('audit.view');
+  const user = await requireAdmin();
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '');
 

@@ -43,7 +43,7 @@ function reject(fd: FormData, field: string, error: string): SubAgentFormState {
 
 export async function saveSubAgentAction(_prev: unknown, fd: FormData): Promise<SubAgentFormState> {
   const id = str(fd, 'agent_id');
-  const guard = await authorise('agent.write', {
+  const guard = await authorise({
     action: id ? 'agent.update' : 'agent.create', entity: 'sub_agent', entityId: id || null,
   });
   if (!guard.ok) return { error: guard.message, values: submitted(fd) };
@@ -158,7 +158,7 @@ export async function setSubAgentStatusAction(fd: FormData) {
   const id = String(fd.get('id') ?? '');
   const status = String(fd.get('status') ?? '') === 'inactive' ? 'inactive' : 'active';
 
-  const guard = await authorise('agent.write', {
+  const guard = await authorise({
     action: `agent.${status === 'inactive' ? 'deactivate' : 'activate'}`, entity: 'sub_agent', entityId: id,
   });
   if (!guard.ok) forbid(guard.message);
@@ -181,7 +181,7 @@ export async function setSubAgentStatusAction(fd: FormData) {
 
 export async function deleteSubAgentAction(fd: FormData) {
   const id = String(fd.get('id') ?? '');
-  const guard = await authorise('agent.delete', { action: 'agent.delete', entity: 'sub_agent', entityId: id });
+  const guard = await authorise({ action: 'agent.delete', entity: 'sub_agent', entityId: id });
   if (!guard.ok) forbid(guard.message);
   const user = guard.user;
 

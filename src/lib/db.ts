@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS app_user (
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   name          TEXT NOT NULL,
-  role          TEXT NOT NULL,          -- master | manager | finance | agent | viewer
+  role          TEXT NOT NULL,          -- admin (the agency application) | client (the portal)
   agent_code    TEXT,
   phone         TEXT,
   status        TEXT NOT NULL DEFAULT 'active'
@@ -397,6 +397,29 @@ function migrate(db: Database.Database) {
   );
   if (!nmColumns.has('class_of_business')) {
     db.exec('ALTER TABLE non_motor_detail ADD COLUMN class_of_business TEXT');
+  }
+
+  /*
+   * Insurhelp used to grade users as master / manager / finance / agent /
+   * viewer. It now has one role, admin, and any other value grants nothing —
+   * so a database written before this change would lock every one of its
+   * users out of the application on the next start. Everyone who already had
+   * a working account keeps one.
+   *
+   * `client` is left alone: it is the role the (unbuilt) client portal will
+   * use, and those accounts were never meant to reach the agency screens.
+   */
+  const legacyRoles = ['master', 'manager', 'finance', 'agent', 'viewer'];
+  const stale = db
+    .prepare(
+      `SELECT COUNT(*) n FROM app_user WHERE role IN (${legacyRoles.map(() => '?').join(',')})`,
+    )
+    .get(...legacyRoles) as { n: number };
+  if (stale.n > 0) {
+    db.prepare(
+      `UPDATE app_user SET role = 'admin' WHERE role IN (${legacyRoles.map(() => '?').join(',')})`,
+    ).run(...legacyRoles);
+    console.log(`Insurhelp: moved ${stale.n} user${stale.n === 1 ? '' : 's'} to the admin role.`);
   }
 }
 

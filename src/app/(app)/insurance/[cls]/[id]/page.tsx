@@ -6,7 +6,6 @@ import { money, longDate, num, classLabel } from '@/lib/format';
 import { Crumb, StatusBadge, Help } from '@/components/ui';
 import { recordPaymentAction } from '@/lib/actions';
 import { deletePolicyAction } from '@/lib/policy-actions';
-import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,9 +63,6 @@ export default async function PolicyDetailPage({
   const clientPay = payments.find((p) => p.kind === 'client');
   const principalPay = payments.find((p) => p.kind === 'principal');
   const deleteBlock = policyDeleteBlock(id, user.org_id);
-  const mayWrite = can(user.role, 'policy.write');
-  const mayDelete = can(user.role, 'policy.delete');
-  const mayCollect = can(user.role, 'payment.record');
 
   return (
     <div className="space-y-4">
@@ -91,10 +87,8 @@ export default async function PolicyDetailPage({
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={policy.status} />
             <span className="badge badge-blue">{principalRow.short_name}</span>
-            {mayWrite && (
-              <Link href={`/insurance/${slug}/${policy.id}/edit`} className="btn btn-ghost">Edit</Link>
-            )}
-            {!mayDelete ? null : deleteBlock ? (
+            <Link href={`/insurance/${slug}/${policy.id}/edit`} className="btn btn-ghost">Edit</Link>
+            {deleteBlock ? (
               <span
                 className="max-w-xs text-[12px] text-muted"
                 title={deleteBlock}
@@ -260,7 +254,7 @@ export default async function PolicyDetailPage({
                 <Field label="Reference" value={clientPay.reference} />
                 <Field label="Status" value={<StatusBadge status={clientPay.status} />} />
               </dl>
-              {mayCollect && clientPay.status !== 'paid' && (
+              {clientPay.status !== 'paid' && (
                 <form action={recordPaymentAction} className="flex flex-wrap items-end gap-3 border-t border-line px-6 py-4">
                   <input type="hidden" name="payment_id" value={clientPay.id} />
                   <input type="hidden" name="back" value={`/insurance/${slug}/${policy.id}`} />

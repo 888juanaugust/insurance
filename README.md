@@ -19,14 +19,11 @@ npm run dev          # http://localhost:3000
 
 Sign in with:
 
-| Login ID | Password | Role |
+| Login ID | Password | Organisation |
 | --- | --- | --- |
-| `exemaster3@gmail.com` | `12345Abcdefg` | Master |
-| `manager@exeagency.my` | `12345Abcdefg` | Manager |
-| `finance@exeagency.my` | `12345Abcdefg` | Finance |
-| `exemaster1@gmail.com` | `12345Abcdefg` | Agent |
-| `auditor@exeagency.my` | `12345Abcdefg` | Viewer |
-| `boonseng_agent@yahoo.com` | `12345Abcdefg` | Master, second organisation |
+| `exemaster3@gmail.com` | `12345Abcdefg` | EXE Cheras |
+| `exemaster1@gmail.com` | `12345Abcdefg` | EXE Cheras |
+| `boonseng_agent@yahoo.com` | `12345Abcdefg` | BS Agency |
 
 The SQLite database is created and seeded automatically at `data/insurhelp.db` on first
 request. `npm run db:reset` deletes it so the next request reseeds from scratch.
@@ -45,8 +42,7 @@ invented.
 | Module | Route | Notes |
 | --- | --- | --- |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
-| Users and roles | `/team/users` | Who may do what. Master only. |
-| Audit trail | `/audit` | Every change, refusal and sign-in. Master only. |
+| Audit trail | `/audit` | Every change, refusal and sign-in. |
 | Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
 | Organisation | `/organisation` | Editable company particulars, invoice letterhead and collection account, plus subscription terms and quota usage. Each panel saves on its own, so a shared field edited in either place lands in the same column. |
 | Clients | `/clients`, `/clients/new`, `/clients/[id]`, `/clients/[id]/edit` | Add, edit and delete clients — individual or company. NRIC fills the date of birth, duplicate identification is refused, and a client carrying policies cannot be deleted. |
@@ -100,29 +96,24 @@ export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
 
 ## Roles
 
-Five roles, split the way a small agency divides work rather than as an
-admin/user ladder. The rule doing the most work: **an agent cannot approve their
-own commission** — they are paid by it, so the approval has to come from someone
-else. Everything else follows from the same idea.
+One role: **admin**. Everyone who can sign in to the agency application can do
+everything in it — clients, policies, renewals, collections, commission, sub
+agents, organisation settings and the audit trail.
 
-| Role | Meant for |
-| --- | --- |
-| **Master** | The agency principal. Everything, including organisation particulars, commission rates, user roles and the audit trail. |
-| **Manager** | Runs the book: clients, policies, renewals, sub agents, and approves commission. Writes no business of their own, so the approval is not self-approval. Cannot change settings or rates. |
-| **Finance** | Records collections and remittances, approves commission and releases the payout. Writes no policies. |
-| **Agent** | Writes and services business: clients, policies, renewals, client collections. Cannot approve commission. |
-| **Viewer** | Reads the registers and reports. Changes nothing. |
+The check is kept rather than removed, because it still decides one real thing:
+**an account whose role is anything else grants nothing**. That covers a stale
+row, a hand-edited database, and the `client` role the unbuilt portal will use —
+none of which should reach the agency screens. It fails closed, which is the only
+sensible direction for a default. A refused account is sent to a page that names
+the role actually on it, and the attempt goes to the audit trail.
 
-Approving commission and paying it out are separate permissions, so a manager can
-sign a payout off without being able to release the money.
+A database written before this change is migrated on the next start: `master`,
+`manager`, `finance`, `agent` and `viewer` all become `admin`, so nobody who had
+a working account loses it. `client` is deliberately left alone.
 
-**Every action checks its permission on the server**, in `authorise()`. The
-interface hides what a role cannot use — the rail drops whole sections, forms
-render read-only, buttons disappear — but that is presentation. A hidden button
-is not access control, and the check that matters runs where the mutation does.
-Removing the last Master is refused: every screen that could grant the role back
-is behind the permission only a Master holds, so the organisation would be locked
-out of its own settings for good.
+Bringing graded roles back means widening `isAdmin` in `src/lib/permissions.ts`
+into a permission lookup and giving `authorise` a permission argument again.
+Every mutation already routes through it, so nothing else has to move.
 
 ## Audit trail
 
@@ -130,10 +121,10 @@ out of its own settings for good.
 when, from where, and which fields changed.
 
 Refusals are the point. A trail that only records successes cannot answer the
-question people actually bring to it, so a role-blocked attempt is written before
-it is turned away, and page-level refusals are recorded too — someone walking the
-URL space looking for a screen that forgot to check is exactly what should show
-up. Rules that refuse on their own terms — deleting a policy that has been paid,
+question people actually bring to it, so a blocked attempt is written before it is
+turned away, and page-level refusals are recorded too — someone walking the URL
+space looking for a screen that forgot to check is exactly what should show up.
+Rules that refuse on their own terms — deleting a policy that has been paid,
 deleting a client that still carries cover — are recorded the same way, marked
 `refused` rather than `blocked`.
 

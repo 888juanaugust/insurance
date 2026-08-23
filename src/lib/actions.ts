@@ -78,10 +78,7 @@ export async function approveCommissionAction(formData: FormData) {
   const status = String(formData.get('status') ?? '');
   if (!id || !['pending', 'approved', 'paid'].includes(status)) redirect('/accounting');
 
-  // Approving and paying out are separate permissions: a manager signs the
-  // commission off, finance releases the money.
-  const permission = status === 'paid' ? 'commission.pay' : 'commission.approve';
-  const guard = await authorise(permission, { action: `commission.${status}`, entity: 'commission', entityId: id });
+  const guard = await authorise({ action: `commission.${status}`, entity: 'commission', entityId: id });
   if (!guard.ok) forbid(guard.message);
 
   const before = getCommissionForOrg(id, guard.user.org_id);
@@ -106,7 +103,7 @@ export async function recordPaymentAction(formData: FormData) {
   const method = String(formData.get('method') ?? '');
   const reference = String(formData.get('reference') ?? '');
 
-  const guard = await authorise('payment.record', { action: 'payment.record', entity: 'payment', entityId: id });
+  const guard = await authorise({ action: 'payment.record', entity: 'payment', entityId: id });
   if (!guard.ok) forbid(guard.message);
   if (!id || !(amount > 0)) redirect(String(formData.get('back') ?? '/'));
 
@@ -142,7 +139,7 @@ export async function markNotificationsReadAction() {
  */
 export async function bulkCommissionAction(formData: FormData) {
   const op = String(formData.get('op') ?? '');
-  const guard = await authorise('commission.approve', {
+  const guard = await authorise({
     action: `commission.bulk_${op || 'unknown'}`, entity: 'commission',
   });
   if (!guard.ok) forbid(guard.message);

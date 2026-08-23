@@ -5,7 +5,6 @@ import { listRenewalRequests, renewalCounts } from '@/lib/queries';
 import { longDate, classLabel, policyHref } from '@/lib/format';
 import { PageHeader, StatusBadge } from '@/components/ui';
 import { renewalActionForm } from '@/lib/renewal-actions';
-import { can } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +45,6 @@ export default async function RenewalsPage({
 }) {
   const user = await currentUser();
   if (!user) redirect('/login');
-  const mayProcess = can(user.role, 'renewal.process');
 
   const sp = await searchParams;
   const tab = (TABS as readonly string[]).includes(String(sp.tab)) ? (sp.tab as (typeof TABS)[number]) : 'inbox';
@@ -108,23 +106,17 @@ export default async function RenewalsPage({
                     <div className="flex flex-wrap gap-1.5">
                       {tab === 'expiring' ? (
                         <>
-                          {mayProcess && (
-                            <RenewalButton op="request" policyId={r.policy_id} cls={r.class} label="Request renewal" />
-                          )}
+                          <RenewalButton op="request" policyId={r.policy_id} cls={r.class} label="Request renewal" />
                           <Link href={policyHref(r.class, r.policy_id)} className="btn btn-ghost px-2.5 py-1 text-[12px]">
                             View policy
                           </Link>
                         </>
-                      ) : mayProcess ? (
+                      ) : (
                         <>
                           <RenewalButton op="quote" id={r.id} policyId={r.policy_id} cls={r.class} label="Create quotation" primary />
                           <RenewalButton op="process" id={r.id} policyId={r.policy_id} cls={r.class} label="Process renewal" />
                           <RenewalButton op="reject" id={r.id} policyId={r.policy_id} cls={r.class} label="Reject" />
                         </>
-                      ) : (
-                        <Link href={policyHref(r.class, r.policy_id)} className="btn btn-ghost px-2.5 py-1 text-[12px]">
-                          View policy
-                        </Link>
                       )}
                     </div>
                   )}

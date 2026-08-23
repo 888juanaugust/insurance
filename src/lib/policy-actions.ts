@@ -25,7 +25,7 @@ export type UploadState = {
 
 /** Read an uploaded policy document and return what it contains for review. */
 export async function uploadPolicyAction(_prev: unknown, formData: FormData): Promise<UploadState> {
-  const guard = await authorise('policy.write', { action: 'policy.upload', entity: 'policy' });
+  const guard = await authorise({ action: 'policy.upload', entity: 'policy' });
   if (!guard.ok) return { ok: false, error: guard.message };
   const user = guard.user;
 
@@ -201,7 +201,7 @@ function submitted(fd: FormData): Record<string, string> {
 
 /** Persist a reviewed policy — from the upload review form or Create Policy. */
 export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<SaveState> {
-  const guard = await authorise('policy.write', {
+  const guard = await authorise({
     action: str(fd, 'policy_id') ? 'policy.update' : 'policy.create',
     entity: 'policy',
     entityId: str(fd, 'policy_id') || null,
@@ -286,7 +286,7 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
 export async function deletePolicyAction(fd: FormData) {
   const id = String(fd.get('id') ?? '');
   const cls = String(fd.get('cls') ?? 'motor');
-  const guard = await authorise('policy.delete', { action: 'policy.delete', entity: 'policy', entityId: id });
+  const guard = await authorise({ action: 'policy.delete', entity: 'policy', entityId: id });
   if (!guard.ok) forbid(guard.message);
   const user = guard.user;
   if (!id) redirect(`/insurance/${cls}`);
@@ -316,7 +316,7 @@ export async function deletePolicyAction(fd: FormData) {
 
 export async function bulkPaidAction(fd: FormData) {
   const kind = String(fd.get('kind') ?? '') === 'principal' ? 'principal' : 'client';
-  const guard = await authorise('payment.record', {
+  const guard = await authorise({
     action: `payment.bulk_${kind}`, entity: 'payment',
   });
   if (!guard.ok) forbid(guard.message);
