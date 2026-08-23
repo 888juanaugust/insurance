@@ -31,6 +31,7 @@ export const NAV: NavSection[] = [
     icon: 'clients',
     children: [
       { href: '/clients', label: 'All clients', hint: 'Individuals and companies' },
+      { href: '/import', label: 'Import', hint: 'Bring a book across from a spreadsheet' },
       { href: '/client-groups', label: 'Groups', hint: 'Fleets, families, affinity blocks' },
       { href: '/client-planning', label: 'Life planning', hint: 'Plans held alongside the general book' },
     ],

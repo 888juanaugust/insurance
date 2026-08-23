@@ -41,6 +41,7 @@ invented.
 
 | Module | Route | Notes |
 | --- | --- | --- |
+| Import | `/import` | Bring an existing book across from a spreadsheet. Every row is checked and shown before anything is written. |
 | Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
 | Audit trail | `/audit` | Every change, refusal and sign-in. |
@@ -165,6 +166,42 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Importing a book
+
+An agency arriving from something else has its clients and policies in a
+spreadsheet. `/import` takes a CSV of either and writes it — but only after
+showing exactly what would happen.
+
+**Nothing is written by the check.** Every row is parsed, validated and
+displayed with its problems first; the commit is a separate, explicit step. That
+matters more than it sounds: an import that surprises the agency is worse than
+one that refuses, because they cannot tell what landed and running the file
+again duplicates whatever did.
+
+- **The CSV parser walks the text rather than splitting on commas**, which fails
+  on the first address field. Quoted fields carry commas, newlines and doubled
+  quotes; Excel's CRLF and UTF-8 BOM are handled (a BOM left in place becomes
+  part of the first header and every lookup for that column silently misses);
+  and a row whose column count differs from the header is reported rather than
+  quietly misaligned.
+- **Headers are matched loosely.** `Policy No.`, `policy number` and `No Polisi`
+  all find the same field, by exact alias then prefix. Columns nothing claimed
+  are listed back — a column silently left out is data the agency believes it
+  imported.
+- **The preview shows what was converted.** Dates arrive as `01/03/2026`,
+  `1-3-26` and Excel serial numbers, and day-first is assumed because that is how
+  Malaysia writes them. Ambiguity is real, so the converted columns are the ones
+  the preview chooses to show, each with the original beneath it — showing the
+  first few columns instead would hide exactly the values a misreading ruins.
+- **Errors block a row; warnings do not.** A malformed NRIC, an unknown insurer,
+  a policy number already on the register, an expiry on or before its effective
+  date — those stop the row. A premium that does not add up, or a client with no
+  identifier, are flagged and still imported.
+- **A commit is one transaction.** All the good rows or none of them; the blocked
+  rows come back as a CSV to correct and re-upload. The rows are re-analysed at
+  commit rather than trusted from the preview, so a duplicate created in between
+  is still caught.
 
 ## Search
 

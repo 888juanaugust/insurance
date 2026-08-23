@@ -2208,3 +2208,82 @@ export function searchCandidates(orgId: string, term: string, limitPerKind = 40)
       .all(p) as Array<Record<string, any>>,
   };
 }
+
+/* ----------------------------------------------------------------- import */
+
+export type ImportedClient = {
+  name: string; client_type: string; nric: string | null; business_reg: string | null;
+  email: string | null; phone: string | null; address1: string | null; address2: string | null;
+  postcode: string | null; city: string | null; state: string | null;
+  occupation: string | null; dob: string | null;
+};
+
+export type ImportedPolicy = {
+  policy_no: string; client_id: string; principal_id: string; class: string;
+  product: string | null; effective_date: string; expiry_date: string;
+  sum_insured: number; gross_premium: number; service_tax: number; stamp_duty: number;
+  total_premium: number; ncd_pct: number; remarks: string | null;
+  vehicle_no: string | null; make_model: string | null;
+};
+
+/**
+ * Writes a whole batch or none of it.
+ *
+ * A half-finished import is the worst outcome: the agency cannot tell what
+ * landed, and running the file again duplicates whatever did. One transaction
+ * means the only two states are "before" and "after".
+ */
+export function importClients(orgId: string, rows: ImportedClient[]): number {
+  const db = getDb();
+  const stmt = db.prepare(
+    `INSERT INTO client (id, org_id, name, client_type, nric, business_reg, email, phone,
+       address1, address2, postcode, city, state, country, occupation, dob, portal_enabled, created_at)
+     VALUES (@id, @org_id, @name, @client_type, @nric, @business_reg, @email, @phone,
+       @address1, @address2, @postcode, @city, @state, 'MALAYSIA', @occupation, @dob, 0, @created_at)`,
+  );
+  const tx = db.transaction((batch: ImportedClient[]) => {
+    for (const r of batch) stmt.run({ ...r, id: newId('cl'), org_id: orgId, created_at: today() });
+    return batch.length;
+  });
+  return tx(rows);
+}
+
+export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
+  const db = getDb();
+  const policy = db.prepare(
+    `INSERT INTO policy (id, org_id, client_id, principal_id, policy_no, class, product,
+       type_of_cover, status, case_type, effective_date, expiry_date, issue_date, created_date,
+       sum_insured, basic_premium, ncd_pct, ncd_amount, extra_premium, gross_premium,
+       service_tax, stamp_duty, total_premium, commission_rate, commission_amt, excess,
+       referral_fee, agent_commission, consultant_commission, uploaded_at, source_file, remarks)
+     VALUES (@id, @org_id, @client_id, @principal_id, @policy_no, @class, @product,
+       @product, 'active', 'new', @effective_date, @expiry_date, @effective_date, @created,
+       @sum_insured, @gross_premium, @ncd_pct, 0, 0, @gross_premium,
+       @service_tax, @stamp_duty, @total_premium, 0, 0, 0,
+       0, 0, 0, @created, 'imported', @remarks)`,
+  );
+  const motor = db.prepare(
+    `INSERT INTO motor_detail (policy_id, vehicle_no, make_model, windscreen_si)
+     VALUES (?, ?, ?, 0)`,
+  );
+  // Both legs of the money, so an imported policy behaves like a keyed one on
+  // the dashboard rather than showing nothing outstanding.
+  const payment = db.prepare(
+    `INSERT INTO payment (id, policy_id, kind, amount, paid_amount, due_date, status)
+     VALUES (@id, @policy_id, @kind, @amount, 0, @due_date, 'outstanding')`,
+  );
+
+  const tx = db.transaction((batch: ImportedPolicy[]) => {
+    for (const r of batch) {
+      const id = newId('pol');
+      policy.run({ ...r, id, org_id: orgId, created: today() });
+      if (r.class === 'motor' && (r.vehicle_no || r.make_model)) {
+        motor.run(id, r.vehicle_no, r.make_model);
+      }
+      payment.run({ id: `${id}-pay-c`, policy_id: id, kind: 'client', amount: r.total_premium, due_date: r.effective_date });
+      payment.run({ id: `${id}-pay-p`, policy_id: id, kind: 'principal', amount: r.total_premium, due_date: r.effective_date });
+    }
+    return batch.length;
+  });
+  return tx(rows);
+}
