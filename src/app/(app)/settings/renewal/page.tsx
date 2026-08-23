@@ -19,7 +19,7 @@ export default async function RenewalSettingPage() {
       <div className="panel px-6 py-6">
         <Crumb items={[{ href: '/setting', label: 'Setting' }, { label: 'Renewal Setting' }]} />
         <PageHeader
-          title="Renewal Setting"
+          title="Renewal reminders"
           subtitle="Renewal notices sent to the insured before a policy expires."
           meta={`${settings.filter((s) => s.enabled).length} active reminder rules · ${due.length} policies expiring in the next 90 days`}
         />

@@ -13,8 +13,8 @@ import RegisterTable from '@/components/RegisterTable';
 export const dynamic = 'force-dynamic';
 
 const TITLES: Record<string, string> = {
-  'general-motor': 'Insurance - General Motor',
-  'non-motor': 'Insurance - General Non-Motor',
+  'general-motor': 'Motor policies',
+  'non-motor': 'Non-motor policies',
 };
 
 export default async function RegisterPage({

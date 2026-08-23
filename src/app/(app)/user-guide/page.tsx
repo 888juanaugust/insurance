@@ -9,7 +9,7 @@ const MODULES = [
   {
     href: '/organisation',
     title: 'User Management',
-    body: 'Stores user access and sub agent settings, including each sub agent’s commission structure and the e-Invoice details used for self-billed commission payouts.',
+    body: 'Agent roster, commission structure per agent, and the e-Invoice details used for self-billed commission payouts.',
   },
   {
     href: '/clients',

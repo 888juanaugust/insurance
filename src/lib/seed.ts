@@ -40,7 +40,7 @@ const ORGS: Row[] = [
     state: 'Selangor',
     country: 'Malaysia',
     kick_start_date: '2025-01-06',
-    plan_name: 'Insurance Helper Standard Package',
+    plan_name: 'Insurhelp Standard',
     plan_price: 500,
     plan_sst_pct: 8,
     policy_quota: 350,
@@ -79,7 +79,7 @@ const ORGS: Row[] = [
     state: 'Negeri Sembilan',
     country: 'Malaysia',
     kick_start_date: '2025-06-02',
-    plan_name: 'Insurance Helper Standard Package',
+    plan_name: 'Insurhelp Standard',
     plan_price: 500,
     plan_sst_pct: 8,
     policy_quota: 350,
@@ -92,7 +92,7 @@ const ORGS: Row[] = [
     former_name: '',
     bank_name: 'Maybank Berhad',
     bank_account_name: 'BS AGENCY SDN BHD',
-    bank_account_number: '5642 7654 0010',
+    bank_account_number: '8801 2233 4455',
     remark1: 'Please quote the policy number on every payment.',
     remark2: '',
     loc_prefix: 'LOC',
@@ -144,7 +144,7 @@ const SUB_AGENTS: Row[] = [
   { id: 'sa-exe-03', org_id: 'org-exe', name: 'ARUL SELVAM A/L RAJAN',email: 'arul.selvam@exeagency.my',  phone: '016-220 9987', nric: '860519-08-5271', agent_code: 'EXE-A03', rank: 'Agent',           motor_rate: 7,  non_motor_rate: 15, override_rate: 0, bank_name: 'Public Bank',      bank_account: '3199 0084 5522', einvoice_tin: 'IG19338004120', self_billed: 0, join_date: '2024-07-22', status: 'active' },
   { id: 'sa-exe-04', org_id: 'org-exe', name: 'TAN CHIN HOCK',        email: 'chinhock.tan@exeagency.my', phone: '017-661 2038', nric: '780412-06-5019', agent_code: 'EXE-A04', rank: 'Unit Manager',    motor_rate: 9,  non_motor_rate: 20, override_rate: 3, bank_name: 'Hong Leong Bank', bank_account: '2210 5567 8890', einvoice_tin: 'IG17552090330', self_billed: 1, join_date: '2022-11-02', status: 'active' },
   { id: 'sa-exe-05', org_id: 'org-exe', name: 'SITI ZAHARAH BINTI IDRIS', email: 'siti.zaharah@exeagency.my', phone: '011-2288 4471', nric: '950122-03-5588', agent_code: 'EXE-A05', rank: 'Agent',   motor_rate: 6,  non_motor_rate: 14, override_rate: 0, bank_name: 'Bank Islam',       bank_account: '1204 9987 0031', einvoice_tin: 'IG21009855440', self_billed: 0, join_date: '2025-02-17', status: 'inactive' },
-  { id: 'sa-bs-01',  org_id: 'org-bs',  name: 'MADAM SIM',            email: 'madamsim@bsagency.my',      phone: '014-994 4313', nric: '751130-05-5442', agent_code: 'A02100-01', rank: 'Senior Agent',  motor_rate: 8,  non_motor_rate: 18, override_rate: 2, bank_name: 'Maybank Berhad',   bank_account: '5642 7654 0010', einvoice_tin: 'IG16220447080', self_billed: 1, join_date: '2021-05-03', status: 'active' },
+  { id: 'sa-bs-01',  org_id: 'org-bs',  name: 'MADAM SIM',            email: 'madamsim@bsagency.my',      phone: '014-994 4313', nric: '751130-05-5442', agent_code: 'A02100-01', rank: 'Senior Agent',  motor_rate: 8,  non_motor_rate: 18, override_rate: 2, bank_name: 'Maybank Berhad',   bank_account: '8801 2233 4455', einvoice_tin: 'IG16220447080', self_billed: 1, join_date: '2021-05-03', status: 'active' },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -431,6 +431,31 @@ const POLICIES: PolicySeed[] = [
     nonMotor: { riskType: 'Personal Accident', riskAddress: 'No 18, Jalan Cheras Idaman 2, 43200 Cheras, Selangor', occupancy: 'Class 1 occupation', periodDesc: '12 months', benefits: 'Accidental death RM80,000; Permanent disablement RM80,000; Medical expenses RM4,000' },
     clientDue: '2026-05-15', clientPaid: '2026-08-03', clientMethod: 'Online transfer', clientRef: 'FPX-20260803-4990',
     principalDue: '2026-05-30', principalPaid: '2026-08-08' },
+
+  /* --- EXE Cheras: written last year, so falling due now --------------- */
+  { id: 'pol-v7340021', org: 'org-exe', client: 'cl-ngsiew', principal: 'pr-tokio', agent: 'sa-exe-02',
+    policyNo: 'V7340021', coverNote: 'CN-V7340021', cls: 'motor', product: 'Private Car', cover: 'Comprehensive',
+    status: 'active', caseType: 'renewal', created: '2025-08-28', effective: '2025-09-11', expiry: '2026-09-10', issue: '2025-08-28',
+    sumInsured: 33000, total: 942.60, ncd: 38.33, excess: 0,
+    motor: { vehicleNo: 'NSL 7340', makeModel: 'PERODUA ATIVA 1.0 AV', bodyType: '5D SUV', engineNo: '1KRB7340021', chassisNo: 'PM2M700S1M1007340', cc: '998', year: '2021', seating: 5, hp: 'NONE', windscreen: 1500, drivers: 'ANY AUTHORISED DRIVER', rtd: '08' },
+    clientDue: '2025-09-11', clientPaid: '2025-09-08', clientMethod: 'Online transfer', clientRef: 'FPX-20250908-7340',
+    principalDue: '2025-09-25', principalPaid: '2025-09-24' },
+
+  { id: 'pol-a6655120', org: 'org-exe', client: 'cl-chong', principal: 'pr-lonpac', agent: 'sa-exe-03',
+    policyNo: 'A6655120-2', coverNote: 'A6655120-2', cls: 'motor', product: 'Private Car', cover: 'Comprehensive',
+    status: 'active', caseType: 'renewal', created: '2025-09-20', effective: '2025-10-06', expiry: '2026-10-05', issue: '2025-09-20',
+    sumInsured: 58000, total: 1436.90, ncd: 30, excess: 400,
+    motor: { vehicleNo: 'CWK 6655', makeModel: 'HONDA CR-V 1.5 TC', bodyType: '5D SUV', engineNo: 'L15BE6655120', chassisNo: 'PADRW2870LV006655', cc: '1498', year: '2020', seating: 5, hp: 'CIMB BANK BERHAD', windscreen: 2500, drivers: 'ANY AUTHORISED DRIVER', rtd: '08' },
+    clientDue: '2025-10-06', clientPaid: '2025-10-02', clientMethod: 'Cheque', clientRef: 'CHQ-006655',
+    principalDue: '2025-10-20', principalPaid: '2025-10-18' },
+
+  { id: 'pol-t6790455', org: 'org-exe', client: 'cl-limlay', principal: 'pr-generali', agent: 'sa-exe-04',
+    policyNo: 'T6790455', coverNote: 'CN-T6790455', cls: 'motor', product: 'Commercial Vehicle', cover: 'Comprehensive',
+    status: 'active', caseType: 'renewal', created: '2025-10-30', effective: '2025-11-15', expiry: '2026-11-14', issue: '2025-10-30',
+    sumInsured: 72000, total: 2018.35, ncd: 25, excess: 500,
+    motor: { vehicleNo: 'LLG 6790', makeModel: 'TOYOTA HILUX 2.8 ROGUE', bodyType: '4D PICKUP', engineNo: '1GD6790455', chassisNo: 'MR0FZ29G6N0006790', cc: '2755', year: '2022', seating: 5, hp: 'PUBLIC BANK BERHAD', windscreen: 3000, drivers: 'ANY AUTHORISED DRIVER', rtd: '10' },
+    clientDue: '2025-11-15', clientPaid: '2025-11-12', clientMethod: 'Online transfer', clientRef: 'FPX-20251112-6790',
+    principalDue: '2025-11-30', principalPaid: '2025-11-28' },
 
   /* --- BS Agency: the four scanned policy documents -------------------- */
   { id: 'pol-wqk100', sourceFile: 'WQK100POLICY.pdf', org: 'org-bs', client: 'cl-bolton', principal: 'pr-liberty', agent: 'sa-bs-01',

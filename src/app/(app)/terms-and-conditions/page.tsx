@@ -6,28 +6,28 @@ export const dynamic = 'force-dynamic';
 
 const CLAUSES: [string, string][] = [
   [
-    'Term',
-    'The initial term runs for one (1) year from the date of the agreement and renews automatically at the expiry of the initial term for successive terms of twelve (12) calendar months each, until terminated by notice in accordance with the agreement.',
+    'These terms',
+    'They cover your agency\u2019s use of Insurhelp. Replace this page with the agreement your own counsel prepares before you take on a paying customer \u2014 what follows is a working outline, not legal advice.',
   ],
   [
-    'Subscription and quota',
-    'The standard package covers up to 350 policy transactions per month across motor and non-motor, including quotations and renewals. Exceeding the quota in any month requires an upgrade to the next tier; downgrades are not permitted once upgraded.',
+    'Your data is yours',
+    'Client records, policies and financial figures entered into Insurhelp belong to your agency. You can export the register to CSV at any time, and we will provide a full extract on request if you stop using the product.',
   ],
   [
-    'Named users',
-    'The standard package includes two named users. Additional named users are charged at RM50 per user per month.',
+    'What we do with it',
+    'We process your data only to run the service. We do not sell it, and we do not use one agency\u2019s book to inform another\u2019s.',
   ],
   [
-    'Storage',
-    'The standard subscription includes 20 GB of storage. Additional storage is purchased in 20 GB increments at RM50 per month; 20 GB is both the minimum add-on and the fixed increment for subsequent top-ups.',
+    'Availability',
+    'We aim for the service to be available during Malaysian business hours and will give notice before planned maintenance. Set out any availability commitment you intend to be held to before you sign a customer.',
   ],
   [
-    'Payment',
-    'Fees are payable monthly in advance. Cheques should be crossed and made payable to Simplicity Consulting Sdn. Bhd., with the payment slip emailed to the address shown under Contact Us.',
+    'Your responsibilities',
+    'Keep sign-in credentials confidential, keep the records you enter accurate, and make sure you have the consent you need from the individuals whose details you record.',
   ],
   [
-    'Confidentiality',
-    'All materials made available through the service are private and confidential, and remain the property of Simplicity Consulting Sdn. Bhd.',
+    'Ending the agreement',
+    'State your notice period, what happens to data afterwards, and how long you retain it before deletion. Malaysian insurance record-keeping obligations will usually set the floor.',
   ],
 ];
 
@@ -39,8 +39,8 @@ export default async function TermsPage() {
     <div className="panel px-6 py-6">
       <PageHeader
         title="Terms of Service"
-        subtitle="Summary of the Insurance Helper cloud service subscription terms."
-        meta="Copyright © 2020–2026 Simplicity Consulting Sdn. Bhd. All rights reserved."
+        subtitle="The terms on which your agency uses Insurhelp."
+        meta="A working outline — replace with your own agreement before launch."
       />
       <div className="max-w-[820px] space-y-5">
         {CLAUSES.map(([title, body]) => (

@@ -22,7 +22,7 @@ export default async function ClientPlanningPage() {
   return (
     <div className="panel px-6 py-6">
       <PageHeader
-        title="Client Planning (Life Insurance)"
+        title="Life planning"
         subtitle="Life and medical plans held alongside the general insurance portfolio."
         meta={`${plans.length} plans · ${inForce.length} in force · ${money(sumAssured)} sum assured · ${money(annualised)} annualised premium`}
       />

@@ -58,7 +58,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ cls:
   return new NextResponse('﻿' + lines.join('\r\n'), {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="insurance-helper-${slug}-${stamp}.csv"`,
+      'Content-Disposition': `attachment; filename="insurhelp-${slug}-${stamp}.csv"`,
       'Cache-Control': 'no-store',
     },
   });

@@ -1,11 +1,14 @@
-# Insurance Helper
+# Insurhelp
 
 A Next.js application for a Malaysian general-insurance agency: clients, motor and
 non-motor policies, premium collection, remittance to principals, and sub agent
 commission — with policy documents read straight out of the insurer's PDF.
 
-The screen structure follows a teardown of the SimSuite staging app, so routes and
-field lists match a system agencies already know.
+Field lists and workflows follow how Malaysian agencies actually work — the money
+trail, the statutory compliance dates, the split between what a client owes you and
+what you owe the insurer.
+
+Deploying it: see **[DEPLOY.md](DEPLOY.md)**.
 
 ## Running it
 
@@ -21,7 +24,7 @@ Sign in with:
 | `exemaster3@gmail.com` | `12345Abcdefg` |
 | `boonseng_agent@yahoo.com` | `12345Abcdefg` |
 
-The SQLite database is created and seeded automatically at `data/insurance-helper.db` on first
+The SQLite database is created and seeded automatically at `data/insurhelp.db` on first
 request. `npm run db:reset` deletes it so the next request reseeds from scratch.
 
 ```bash
@@ -135,7 +138,7 @@ src/
     format.ts       currency and date helpers
 ```
 
-## Divergences from the reference app
+## Known gaps
 
 - **Employee Benefits** is served from `/insurance/endorsement` to match the live route, but
   the live build renders the Renewals screen there — a wiring bug noted in the teardown. This
@@ -160,6 +163,10 @@ src/
   server component — only from a client component, where React encodes the submitter itself.
   Forms in server components therefore pass the operation as a hidden input, one form per
   action. Getting this wrong fails silently: the POST returns 200 and nothing happens.
+- `IH_SECRET` signs the session cookie. The server refuses to start in production
+  without it — see `src/instrumentation.ts`.
+- Sign-in allows 8 failures per 15 minutes, per address and per email. The counter is
+  in memory, so it resets on restart and does not span multiple instances.
 - Passwords are hashed with scrypt. This is a demo application, not a production system —
   it has no rate limiting, audit trail, or multi-tenant hardening beyond scoping every query
   to the signed-in user's organisation.

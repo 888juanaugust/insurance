@@ -24,7 +24,7 @@ export default async function NotificationsPage() {
     <div className="panel px-6 py-6">
       <Crumb items={[{ href: '/setting', label: 'Setting' }, { label: 'Schedule Notification' }]} />
       <PageHeader
-        title="Schedule Notification"
+        title="Broadcasts"
         subtitle="Broadcast messages to everyone in the system, including sub agents and insured clients."
         meta={`${rows.length} messages · ${unread} unread`}
         actions={

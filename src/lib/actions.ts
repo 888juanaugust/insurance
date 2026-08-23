@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { getDb } from './db';
 import { verifyPassword } from './auth';
 import { createSession, destroySession, currentUser } from './session';
+import { checkRate, recordFailure, clearFailures } from './rate-limit';
+import { headers } from 'next/headers';
 import { setCommissionStatus, recordPayment } from './queries';
 
 export async function loginAction(_prev: unknown, formData: FormData) {
@@ -13,17 +15,33 @@ export async function loginAction(_prev: unknown, formData: FormData) {
 
   if (!email || !password) return { error: 'Please enter your email address and password.' };
 
+  // Throttle per address and per email, so neither one account nor one source
+  // can be worked through at network speed.
+  const hdrs = await headers();
+  const ip = (hdrs.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
+  const keys = [`ip:${ip}`, `email:${email}`];
+
+  for (const key of keys) {
+    const verdict = checkRate(key);
+    if (!verdict.allowed) {
+      const mins = Math.ceil(verdict.retryAfterSec / 60);
+      return { error: `Too many sign-in attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+    }
+  }
+
   const user = getDb()
     .prepare('SELECT id, password_hash, status FROM app_user WHERE lower(email) = ?')
     .get(email) as { id: string; password_hash: string; status: string } | undefined;
 
   if (!user || !verifyPassword(password, user.password_hash)) {
+    for (const key of keys) recordFailure(key);
     return { error: 'Invalid login ID or password.' };
   }
   if (user.status !== 'active') {
     return { error: 'This account is not active. Please contact your administrator.' };
   }
 
+  for (const key of keys) clearFailures(key);
   await createSession(user.id);
   redirect('/');
 }

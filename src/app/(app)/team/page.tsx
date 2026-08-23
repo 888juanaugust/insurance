@@ -19,7 +19,7 @@ export default async function SubAgentsPage() {
     <div className="space-y-4">
       <div className="panel px-6 py-6">
         <PageHeader
-          title="Sub Agents"
+          title="Agents"
           subtitle="Downline agent roster with commission structure, activation control and e-Invoice details for self-billed payouts."
           meta={`${agents.length} sub agent${agents.length === 1 ? '' : 's'} · ${active} active · ${money(commission)} commission earned to date`}
         />

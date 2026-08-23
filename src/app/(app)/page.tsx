@@ -17,10 +17,10 @@ export const dynamic = 'force-dynamic';
 type Search = { [k: string]: string | string[] | undefined };
 
 const KPIS = [
-  { key: 'collection30',  label: '30 days collection',              help: 'Premium collected from clients in the last 30 days.' },
-  { key: 'cases30',       label: '30 day created case',             help: 'Policies and quotations created in the last 30 days.' },
-  { key: 'premiumYtd',    label: 'Total premium collected',         help: 'Premium collected from clients since 1 January.' },
-  { key: 'commissionYtd', label: 'Total commission received',       help: 'Commission actually paid out since 1 January.' },
+  { key: 'collection30',  label: 'Collected, last 30 days',         help: 'Premium collected from clients in the last 30 days.' },
+  { key: 'cases30',       label: 'New cases, last 30 days',         help: 'Policies and quotations created in the last 30 days.' },
+  { key: 'premiumYtd',    label: 'Premium collected',               help: 'Premium collected from clients since 1 January.' },
+  { key: 'commissionYtd', label: 'Commission paid out',             help: 'Commission actually paid out since 1 January.' },
 ] as const;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -65,13 +65,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-[25px] font-semibold leading-tight tracking-tight text-ink">
-            Executive strategic performance
+            Agency overview
           </h1>
           <p className="mt-1 text-[13.5px] text-ink-soft">
-            Agency performance, collections, and portfolio view — reporting layout.
+            What is owed, what was written, and what falls due next.
           </p>
           <p className="mt-1.5 text-[12.5px] text-muted">
-            Data as of {longDate(today())} · {org.name} · Performance year {year}
+            {org.name} · figures to {longDate(today())}
           </p>
         </div>
 
@@ -105,7 +105,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
 
-      <SectionLabel>Key indicators</SectionLabel>
+      <SectionLabel>This year at a glance</SectionLabel>
       <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {KPIS.map((k) => (
           <div key={k.key} className="rounded border border-line bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -123,7 +123,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ))}
       </div>
 
-      <SectionLabel>Operations</SectionLabel>
+      <SectionLabel>Today&rsquo;s work</SectionLabel>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1.3fr)]">
         <section className="panel flex min-h-[430px] flex-col">
           <div className="panel-head">
@@ -207,23 +207,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <div className="mt-7">
-        <SectionLabel>Production</SectionLabel>
+        <SectionLabel>What you wrote</SectionLabel>
         <Production rows={production} />
       </div>
 
       <div className="mt-7 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div>
-          <SectionLabel>Renewal watch</SectionLabel>
+          <SectionLabel>Falling due</SectionLabel>
           <RenewalWatch rows={renewalWatch} />
         </div>
         <div>
-          <SectionLabel>Calendar</SectionLabel>
+          <SectionLabel>This month</SectionLabel>
           <Calendar today={today()} marks={marks} />
         </div>
       </div>
 
       <div className="mt-7">
-        <SectionLabel>Motor compliance</SectionLabel>
+        <SectionLabel>Road tax and inspection</SectionLabel>
         <MotorCompliance rows={compliance} />
       </div>
     </div>

@@ -88,13 +88,12 @@ export const IconFire = (p: P) => (
   <S {...p}><path d="M12 2.5s5.5 4.4 5.5 9.4a5.5 5.5 0 0 1-11 0c0-2 1-3.6 1.9-4.6.3 1.4 1.2 2.3 2.1 2.3 1.3 0 2-1.4 1.5-7.1Z" /></S>
 );
 
+// Split shield: the two halves are the two payment records every policy
+// carries — what the client owes the agency, what the agency owes the
+// principal. Brand red and its tint, so it holds on light and dark alike.
 export const Logo = ({ className }: P) => (
-  <svg viewBox="0 0 24 24" className={className ?? 'h-7 w-7'} aria-hidden="true">
-    <circle cx="12" cy="12" r="2.1" fill="#2b9fd4" />
-    <g fill="none" stroke="#2b9fd4" strokeWidth="1.15">
-      <ellipse cx="12" cy="12" rx="10" ry="4.2" />
-      <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)" />
-      <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)" />
-    </g>
+  <svg viewBox="0 0 48 48" className={className ?? 'h-7 w-7'} aria-hidden="true">
+    <path d="M23.1 4.2 6 9.4V24c0 9.5 7.1 16.5 17.1 20Z" fill="#d0342c" />
+    <path d="M24.9 4.2 42 9.4V24c0 9.5-7.1 16.5-17.1 20Z" fill="#f0837b" />
   </svg>
 );

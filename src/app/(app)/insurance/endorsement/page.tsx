@@ -25,7 +25,7 @@ export default async function EmployeeBenefitsPage() {
     <div className="space-y-4">
       <div className="panel px-6 py-6">
         <PageHeader
-          title="Employee Benefits"
+          title="Employee benefits"
           subtitle="Group medical and personal accident schemes written for corporate clients."
           meta={`${lives} schemes · ${money(premium)} premium · ${groups.length} group accounts`}
           actions={<Link href="/insurance/non-motor/upload" className="btn btn-primary">Upload PDF</Link>}

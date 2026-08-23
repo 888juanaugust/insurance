@@ -12,7 +12,7 @@ export default function LoginPage() {
       <div className="w-full max-w-[400px]">
         <div className="mb-6 flex items-center justify-center gap-2">
           <Logo className="h-9 w-9" />
-          <span className="text-[26px] font-semibold tracking-tight text-ink">Insurance Helper</span>
+          <span className="text-[26px] font-semibold tracking-tight text-ink">Insurhelp</span>
         </div>
 
         <div className="panel px-7 py-8 shadow-sm">
@@ -71,7 +71,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-[12px] text-muted">
-          © 2026 Simplicity Consulting Sdn Bhd
+          © 2026 Insurhelp
         </p>
       </div>
     </main>

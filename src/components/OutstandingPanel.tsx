@@ -39,15 +39,15 @@ export default function OutstandingPanel({
     <section className="panel flex min-h-[430px] flex-col">
       <div className="panel-head">
         <IconCash className="h-[17px] w-[17px] text-[#3d7d4f]" />
-        Client Outstanding Payment
+        Money outstanding
         <Help text="Premium not yet collected from clients, and premium not yet remitted to principals." />
       </div>
 
       <div className="flex gap-5 border-b border-line px-4">
         {(
           [
-            ['client', `Client Outstanding Premium (${clientRows.length})`, 'Premium the agency has not yet collected from the insured.'],
-            ['principal', `Outstanding to Principal (${principalRows.length})`, 'Premium collected or due that the agency has not yet remitted to the insurer.'],
+            ['client', `From clients (${clientRows.length})`, 'Premium the agency has not yet collected from the insured.'],
+            ['principal', `To insurers (${principalRows.length})`, 'Premium collected or due that the agency has not yet remitted to the insurer.'],
           ] as const
         ).map(([key, label, help]) => (
           <button

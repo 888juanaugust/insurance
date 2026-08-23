@@ -27,7 +27,7 @@ const CLAUSES: [string, string][] = [
   ],
   [
     'Enquiries',
-    'Questions about how data is handled in this system can be directed to Simplicity Consulting Sdn. Bhd. using the details under Contact Us.',
+    'Questions about how data is handled in this system can be directed to your agency, or to us at the address under Support.',
   ],
 ];
 
@@ -39,8 +39,8 @@ export default async function PrivacyPage() {
     <div className="panel px-6 py-6">
       <PageHeader
         title="Privacy Notice"
-        subtitle="How personal data recorded in Insurance Helper is handled."
-        meta="Copyright © 2020–2026 Simplicity Consulting Sdn. Bhd. All rights reserved."
+        subtitle="How personal data recorded in Insurhelp is handled."
+        meta="Written against the Personal Data Protection Act 2010 — have it reviewed before launch."
       />
       <div className="max-w-[820px] space-y-5">
         {CLAUSES.map(([title, body]) => (

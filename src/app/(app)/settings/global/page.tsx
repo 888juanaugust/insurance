@@ -28,7 +28,7 @@ export default async function GlobalSettingPage() {
       <div className="panel px-6 py-6">
         <Crumb items={[{ href: '/setting', label: 'Setting' }, { label: 'Global' }]} />
         <PageHeader
-          title="Global"
+          title="Rates and insurers"
           subtitle="Commission rates, company e-Invoice particulars and insurance company records."
         />
       </div>

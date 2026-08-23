@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Insurance Helper',
-  description: 'Insurance Helper — agency management for motor and non-motor portfolios.',
+  title: 'Insurhelp',
+  description: 'Insurhelp — policy, collection and commission management for insurance agencies.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

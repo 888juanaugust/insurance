@@ -1,17 +1,43 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-ink: #1f2733;
-  --color-ink-soft: #4a5567;
-  --color-muted: #7b8698;
-  --color-line: #e2e6ec;
-  --color-canvas: #eef0f4;
-  --color-brand: #d0342c;
-  --color-brand-dark: #a82820;
-  --color-link: #1d6fd0;
-  --color-accent: #2b7fd4;
+  /* Brand — taken from the shield: the deep half and its tint. */
+  --color-brand:      #d0342c;
+  --color-brand-dark: #a8271f;
+  --color-brand-tint: #f0837b;
+  --color-brand-wash: #fdeeed;
 
-  --font-sans: 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  /* Navigation sits on a deep neutral so the red reads as an accent
+     rather than a wall of colour. */
+  --color-nav:      #1b1f26;
+  --color-nav-soft: #2a2f38;
+  --color-nav-text: #b9c0cb;
+
+  /* Cool neutrals against the warm brand — a deliberate pairing rather
+     than the obvious warm-on-warm. */
+  --color-ink:      #171a1f;
+  --color-ink-soft: #414852;
+  --color-muted:    #6b7480;
+  --color-faint:    #98a1ac;
+  --color-line:     #e3e6eb;
+  --color-canvas:   #f5f6f8;
+  --color-sunken:   #eef0f3;
+
+  /* Semantic. Destructive is a deeper oxblood so it never reads as the
+     brand, which is the same family. */
+  --color-ok:      #17724f;
+  --color-ok-wash: #e6f2ec;
+  --color-warn:      #8a5a0b;
+  --color-warn-wash: #fbf1de;
+  --color-danger:      #8f1d16;
+  --color-danger-wash: #fbe9e7;
+  --color-info:      #1d5fae;
+  --color-info-wash: #e9f1fb;
+
+  --color-accent: #d0342c;
+  --color-link:   #1d5fae;
+
+  --font-sans: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif;
 }
 
 html,
@@ -110,8 +136,8 @@ body {
 
   .inp:focus {
     outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px rgb(43 127 212 / 0.12);
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgb(208 52 44 / 0.13);
   }
 
   .btn {
@@ -127,12 +153,12 @@ body {
   }
 
   .btn-primary {
-    background: var(--color-accent);
+    background: var(--color-brand);
     color: #fff;
   }
 
   .btn-primary:hover {
-    background: #2470bd;
+    background: var(--color-brand-dark);
   }
 
   .btn-ghost {
@@ -158,15 +184,26 @@ body {
     white-space: nowrap;
   }
 
-  .badge-red    { background: #fdeceb; color: #b32b21; }
-  .badge-amber  { background: #fdf3e2; color: #98650c; }
-  .badge-green  { background: #e9f6ed; color: #226e3c; }
-  .badge-blue   { background: #e9f1fb; color: #1c5fae; }
-  .badge-grey   { background: #f0f2f5; color: #5a6474; }
+  .badge-red    { background: var(--color-danger-wash); color: var(--color-danger); }
+  .badge-amber  { background: var(--color-warn-wash);   color: var(--color-warn); }
+  .badge-green  { background: var(--color-ok-wash);     color: var(--color-ok); }
+  .badge-blue   { background: var(--color-info-wash);   color: var(--color-info); }
+  .badge-grey   { background: var(--color-sunken);      color: var(--color-muted); }
 
   .link-red {
     color: var(--color-brand);
     font-weight: 600;
+  }
+
+  /* Keyboard focus has to be visible on every control, including the
+     dark navigation bar. */
+  a:focus-visible,
+  button:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-brand-tint);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
   .link-red:hover {

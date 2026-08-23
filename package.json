@@ -1,15 +1,15 @@
 {
-  "name": "insurance-helper",
+  "name": "insurhelp",
   "version": "1.0.0",
   "private": true,
-  "description": "Insurance Helper — insurance agency management for motor and non-motor portfolios",
+  "description": "Insurhelp — policy, collection and commission management for insurance agencies",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:reset": "rm -f data/insurance-helper.db data/insurance-helper.db-wal data/insurance-helper.db-shm"
+    "db:reset": "rm -f data/insurhelp.db data/insurhelp.db-wal data/insurhelp.db-shm"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

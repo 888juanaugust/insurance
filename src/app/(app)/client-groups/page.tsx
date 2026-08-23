@@ -19,7 +19,7 @@ export default async function GroupingClientPage() {
     <div className="space-y-4">
       <div className="panel px-6 py-6">
         <PageHeader
-          title="Grouping Client"
+          title="Client groups"
           subtitle="Roll several insured parties into a single account so fleets and group schemes are handled together."
           meta={`${groups.length} groups · ${members.length - ungrouped.length} grouped clients · ${ungrouped.length} ungrouped`}
         />
