@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { currentUser } from './session';
 import { extractPolicy, type ExtractionResult, type FieldKey } from './extract';
 import {
-  createPolicy, updatePolicy, deletePolicy, bulkMarkPaid, recordUpload,
+  createPolicy, updatePolicy, deletePolicy, policyDeleteBlock, bulkMarkPaid, recordUpload,
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
   listPrincipals, type PolicyInput,
 } from './queries';
@@ -268,9 +268,20 @@ export async function deletePolicyAction(fd: FormData) {
   if (!user) redirect('/login');
   const id = String(fd.get('id') ?? '');
   const cls = String(fd.get('cls') ?? 'motor');
-  if (id) deletePolicy(id, user.org_id);
+  if (!id) redirect(`/insurance/${cls}`);
+
+  // The page hides the button when the policy cannot go, but the page it was
+  // rendered from may be minutes old — a collection recorded in between has to
+  // stop the delete, not be discovered afterwards.
+  const blocked = policyDeleteBlock(id, user.org_id);
+  if (blocked) {
+    redirect(`/insurance/${cls}/${id}?blocked=${encodeURIComponent(blocked)}`);
+  }
+
+  deletePolicy(id, user.org_id);
   revalidatePath(`/insurance/${cls}`);
-  redirect(`/insurance/${cls}`);
+  revalidatePath('/');
+  redirect(`/insurance/${cls}?deleted=1`);
 }
 
 export async function bulkPaidAction(fd: FormData) {

@@ -63,6 +63,11 @@ export default async function RegisterPage({
 
   return (
     <div className="panel px-6 py-6">
+      {str('deleted') && (
+        <p role="status" className="mb-5 rounded border border-line bg-ok-wash px-4 py-3 text-[13px] text-ok">
+          Policy deleted, along with its payment and commission records.
+        </p>
+      )}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[20px] font-semibold tracking-tight text-ink">{TITLES[slug]}</h1>
         <div className="flex flex-wrap items-center gap-2.5">

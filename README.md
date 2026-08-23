@@ -42,7 +42,7 @@ invented.
 | --- | --- | --- |
 | Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
 | Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
-| Organisation | `/organisation` | Company particulars, subscription terms and quota usage. |
+| Organisation | `/organisation` | Editable company particulars, invoice letterhead and collection account, plus subscription terms and quota usage. Each panel saves on its own, so a shared field edited in either place lands in the same column. |
 | Clients | `/clients`, `/clients/new`, `/clients/[id]`, `/clients/[id]/edit` | Add, edit and delete clients — individual or company. NRIC fills the date of birth, duplicate identification is refused, and a client carrying policies cannot be deleted. |
 | Grouping Client | `/client-groups` | Group accounts and their members. |
 | Client Planning | `/client-planning` | Life and medical plans held alongside the general book. |
@@ -50,10 +50,10 @@ invented.
 | Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. See below. |
 | Create / edit policy | `/insurance/[cls]/new`, `/insurance/[cls]/[id]/edit` | Key a policy in or correct one. |
 | Quotations, Reconcile, Renewals, Employee Benefits | `/insurance/…` | Open quotations, receivable-vs-payable position, expiring cover, group schemes. |
-| Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page. |
+| Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page, and a policy nothing has been paid on can be deleted — see below. |
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
 | Accounting | `/accounting` | Approve commission and mark it paid. |
-| Setting | `/settings` | Per-user e-Invoice billing identity and password change, as on the live app. Organisation-wide settings (commission rates, insurance companies, renewal reminders, scheduled broadcasts) sit under `/settings/global`, `/settings/renewal` and `/settings/notifications`. |
+| Setting | `/settings` | Per-user e-Invoice billing identity and password change. Organisation-wide settings sit under `/settings/global` (editable commission rates per insurer and class, the letterhead, the insurer list), `/settings/renewal` and `/settings/notifications`. |
 | Quotations | `/insurance/quotations` | Quote pipeline: drafts, sent, accepted, rejected, converted. |
 | Renewals | `/insurance/renewals` | Inbox, expiring and history, with create-quotation / process / reject. |
 | Documents | `/documents/loc/[id]`, `/documents/receipt/[id]` | Letter of collection and receipt, laid out for printing to PDF. |
@@ -91,6 +91,30 @@ more blanks to fill in. Configure the model pass with:
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
 export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
 ```
+
+## Deleting a policy
+
+A policy is the record that a payment relates to something. Once the client has paid, the
+principal has been remitted, or commission has moved past `pending`, deleting it would leave
+a payment pointing at nothing — so those policies refuse deletion and name the reason, and
+the schedule is cancelled through the edit form instead. The status says what happened and
+the money keeps its paper trail.
+
+Where deletion is allowed, it takes the payments, commission, vehicle or risk detail,
+extensions, documents and renewal requests with it, and detaches any quotation that
+converted into it. The schema declares those cascades, but they only fire while
+`PRAGMA foreign_keys` is on, and an orphaned commission row keeps counting towards its
+agent's total on `/team` — so the children go explicitly rather than on trust. The check
+runs again inside the action, because the page offering the button may be minutes old.
+
+## Commission rates
+
+`/settings/global` edits the rate the agency earns per insurer and class. The insurer's own
+rate is the ceiling: above it the register would book commission that never arrives, so the
+save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% would book
+commission the insurer never pays.* Changing a rate sets the default for the **next** policy
+created; policies already written keep the rate they were written at, and the confirmation
+says so rather than leaving it to be discovered.
 
 ## How the money adds up
 
@@ -173,6 +197,15 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
   server component — only from a client component, where React encodes the submitter itself.
   Forms in server components therefore pass the operation as a hidden input, one form per
   action. Getting this wrong fails silently: the POST returns 200 and nothing happens.
+- An input that leaves the DOM posts nothing. The commission rate filter hides rows with CSS
+  rather than unmounting them, because the action reads every rate on file and a filtered
+  save would otherwise arrive looking like every hidden rate had been cleared.
+- The organisation panels share columns, so each input's `id` carries its panel. Two elements
+  with one `id` is invalid, and every `label for` on the page then points at whichever came
+  first — clicking a label focuses the wrong field.
+- Validators have to accept what real documents carry. A company registered before 2019
+  prints both SSM numbers together — `201901004455 (1315678-V)` — and a dash in the SST field
+  means "not registered", not a value to check.
 - `IH_SECRET` signs the session cookie. The server refuses to start in production
   without it — see `src/instrumentation.ts`.
 - Sign-in allows 8 failures per 15 minutes, per address and per email. The counter is

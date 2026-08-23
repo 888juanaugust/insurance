@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/session';
 import { getOrg, orgUsage } from '@/lib/queries';
 import { money, longDate } from '@/lib/format';
 import { PageHeader, Help } from '@/components/ui';
+import { OrgProfilePanel, OrgInvoicePanel, OrgBankPanel } from '@/components/OrgForms';
 import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -37,76 +38,13 @@ export default async function OrganisationPage() {
           subtitle="Company particulars, invoice letterhead and collection account."
           meta={`${org.name} · code ${org.code} · live since ${longDate(org.kick_start_date)}`}
         />
-        <dl className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <Field label="Company name" value={org.name} />
-          <Field label="SSM business registration no" value={org.ssm_no} />
-          <Field label="TIN number" value={org.tin_no} />
-          <Field label="SST number" value={org.sst_no} />
-          <Field label="MSIC code" value={org.msic_code} />
-          <Field label="Business activity" value={org.business_desc} />
-          <Field label="Contact person" value={org.contact_person} />
-          <Field label="Contact number" value={org.phone} />
-          <Field label="Email address" value={org.email} />
-          <Field
-            label="Address"
-            value={
-              <>
-                {org.address1}
-                <br />
-                {org.address2}
-                <br />
-                {org.postcode} {org.city}
-                <br />
-                {org.state}, {org.country}
-              </>
-            }
-          />
-          <Field label="Kick start date" value={longDate(org.kick_start_date)} />
-        </dl>
       </div>
 
+      <OrgProfilePanel org={org} />
+
       <div className="grid gap-4 xl:grid-cols-2">
-        <div className="panel">
-          <div className="panel-head">
-            Invoice company info
-            <Help text="Printed as the letterhead on letters of collection, receipts and e-Invoices." />
-          </div>
-          <dl className="grid gap-5 px-6 py-5 sm:grid-cols-2">
-            <Field label="Company name" value={org.name} />
-            <Field label="Former name" value={org.former_name} />
-            <Field label="Logo URL" value={org.logo_url} />
-            <Field label="Website" value={org.website} />
-            <Field label="Phone" value={org.phone} />
-            <Field label="Phone 2" value={org.phone2} />
-            <Field label="Email" value={org.email} />
-            <Field label="Email 2" value={org.email2} />
-            <Field label="BRN" value={org.ssm_no} />
-            <Field label="SST" value={org.sst_no} />
-          </dl>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            Bank account
-            <Help text="Where clients remit premium, shown on the letter of collection." />
-          </div>
-          <dl className="grid gap-5 px-6 py-5 sm:grid-cols-2">
-            <Field label="Bank name" value={org.bank_name} />
-            <Field label="Account name" value={org.bank_account_name} />
-            <Field label="Account number" value={org.bank_account_number} />
-            <Field label="Remark 1" value={org.remark1} />
-            <Field label="Remark 2" value={org.remark2} />
-          </dl>
-
-          <div className="border-t border-line px-6 py-5">
-            <p className="sec-label mb-3">Document numbering</p>
-            <dl className="grid gap-5 sm:grid-cols-2">
-              <Field label="Letter of collection prefix" value={org.loc_prefix} />
-              <Field label="POS prefix" value={org.pos_prefix} />
-              <Field label="Invoice template" value={org.invoice_template} />
-            </dl>
-          </div>
-        </div>
+        <OrgInvoicePanel org={org} />
+        <OrgBankPanel org={org} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

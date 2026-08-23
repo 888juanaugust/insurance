@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { getPolicy } from '@/lib/queries';
+import { getPolicy, policyDeleteBlock } from '@/lib/queries';
 import { money, longDate, num, classLabel } from '@/lib/format';
 import { Crumb, StatusBadge, Help } from '@/components/ui';
 import { recordPaymentAction } from '@/lib/actions';
+import { deletePolicyAction } from '@/lib/policy-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,19 +46,23 @@ function Line({
 
 export default async function PolicyDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ cls: string; id: string }>;
+  searchParams: Promise<{ blocked?: string }>;
 }) {
   const user = await currentUser();
   if (!user) redirect('/login');
 
   const { cls: slug, id } = await params;
+  const { blocked: blockedParam } = await searchParams;
   const data = getPolicy(id);
   if (!data || data.policy.org_id !== user.org_id) notFound();
 
   const { policy, motor, nonMotor, extensions, payments, commission, client, principalRow } = data;
   const clientPay = payments.find((p) => p.kind === 'client');
   const principalPay = payments.find((p) => p.kind === 'principal');
+  const deleteBlock = policyDeleteBlock(id, user.org_id);
 
   return (
     <div className="space-y-4">
@@ -79,11 +84,32 @@ export default async function PolicyDetailPage({
               {policy.case_type === 'renewal' ? 'Renewal' : 'New business'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={policy.status} />
             <span className="badge badge-blue">{principalRow.short_name}</span>
+            <Link href={`/insurance/${slug}/${policy.id}/edit`} className="btn btn-ghost">Edit</Link>
+            {deleteBlock ? (
+              <span
+                className="max-w-xs text-[12px] text-muted"
+                title={deleteBlock}
+              >
+                Cannot be deleted — {deleteBlock}
+              </span>
+            ) : (
+              <form action={deletePolicyAction}>
+                <input type="hidden" name="id" value={policy.id} />
+                <input type="hidden" name="cls" value={slug} />
+                <button type="submit" className="btn btn-ghost text-danger">Delete</button>
+              </form>
+            )}
           </div>
         </div>
+
+        {blockedParam && (
+          <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+            {blockedParam}
+          </p>
+        )}
 
         <dl className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <Field

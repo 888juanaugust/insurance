@@ -654,10 +654,64 @@ export function updatePolicy(id: string, orgId: string, input: PolicyInput) {
   return true;
 }
 
-export function deletePolicy(id: string, orgId: string): boolean {
+/**
+ * Why a policy cannot be deleted, or null when it can be.
+ *
+ * Once a client has paid, or the agency has remitted, or commission has moved
+ * past pending, the policy is the record of that money. Deleting it destroys
+ * the only proof the payment relates to anything, so those policies are
+ * cancelled instead — the schedule stays, the status says what happened.
+ */
+export function policyDeleteBlock(id: string, orgId: string): string | null {
   const db = getDb();
-  const info = db.prepare('DELETE FROM policy WHERE id = ? AND org_id = ?').run(id, orgId);
-  return info.changes > 0;
+  const policy = db
+    .prepare('SELECT id FROM policy WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as { id: string } | undefined;
+  if (!policy) return 'That policy is not on file.';
+
+  const paid = db
+    .prepare("SELECT kind, paid_amount FROM payment WHERE policy_id = ? AND paid_amount > 0")
+    .all(id) as Array<{ kind: string; paid_amount: number }>;
+  if (paid.length) {
+    const legs = paid.map((p) => (p.kind === 'client' ? 'the client has paid' : 'the principal has been remitted'));
+    return `Money has moved on this policy — ${[...new Set(legs)].join(' and ')}. Cancel it instead, so the payment record keeps something to point at.`;
+  }
+
+  const commission = db
+    .prepare("SELECT status FROM commission WHERE policy_id = ? AND status != 'pending'")
+    .get(id) as { status: string } | undefined;
+  if (commission) {
+    return `Commission on this policy is already ${commission.status}. Cancel it instead of deleting it.`;
+  }
+
+  return null;
+}
+
+/**
+ * Removes the policy and everything hanging off it. The schema declares the
+ * cascades, but they only fire while `PRAGMA foreign_keys` is on, and an
+ * orphaned commission row still counts towards its agent's total on /team —
+ * so the children go explicitly rather than on trust.
+ */
+export function deletePolicy(id: string, orgId: string): boolean {
+  if (policyDeleteBlock(id, orgId)) return false;
+
+  const db = getDb();
+  let removed = false;
+  const tx = db.transaction(() => {
+    for (const table of [
+      'payment', 'commission', 'motor_detail', 'non_motor_detail',
+      'policy_extension', 'policy_document', 'renewal_request',
+    ]) {
+      db.prepare(`DELETE FROM ${table} WHERE policy_id = ?`).run(id);
+    }
+    // A quotation outlives the policy it converted into — it keeps its own
+    // history, it just no longer points anywhere.
+    db.prepare('UPDATE quotation SET policy_id = NULL WHERE policy_id = ?').run(id);
+    removed = db.prepare('DELETE FROM policy WHERE id = ? AND org_id = ?').run(id, orgId).changes > 0;
+  });
+  tx();
+  return removed;
 }
 
 /** Mark every outstanding payment of a kind as settled, for the given policies. */
@@ -1356,4 +1410,87 @@ export function principalRateCeiling(cls: 'motor' | 'non_motor') {
     .prepare(`SELECT MIN(${column}) lo, MAX(${column}) hi FROM principal WHERE status = 'active'`)
     .get() as { lo: number | null; hi: number | null };
   return { lo: row.lo ?? 0, hi: row.hi ?? 0 };
+}
+
+/* ---------------------------------------------------- organisation edits */
+
+/**
+ * Which columns each panel on /organisation owns. The panels overlap — name,
+ * phone, email, SSM and SST show on more than one — so each save writes only
+ * its own list and a shared field edited in either place lands in the same
+ * column. Anything not on a list is never written, so a stray form field
+ * cannot reach the table.
+ */
+export const ORG_FIELDS = {
+  profile: [
+    'name', 'ssm_no', 'tin_no', 'sst_no', 'msic_code', 'business_desc',
+    'contact_person', 'email', 'phone', 'address1', 'address2', 'postcode',
+    'city', 'state', 'country',
+  ],
+  invoice: [
+    'name', 'former_name', 'logo_url', 'website', 'phone', 'phone2',
+    'email', 'email2', 'ssm_no', 'sst_no',
+  ],
+  bank: [
+    'bank_name', 'bank_account_name', 'bank_account_number', 'remark1',
+    'remark2', 'loc_prefix', 'pos_prefix', 'invoice_template',
+  ],
+} as const;
+
+export type OrgPanel = keyof typeof ORG_FIELDS;
+
+export function updateOrg(orgId: string, panel: OrgPanel, values: Record<string, string>): void {
+  const cols = ORG_FIELDS[panel].filter((c) => c in values);
+  if (!cols.length) return;
+  const set = cols.map((c) => `${c} = @${c}`).join(', ');
+  const params: Record<string, string> = { id: orgId };
+  for (const c of cols) params[c] = values[c];
+  getDb().prepare(`UPDATE organisation SET ${set} WHERE id = @id`).run(params);
+}
+
+/* ------------------------------------------------- commission rate edits */
+
+/**
+ * The rate the agency earns for one principal and class. The principal's own
+ * rate is the ceiling: the agency cannot be paid more than the insurer pays
+ * out, so a higher figure here would book commission that never arrives.
+ */
+export function listCommissionRatesWithCeiling(orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT cr.id, cr.class, cr.rate, cr.principal_id,
+              pr.short_name, pr.name, pr.status,
+              CASE cr.class WHEN 'motor' THEN pr.motor_rate ELSE pr.non_motor_rate END AS ceiling
+         FROM commission_rate cr
+         JOIN principal pr ON pr.id = cr.principal_id
+        WHERE cr.org_id = ? ORDER BY pr.short_name, cr.class DESC`,
+    )
+    .all(orgId) as Array<{
+      id: string; class: string; rate: number; principal_id: string;
+      short_name: string; name: string; status: string; ceiling: number;
+    }>;
+}
+
+export function updateCommissionRates(orgId: string, rates: Array<{ id: string; rate: number }>): number {
+  const db = getDb();
+  const stmt = db.prepare('UPDATE commission_rate SET rate = ? WHERE id = ? AND org_id = ?');
+  let changed = 0;
+  const tx = db.transaction(() => {
+    for (const r of rates) changed += stmt.run(r.rate, r.id, orgId).changes;
+  });
+  tx();
+  return changed;
+}
+
+/**
+ * Policies already written keep the rate they were written at — the rate
+ * table is the default applied when the next policy is created, not a
+ * retrospective correction. This counts what would be misread as re-rated so
+ * the screen can say so plainly.
+ */
+export function policiesAtRate(orgId: string, principalId: string, cls: string): number {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) n FROM policy WHERE org_id = ? AND principal_id = ? AND class = ?')
+    .get(orgId, principalId, cls) as { n: number };
+  return row.n;
 }
