@@ -54,6 +54,8 @@ invented.
 | Insurance | `/insurance/general-motor`, `/insurance/non-motor` | Policy registers, 25 columns: principal chips (20 insurers), 15 class-of-business tabs on non-motor, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |
 | Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. The file itself is kept — see below. |
 | Create / edit policy | `/insurance/[cls]/new`, `/insurance/[cls]/[id]/edit` | Key a policy in or correct one. |
+| Renewal notices | `/renewals/notices` | The outbox: what is going out to clients whose cover is running down, and what has already gone. |
+| Retention | `/reports/retention` | What was renewed, what lapsed, and what the lapses cost. |
 | Quotations, Reconcile, Renewals, Employee Benefits | `/insurance/…` | Open quotations, receivable-vs-payable position, expiring cover, group schemes. |
 | Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page, and a policy nothing has been paid on can be deleted — see below. |
 | Reports | `/reports/...` | Agent commission, monthly sales, company commission breakdown, outstanding premium ageing. |
@@ -167,6 +169,52 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Renewal notices
+
+Renewals are where an agency's revenue lives, and the app had a list without a
+way to act on it. `/renewals/notices` now builds the notices that are due and
+holds them until they are actually delivered.
+
+**Building never sends.** The two are separate steps so a run that queues the
+wrong thing can be cancelled before it reaches a client, and so the agency can
+read what is about to go out. Building twice adds nothing — each notice is keyed
+to its policy, reminder and expiry date.
+
+**Nothing is marked sent on a promise that was not kept.** With no provider
+configured a notice stays queued and says why, and the outbox becomes a worklist:
+open one, copy the text, send it from your own WhatsApp, mark it sent. That is
+what a small Malaysian agency does anyway, and it is the honest default — the
+alternative is a screen full of green ticks for messages nobody received.
+
+Configuring a provider turns the same queue automatic without changing anything
+above it. Set `IH_WHATSAPP_URL` (or `IH_EMAIL_URL`, `IH_SMS_URL`) and Insurhelp
+POSTs `{to, subject, text}` with `IH_*_TOKEN` as a bearer. A provider failure is
+recorded on the message with its reason; waiting for a provider that does not
+exist is not counted as a failed attempt.
+
+Templates are per reminder, with merge fields — `{client_name}`, `{vehicle_no}`,
+`{days_left}`, `{ncd_pct}` and the rest. **An unknown placeholder is rejected when
+the template is saved**, because a misspelled one reaches the client verbatim:
+"Dear {custmer_name}". A field that is empty on a particular policy degrades
+rather than leaving a hole — a non-motor policy reads "your Houseowner policy"
+where a car would read "WXY 4471", and the rendered text is tidied so a missing
+detail never shows up as a double space.
+
+The daily run is `POST /api/cron/renewal-notices`, guarded by `IH_CRON_SECRET`.
+Without the secret set it returns 503 rather than running unauthenticated.
+
+## Retention and lapses
+
+A policy now records which policy it renewed. Without that link a renewal and a
+lapse are indistinguishable afterwards, and the number an agency most needs —
+how much of the book walked — cannot be computed at all.
+
+`/reports/retention` shows the rate, the premium kept, the premium lost and the
+commission not earned, with the lapsed policies listed by name and telephone
+number. Renewing through the app sets the link automatically: the renewal form
+opens prefilled from last year's policy, with a header telling you to check the
+premium and the no-claim discount, because a claim may have reset it.
 
 ## The client portal
 

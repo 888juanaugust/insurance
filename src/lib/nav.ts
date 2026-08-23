@@ -51,7 +51,18 @@ export const NAV: NavSection[] = [
       { href: '/insurance/endorsement', label: 'Employee benefits', hint: 'Group schemes' },
     ],
   },
-  { key: 'renewals', href: '/insurance/renewals', label: 'Renewals', icon: 'renewals', count: 'renewals' },
+  {
+    key: 'renewals',
+    href: '/insurance/renewals',
+    label: 'Renewals',
+    icon: 'renewals',
+    count: 'renewals',
+    children: [
+      { href: '/insurance/renewals', label: 'Due and expiring', hint: 'What needs working', count: 'renewals' },
+      { href: '/renewals/notices', label: 'Notices', hint: 'What is going out to clients' },
+      { href: '/reports/retention', label: 'Retention', hint: 'What was kept, and what walked' },
+    ],
+  },
   {
     key: 'accounts',
     href: '/accounting',

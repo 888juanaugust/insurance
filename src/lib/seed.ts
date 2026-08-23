@@ -1,7 +1,9 @@
 import type { Database } from 'better-sqlite3';
+import { DEFAULT_TEMPLATES } from './messaging';
 import { calculateEndorsement } from './endorsements';
 import { hashPassword } from './auth';
 import { inferClassOfBusiness } from './classes';
+import { today } from './format';
 
 type Row = Record<string, string | number | null>;
 
@@ -636,10 +638,21 @@ const NOTIFICATIONS: Row[] = [
 ];
 
 const RENEWAL_SETTINGS: Row[] = [
-  { id: 'rs-01', org_id: 'org-exe', days_before: 60, channel: 'email',    template: 'Dear {client_name}, your {product} policy {policy_no} for {vehicle_no} expires on {expiry_date}. Reply to this email to renew.', enabled: 1 },
-  { id: 'rs-02', org_id: 'org-exe', days_before: 30, channel: 'whatsapp', template: 'Hi {client_name}, friendly reminder that policy {policy_no} expires on {expiry_date}. Shall we prepare the renewal quotation?', enabled: 1 },
-  { id: 'rs-03', org_id: 'org-exe', days_before: 7,  channel: 'whatsapp', template: 'Hi {client_name}, policy {policy_no} expires in 7 days. Driving without cover is an offence — let us renew today.', enabled: 1 },
-  { id: 'rs-04', org_id: 'org-bs',  days_before: 45, channel: 'email',    template: 'Dear {client_name}, your policy {policy_no} expires on {expiry_date}.', enabled: 1 },
+  { id: 'rs-01', org_id: 'org-exe', days_before: 60, channel: 'email',
+    name: DEFAULT_TEMPLATES[60].name, subject: DEFAULT_TEMPLATES[60].subject,
+    template: DEFAULT_TEMPLATES[60].body, enabled: 1 },
+  { id: 'rs-02', org_id: 'org-exe', days_before: 30, channel: 'whatsapp',
+    name: DEFAULT_TEMPLATES[30].name, subject: DEFAULT_TEMPLATES[30].subject,
+    template: DEFAULT_TEMPLATES[30].body, enabled: 1 },
+  { id: 'rs-05', org_id: 'org-exe', days_before: 14, channel: 'whatsapp',
+    name: DEFAULT_TEMPLATES[14].name, subject: DEFAULT_TEMPLATES[14].subject,
+    template: DEFAULT_TEMPLATES[14].body, enabled: 1 },
+  { id: 'rs-03', org_id: 'org-exe', days_before: 7,  channel: 'whatsapp',
+    name: DEFAULT_TEMPLATES[7].name, subject: DEFAULT_TEMPLATES[7].subject,
+    template: DEFAULT_TEMPLATES[7].body, enabled: 1 },
+  { id: 'rs-04', org_id: 'org-bs',  days_before: 45, channel: 'email',
+    name: 'Six weeks before expiry', subject: 'Renewal due on {expiry_date}',
+    template: 'Dear {client_name}, your policy {policy_no} expires on {expiry_date}.\n\n{agency_name}', enabled: 1 },
 ];
 
 const QUOTATIONS: Row[] = [
@@ -810,6 +823,25 @@ export function seed(db: Database) {
     });
   }
 
+  /*
+   * Two adjustments so the renewal machinery has something to show on a fresh
+   * database, both relative to `today()` rather than a fixed date — otherwise
+   * the demo stops demonstrating anything a month after it was written.
+   *
+   * One policy is moved to expire in exactly 30 days, which is when the second
+   * reminder fires; and the oldest expired one is marked as renewed by the
+   * newest, so the retention report has both a kept and a lapsed case.
+   */
+  const shift = (id: string, days: number) => {
+    const d = new Date(today());
+    d.setDate(d.getDate() + days);
+    const iso = d.toISOString().slice(0, 10);
+    const row = policyRows.find((r) => r.id === id);
+    if (row) row.expiry_date = iso;
+  };
+  shift('pol-v7226410', 30);
+  shift('pol-t6169235', 7);
+
   insertAll(db, 'policy', policyRows);
   insertAll(db, 'motor_detail', motorRows);
   insertAll(db, 'non_motor_detail', nonMotorRows);
@@ -819,6 +851,11 @@ export function seed(db: Database) {
   insertAll(db, 'life_plan', LIFE_PLANS);
   insertAll(db, 'notification', NOTIFICATIONS);
   insertAll(db, 'renewal_setting', RENEWAL_SETTINGS);
+
+  // A renewed pair, so the retention report shows both outcomes rather than
+  // an empty table until the agency has been running a year.
+  db.prepare('UPDATE policy SET renewed_from_policy_id = ? WHERE id = ?')
+    .run('pol-wqk100', 'pol-mdw9185');
   insertAll(db, 'quotation', QUOTATIONS);
   insertAll(db, 'renewal_request', RENEWAL_REQUESTS);
   insertAll(db, 'claim', CLAIMS);

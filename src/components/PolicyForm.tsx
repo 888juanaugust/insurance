@@ -128,7 +128,13 @@ export default function PolicyForm({
   documentId,
 }: PolicyFormProps) {
   const [state, action, pending] = useActionState(savePolicyAction, null as SaveState | null);
-  const [useExisting, setUseExisting] = useState(Boolean(matchedClientId));
+  /*
+   * A renewal arrives with the client already known, the same as an upload that
+   * matched one. Without this the form opens on "create a new client" with an
+   * empty required name, and the browser blocks the submit with no explanation
+   * — no server error, no navigation, nothing to read.
+   */
+  const [useExisting, setUseExisting] = useState(Boolean(matchedClientId || initial.client_id));
   const [allowDuplicate, setAllowDuplicate] = useState(false);
 
   /** Echoed submission wins, so a rejected save does not empty the form. */
@@ -155,6 +161,7 @@ export default function PolicyForm({
       <input type="hidden" name="class" value={cls} />
       {sourceFile && <input type="hidden" name="source_file" value={sourceFile} />}
       {documentId && <input type="hidden" name="document_id" value={documentId} />}
+      {v('renewed_from') && <input type="hidden" name="renewed_from" value={v('renewed_from')} />}
       {extraction?.principal && <input type="hidden" name="principal_detected" value={extraction.principal} />}
       {allowDuplicate && <input type="hidden" name="allow_duplicate" value="1" />}
 

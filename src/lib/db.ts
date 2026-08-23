@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS policy (
   agent_commission REAL NOT NULL DEFAULT 0,
   consultant_commission REAL NOT NULL DEFAULT 0,
   loc_no          TEXT,
+  renewed_from_policy_id TEXT REFERENCES policy(id) ON DELETE SET NULL,
   uploaded_at     TEXT,
   source_file     TEXT,
   remarks         TEXT
@@ -332,8 +333,37 @@ CREATE TABLE IF NOT EXISTS renewal_setting (
   days_before   INTEGER NOT NULL,
   channel       TEXT NOT NULL,
   template      TEXT,
-  enabled       INTEGER NOT NULL DEFAULT 1
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  name          TEXT,
+  subject       TEXT
 );
+
+CREATE TABLE IF NOT EXISTS message (
+  id            TEXT PRIMARY KEY,
+  org_id        TEXT NOT NULL REFERENCES organisation(id),
+  client_id     TEXT REFERENCES client(id) ON DELETE SET NULL,
+  policy_id     TEXT REFERENCES policy(id) ON DELETE SET NULL,
+  kind          TEXT NOT NULL,   -- renewal_notice | …
+  channel       TEXT NOT NULL,   -- whatsapp | email | sms
+  to_address    TEXT,
+  subject       TEXT,
+  body          TEXT NOT NULL,
+  status        TEXT NOT NULL,   -- queued | sent | failed | cancelled
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  error         TEXT,
+  /* How it went out. 'manual' means an agent copied it and sent it themselves,
+     which is what a small agency does before wiring up a provider. */
+  delivered_by  TEXT,
+  scheduled_for TEXT,
+  sent_at       TEXT,
+  created_at    TEXT NOT NULL,
+  /* One notice per policy per reminder cycle. The generator runs daily and
+     must not send the same thing twice. */
+  dedupe_key    TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_message_dedupe ON message(dedupe_key);
+CREATE INDEX IF NOT EXISTS idx_message_org ON message(org_id, status, scheduled_for);
 
 CREATE TABLE IF NOT EXISTS commission_rate (
   id           TEXT PRIMARY KEY,
@@ -503,6 +533,23 @@ function migrate(db: Database.Database) {
    * `client` is left alone: it is the role the (unbuilt) client portal will
    * use, and those accounts were never meant to reach the agency screens.
    */
+  const policyRenewCols = new Set(
+    (db.prepare('PRAGMA table_info(policy)').all() as { name: string }[]).map((c) => c.name),
+  );
+  // Which policy this one renewed. Without it there is no way to tell a policy
+  // that lapsed from one that was renewed elsewhere in the book, and no
+  // retention rate can be computed at all.
+  if (!policyRenewCols.has('renewed_from_policy_id')) {
+    db.exec('ALTER TABLE policy ADD COLUMN renewed_from_policy_id TEXT');
+  }
+
+  const settingCols = new Set(
+    (db.prepare('PRAGMA table_info(renewal_setting)').all() as { name: string }[]).map((c) => c.name),
+  );
+  for (const [name, decl] of [['name', 'TEXT'], ['subject', 'TEXT']] as [string, string][]) {
+    if (!settingCols.has(name)) db.exec(`ALTER TABLE renewal_setting ADD COLUMN ${name} ${decl}`);
+  }
+
   const clientColumns = new Set(
     (db.prepare('PRAGMA table_info(client)').all() as { name: string }[]).map((c) => c.name),
   );

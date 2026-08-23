@@ -78,6 +78,20 @@ complete backup on its own**: restore it without the documents directory and
 every policy shows an attachment that will not open. `deploy/backup.sh` takes
 both.
 
+### The daily renewal run
+
+Renewal notices are built and sent by a scheduled call. Add to the app user's
+crontab, after setting `IH_CRON_SECRET` in `.env.production`:
+
+```cron
+0 9 * * *  curl -fsS -X POST -H "authorization: Bearer $IH_CRON_SECRET" \
+             https://insurhelp.example.my/api/cron/renewal-notices >/dev/null
+```
+
+Without `IH_CRON_SECRET` the route returns 503 and does nothing — an endpoint
+that messages clients is not left open by default. `GET` on the same path says
+whether it is configured, without running.
+
 ### 4. Build and start
 
 ```bash

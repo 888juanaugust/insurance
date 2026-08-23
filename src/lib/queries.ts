@@ -2423,3 +2423,201 @@ export function portalRenewalState(policyId: string, clientId: string) {
     .get(policyId) as { id: string } | undefined;
   return { policy: owned, pending: Boolean(existing) };
 }
+
+/* ------------------------------------------------------ renewal notices */
+
+export type MessageRow = {
+  id: string; org_id: string; client_id: string | null; policy_id: string | null;
+  kind: string; channel: string; to_address: string | null; subject: string | null;
+  body: string; status: string; attempts: number; error: string | null;
+  delivered_by: string | null; scheduled_for: string | null; sent_at: string | null;
+  created_at: string; dedupe_key: string;
+};
+
+/**
+ * Policies expiring in exactly `daysBefore` days, that have not been renewed
+ * and are not already cancelled. Exact rather than "within" so each reminder
+ * fires once on its own day — a range would re-send every day thereafter.
+ */
+export function policiesDueForNotice(orgId: string, daysBefore: number) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.expiry_date, p.total_premium, p.ncd_pct, p.class, p.product,
+              c.id AS client_id, c.name AS client_name, c.phone, c.email,
+              pr.short_name AS principal, m.vehicle_no, m.make_model
+         FROM policy p
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.org_id = @org
+          AND p.status IN ('active', 'renewal')
+          AND p.expiry_date = date(@today, '+' || @days || ' days')
+          AND NOT EXISTS (SELECT 1 FROM policy r WHERE r.renewed_from_policy_id = p.id)
+        ORDER BY c.name`,
+    )
+    .all({ org: orgId, today: today(), days: daysBefore }) as Array<Record<string, any>>;
+}
+
+/** Insert unless the same notice is already queued or sent. */
+export function queueMessage(row: {
+  org_id: string; client_id: string | null; policy_id: string | null;
+  kind: string; channel: string; to_address: string | null; subject: string | null;
+  body: string; scheduled_for: string; dedupe_key: string;
+}): string | null {
+  const info = getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO message (id, org_id, client_id, policy_id, kind, channel, to_address,
+         subject, body, status, attempts, scheduled_for, created_at, dedupe_key)
+       VALUES (@id, @org_id, @client_id, @policy_id, @kind, @channel, @to_address,
+         @subject, @body, 'queued', 0, @scheduled_for, @created_at, @dedupe_key)`,
+    )
+    .run({ ...row, id: newId('msg'), created_at: today() });
+  return info.changes > 0 ? String(info.lastInsertRowid) : null;
+}
+
+export function listMessages(
+  orgId: string,
+  f: { status?: string; channel?: string; search?: string } = {},
+) {
+  const params = {
+    org: orgId,
+    status: f.status ?? '',
+    channel: f.channel ?? '',
+    search: f.search ?? '',
+    like: `%${(f.search ?? '').toLowerCase()}%`,
+  };
+  return getDb()
+    .prepare(
+      `SELECT m.*, c.name AS client_name, p.policy_no, mo.vehicle_no
+         FROM message m
+         LEFT JOIN client c ON c.id = m.client_id
+         LEFT JOIN policy p ON p.id = m.policy_id
+         LEFT JOIN motor_detail mo ON mo.policy_id = m.policy_id
+        WHERE m.org_id = @org
+          AND (@status  = '' OR m.status  = @status)
+          AND (@channel = '' OR m.channel = @channel)
+          AND (@search  = '' OR lower(COALESCE(c.name,'')) LIKE @like
+               OR lower(COALESCE(p.policy_no,'')) LIKE @like
+               OR lower(COALESCE(mo.vehicle_no,'')) LIKE @like)
+        ORDER BY m.status = 'queued' DESC, m.scheduled_for, m.created_at DESC, m.rowid DESC`,
+    )
+    .all(params) as Array<MessageRow & { client_name: string | null; policy_no: string | null; vehicle_no: string | null }>;
+}
+
+export function getMessage(id: string, orgId: string): MessageRow | undefined {
+  return getDb()
+    .prepare('SELECT * FROM message WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as MessageRow | undefined;
+}
+
+export function markMessage(
+  id: string, orgId: string,
+  outcome: { status: string; error?: string | null; deliveredBy?: string | null; countAttempt?: boolean },
+): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE message
+          SET status = @status,
+              error = @error,
+              delivered_by = COALESCE(@delivered_by, delivered_by),
+              attempts = attempts + @bump,
+              sent_at = CASE WHEN @status = 'sent' THEN @now ELSE sent_at END
+        WHERE id = @id AND org_id = @org`,
+    )
+    .run({
+      id, org: orgId,
+      status: outcome.status,
+      error: outcome.error ?? null,
+      delivered_by: outcome.deliveredBy ?? null,
+      bump: outcome.countAttempt === false ? 0 : 1,
+      now: today(),
+    }).changes > 0;
+}
+
+export function queuedMessages(orgId: string, limit = 200): MessageRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM message
+        WHERE org_id = ? AND status = 'queued' AND scheduled_for <= ?
+        ORDER BY scheduled_for, rowid LIMIT ?`,
+    )
+    .all(orgId, today(), limit) as MessageRow[];
+}
+
+export function messageCounts(orgId: string) {
+  const db = getDb();
+  const one = (sql: string) => (db.prepare(sql).get(orgId) as { v: number }).v;
+  return {
+    queued: one("SELECT COUNT(*) v FROM message WHERE org_id = ? AND status = 'queued'"),
+    sent: one("SELECT COUNT(*) v FROM message WHERE org_id = ? AND status = 'sent'"),
+    failed: one("SELECT COUNT(*) v FROM message WHERE org_id = ? AND status = 'failed'"),
+  };
+}
+
+/* ------------------------------------------------------------- retention */
+
+/**
+ * Whether each expired policy was renewed, and what the lapses cost.
+ *
+ * A policy counts as renewed when a later one points at it. Anything expired
+ * and unpointed-at is business that walked, which is the number an agency
+ * most needs and least often has.
+ */
+export function retention(orgId: string, from: string, to: string) {
+  const rows = getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.expiry_date, p.total_premium, p.commission_amt,
+              c.name AS client_name, c.id AS client_id, c.phone,
+              pr.short_name AS principal, m.vehicle_no,
+              r.id AS renewed_by_id, r.policy_no AS renewed_by_no, r.effective_date AS renewed_on
+         FROM policy p
+         JOIN client c     ON c.id = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+         LEFT JOIN policy r ON r.renewed_from_policy_id = p.id
+        WHERE p.org_id = ? AND p.status != 'quotation'
+          AND p.expiry_date >= ? AND p.expiry_date <= ?
+        ORDER BY p.expiry_date DESC`,
+    )
+    .all(orgId, from, to) as Array<Record<string, any>>;
+
+  const renewed = rows.filter((r) => r.renewed_by_id);
+  const lapsed = rows.filter((r) => !r.renewed_by_id);
+  return {
+    rows,
+    renewed,
+    lapsed,
+    rate: rows.length ? Math.round((renewed.length / rows.length) * 1000) / 10 : 0,
+    premiumKept: renewed.reduce((s, r) => s + Number(r.total_premium ?? 0), 0),
+    premiumLost: lapsed.reduce((s, r) => s + Number(r.total_premium ?? 0), 0),
+    commissionLost: lapsed.reduce((s, r) => s + Number(r.commission_amt ?? 0), 0),
+  };
+}
+
+export function listRenewalSettingsFull(orgId: string) {
+  return getDb()
+    .prepare('SELECT * FROM renewal_setting WHERE org_id = ? ORDER BY days_before DESC')
+    .all(orgId) as Array<{
+      id: string; org_id: string; days_before: number; channel: string;
+      template: string | null; enabled: number; name: string | null; subject: string | null;
+    }>;
+}
+
+export function updateRenewalSetting(
+  id: string, orgId: string,
+  input: { days_before: number; channel: string; name: string; subject: string; template: string; enabled: number },
+): boolean {
+  return getDb()
+    .prepare(
+      `UPDATE renewal_setting SET days_before=@days_before, channel=@channel, name=@name,
+              subject=@subject, template=@template, enabled=@enabled
+        WHERE id=@id AND org_id=@org`,
+    )
+    .run({ ...input, id, org: orgId }).changes > 0;
+}
+
+export function linkRenewal(newPolicyId: string, previousPolicyId: string, orgId: string): boolean {
+  return getDb()
+    .prepare('UPDATE policy SET renewed_from_policy_id = ? WHERE id = ? AND org_id = ?')
+    .run(previousPolicyId, newPolicyId, orgId).changes > 0;
+}

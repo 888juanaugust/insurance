@@ -10,7 +10,7 @@ import {
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
   listPrincipals, getPolicy, attachDocumentToPolicy, findDocumentByHash,
   policyStorageKeys, setDocumentStorageKey, abandonedUploads, deleteDocumentRows,
-  type PolicyInput,
+  linkRenewal, type PolicyInput,
 } from './queries';
 import {
   contentTypeFor, storageKeyFor, writeDocument, deleteDocument, sha256,
@@ -354,9 +354,17 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   const documentId = str(fd, 'document_id');
   const attached = documentId ? attachDocumentToPolicy(documentId, id, user.org_id) : false;
 
+  // What this renewed, if anything. The retention report reads this link, and
+  // it is the only thing distinguishing a renewal from a lapse afterwards.
+  const renewedFrom = str(fd, 'renewed_from');
+  if (renewedFrom) linkRenewal(id, renewedFrom, user.org_id);
+
   await audit(user, {
     action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,
-    summary: `Policy ${policyNo} created — ${money(input.total_premium)} total payable${attached ? ', with its source document attached' : ''}.`,
+    summary:
+      `Policy ${policyNo} created — ${money(input.total_premium)} total payable`
+      + (renewedFrom ? ', renewing an earlier policy' : '')
+      + (attached ? ', with its source document attached' : '') + '.',
   });
   revalidatePath('/insurance/general-motor');
   revalidatePath('/insurance/non-motor');
