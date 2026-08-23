@@ -8,8 +8,13 @@ import { extractPolicy, type ExtractionResult, type FieldKey } from './extract';
 import {
   createPolicy, updatePolicy, deletePolicy, policyDeleteBlock, bulkMarkPaid, recordUpload,
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
-  listPrincipals, getPolicy, type PolicyInput,
+  listPrincipals, getPolicy, attachDocumentToPolicy, findDocumentByHash,
+  policyStorageKeys, setDocumentStorageKey, abandonedUploads, deleteDocumentRows,
+  type PolicyInput,
 } from './queries';
+import {
+  contentTypeFor, storageKeyFor, writeDocument, deleteDocument, sha256,
+} from './files';
 import { classSlug, today, money } from './format';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -18,6 +23,10 @@ export type UploadState = {
   ok: boolean;
   error?: string;
   filename?: string;
+  /** The stored document, so saving the reviewed policy can attach it. */
+  documentId?: string;
+  /** The same file already on record — usually means the policy is too. */
+  sameFileAs?: { filename: string; uploaded_at: string; policy_no: string | null } | null;
   result?: ExtractionResult;
   duplicateOf?: { id: string; policy_no: string };
   matchedClient?: { id: string; name: string } | null;
@@ -28,6 +37,10 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
   const guard = await authorise({ action: 'policy.upload', entity: 'policy' });
   if (!guard.ok) return { ok: false, error: guard.message };
   const user = guard.user;
+
+  // Housekeeping, here because this is the only place documents arrive: a
+  // review that was read and then abandoned leaves a file nothing references.
+  await sweepAbandonedUploads(user);
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) {
@@ -42,9 +55,16 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
     return { ok: false, error: 'Only PDF policy documents can be read. Use Create Policy to key one in by hand.' };
   }
 
+  const type = contentTypeFor(file);
+  if (type !== 'application/pdf') {
+    return { ok: false, error: 'Only PDF policy documents can be read. Use Create Policy to key one in by hand.' };
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = sha256(bytes);
+
   let result: ExtractionResult;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
     result = await extractPolicy(bytes);
   } catch (error) {
     return {
@@ -68,8 +88,12 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
     typeof nric === 'string' ? nric : null,
   );
 
+  // Matching on the content hash catches the same schedule sent twice even
+  // when it has been renamed — which is how one policy becomes two rows.
+  const sameFile = findDocumentByHash(user.org_id, hash);
+
   const found = Object.values(result.fields).filter((f) => f.value !== null).length;
-  recordUpload({
+  const documentId = recordUpload({
     org_id: user.org_id,
     policy_id: null,
     filename: file.name,
@@ -81,15 +105,63 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
     warnings: JSON.stringify(result.warnings),
     extracted_json: JSON.stringify(result.fields),
     uploaded_by: user.id,
+    storage_key: null,
+    content_type: type,
+    sha256: hash,
+    kind: 'schedule',
+    note: null,
+  });
+
+  // The row is written first so the file is named after it; a file with no row
+  // is unreachable, while a row with no file degrades to a broken link the
+  // page can report.
+  const key = storageKeyFor(user.org_id, documentId, type);
+  try {
+    writeDocument(key, bytes);
+    setDocumentStorageKey(documentId, user.org_id, key);
+  } catch (error) {
+    console.error('storing the uploaded document failed', error);
+    // Reading it still worked, so the review goes ahead — losing the file copy
+    // must not cost the extraction the person is waiting for.
+  }
+
+  await audit(user, {
+    action: 'policy.upload', entity: 'policy_document', entityId: documentId, entityLabel: file.name,
+    summary: `${file.name} read — ${found} field${found === 1 ? '' : 's'} found across ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}${result.principal ? `, principal detected as ${result.principal}` : ''}.`,
   });
 
   return {
     ok: true,
     filename: file.name,
+    documentId,
     result,
     duplicateOf,
+    sameFileAs: sameFile
+      ? { filename: sameFile.filename, uploaded_at: sameFile.uploaded_at, policy_no: sameFile.policy_no }
+      : null,
     matchedClient: client ? { id: client.id, name: client.name } : null,
   };
+}
+
+/**
+ * Removes uploads that were read but never turned into a policy. Deleting
+ * somebody's document is worth a line in the trail even when nobody asked for
+ * it, so the sweep records what it took.
+ */
+async function sweepAbandonedUploads(user: { id: string; org_id: string; name: string; role: string }) {
+  try {
+    const stale = abandonedUploads(7);
+    if (!stale.length) return;
+    deleteDocumentRows(stale.map((d) => d.id));
+    for (const d of stale) deleteDocument(d.storage_key);
+    await audit(user, {
+      action: 'document.sweep', entity: 'policy_document',
+      summary: `${stale.length} upload${stale.length === 1 ? '' : 's'} read but never saved to a policy, older than 7 days, removed.`,
+    });
+  } catch (error) {
+    // Tidying up must never cost the upload the person is waiting on.
+    console.error('sweeping abandoned uploads failed', error);
+  }
 }
 
 /* ------------------------------------------------------------------ save */
@@ -250,6 +322,8 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   const input = buildInput(fd, user.org_id, clientId, principalId);
 
   if (editingId) {
+    const documentId = str(fd, 'document_id');
+    if (documentId) attachDocumentToPolicy(documentId, editingId, user.org_id);
     const previous = getPolicy(editingId)?.policy as Record<string, unknown> | undefined;
     const ok = updatePolicy(editingId, user.org_id, input);
     if (!ok) return { error: 'That policy could not be found.' , values: submitted(fd) };
@@ -273,9 +347,16 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
 
   const id = createPolicy(input, { uploadedAt: today() });
+
+  // The document was stored before the policy existed, so this is where the
+  // two are tied together. Without it the schedule the policy was read from
+  // is on disk but unreachable from the policy itself.
+  const documentId = str(fd, 'document_id');
+  const attached = documentId ? attachDocumentToPolicy(documentId, id, user.org_id) : false;
+
   await audit(user, {
     action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,
-    summary: `Policy ${policyNo} created — ${money(input.total_premium)} total payable.`,
+    summary: `Policy ${policyNo} created — ${money(input.total_premium)} total payable${attached ? ', with its source document attached' : ''}.`,
   });
   revalidatePath('/insurance/general-motor');
   revalidatePath('/insurance/non-motor');
@@ -304,10 +385,16 @@ export async function deletePolicyAction(fd: FormData) {
     redirect(`/insurance/${cls}/${id}?blocked=${encodeURIComponent(blocked)}`);
   }
 
+  // Collect the storage keys before the rows go, then remove the files after
+  // the database change succeeds — a file deleted first would be lost even if
+  // the delete then failed.
+  const keys = policyStorageKeys(id);
   deletePolicy(id, user.org_id);
+  for (const key of keys) deleteDocument(key);
+
   await audit(user, {
     action: 'policy.delete', entity: 'policy', entityId: id, entityLabel: existing?.policy_no ?? null,
-    summary: `Policy ${existing?.policy_no ?? id} deleted, with its payment and commission records.`,
+    summary: `Policy ${existing?.policy_no ?? id} deleted, with its payment and commission records${keys.length ? ` and ${keys.length} document${keys.length === 1 ? '' : 's'}` : ''}.`,
   });
   revalidatePath(`/insurance/${cls}`);
   revalidatePath('/');

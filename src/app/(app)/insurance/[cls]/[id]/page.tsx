@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { getPolicy, policyDeleteBlock } from '@/lib/queries';
+import { getPolicy, policyDeleteBlock, listPolicyDocuments } from '@/lib/queries';
 import { money, longDate, num, classLabel } from '@/lib/format';
 import { Crumb, StatusBadge, Help } from '@/components/ui';
 import { recordPaymentAction } from '@/lib/actions';
 import { deletePolicyAction } from '@/lib/policy-actions';
+import PolicyDocuments from '@/components/PolicyDocuments';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +64,7 @@ export default async function PolicyDetailPage({
   const clientPay = payments.find((p) => p.kind === 'client');
   const principalPay = payments.find((p) => p.kind === 'principal');
   const deleteBlock = policyDeleteBlock(id, user.org_id);
+  const documents = listPolicyDocuments(id, user.org_id);
 
   return (
     <div className="space-y-4">
@@ -316,6 +318,24 @@ export default async function PolicyDetailPage({
           )}
         </div>
       </div>
+
+      <PolicyDocuments
+        policyId={policy.id}
+        policyNo={policy.policy_no}
+        docs={documents.map((d) => ({
+          id: d.id,
+          filename: d.filename,
+          byte_size: d.byte_size,
+          content_type: d.content_type,
+          kind: d.kind,
+          note: d.note,
+          uploaded_at: d.uploaded_at,
+          uploaded_by_name: d.uploaded_by_name,
+          page_count: d.page_count,
+          used_claude: d.used_claude,
+        }))}
+        back={`/insurance/${slug}/${policy.id}`}
+      />
     </div>
   );
 }

@@ -147,6 +147,22 @@ type Matcher = {
 };
 
 /**
+ * The Bahasa half of a bilingual label, matched generically.
+ *
+ * Malaysian schedules label nearly every field twice — "Sum Insured / Jumlah
+ * Diinsuranskan" — and insurers word the Bahasa half differently for the same
+ * English term. The specific pairings below were read off real documents and
+ * stay first because they are known good; this covers the ones nobody has seen
+ * yet. Bounded and colon-free so it cannot swallow the value it precedes.
+ */
+const BM = String.raw`(?:\s*\/\s*[^:\n]{1,45})?`;
+
+/** An English label followed by whatever Bahasa wording an insurer chose. */
+function bilingual(english: string): RegExp {
+  return new RegExp(english + BM + String.raw`\s*:`, 'i');
+}
+
+/**
  * Bilingual label patterns. Malaysian motor schedules print English and Bahasa
  * Malaysia labels together, and insurers word them differently, so each field
  * carries several alternatives tried in order of reliability.
@@ -170,6 +186,9 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
     { label: /Name of Policyholder(?:\s*\/\s*Nama Pemegang Polisi)?/i, confidence: 0.9 },
     { label: /^\s*Name\s*(?:\/\s*Nama)?\s*:/i, confidence: 0.85 },
     { label: /Insured(?:\s*\/\s*Pemunya)?\s*:/i, confidence: 0.8 },
+    // Seen in the wild: "Insured / Nama Yang Diinsuranskan".
+    { label: bilingual(String.raw`(?:The\s+)?Insured(?:'?s)?(?:\s+Name)?`), confidence: 0.7 },
+    { label: bilingual(String.raw`Nama\s+(?:Yang\s+)?Diinsuranskan`), confidence: 0.7 },
   ],
   nric: [
     { scan: /\b(\d{6}-\d{2}-\d{4})\b/, confidence: 0.9 },
@@ -177,16 +196,23 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
   ],
   vehicle_no: [
     { label: /Vehicle Reg\.? No\.?|Registration No\.?(?:\s*\/\s*No\.?\s*Pendaftaran)?|No\.?\s*Pendaftaran/i, value: /[A-Z]{1,3}\s?\d{1,4}\s?[A-Z]{0,3}/i, confidence: 0.85 },
+    // Seen in the wild: "Vehicle No / No. Kenderaan".
+    { label: bilingual(String.raw`Vehicle\s*(?:Reg\.?)?\s*No\.?`), value: /[A-Z]{1,3}\s?\d{1,4}\s?[A-Z]{0,3}/i, confidence: 0.7 },
+    { label: bilingual(String.raw`No\.?\s*Kenderaan`), value: /[A-Z]{1,3}\s?\d{1,4}\s?[A-Z]{0,3}/i, confidence: 0.7 },
   ],
   make_model: [
     { label: /Make (?:&|and) (?:Type of Body|Model)(?:\s*\/\s*Buatan(?:\s*(?:&|dan)\s*Jenis Badan)?)?/i, confidence: 0.85 },
     { label: /Buatan (?:&|dan) Jenis Badan/i, confidence: 0.75 },
+    { label: bilingual(String.raw`Make\s*(?:&|and)\s*Model`), confidence: 0.7 },
+    { label: bilingual(String.raw`Model\s*Kenderaan`), confidence: 0.65 },
   ],
   engine_no: [
     { label: /Engine(?:\/Motor)? No\.?(?:\s*\/\s*No\.?\s*Enjin(?:\/Motor)?)?/i, value: /[A-Z0-9-]{5,}/i, confidence: 0.85 },
+    { label: bilingual(String.raw`Engine\s*No\.?`), value: /[A-Z0-9-]{5,}/i, confidence: 0.7 },
   ],
   chassis_no: [
     { label: /Chassis No\.?(?:\s*\/\s*No\.?\s*Casis)?/i, value: /[A-Z0-9-]{8,}/i, confidence: 0.85 },
+    { label: bilingual(String.raw`Chassis\s*No\.?`), value: /[A-Z0-9-]{8,}/i, confidence: 0.7 },
   ],
   engine_cc: [
     { scan: /\b(\d{2,5})(?:\.\d+)?\s*CC\b/i, confidence: 0.8 },
@@ -194,6 +220,7 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
   ],
   year_make: [
     { label: /Year of Manufacture(?:\s*\/\s*Tahun\s*(?:Diperbuat|Dibuat))?|Tahun Diperbuat|Tahun Dibuat/i, value: /(?:19|20)\d{2}/, confidence: 0.9 },
+    { label: bilingual(String.raw`Year\s*of\s*Manufacture`), value: /(?:19|20)\d{2}/, confidence: 0.75 },
   ],
   seating: [
     { label: /Seating Capacity(?:\s*Incl\.? Driver)?|Muatan Tempat Duduk|Carrying or Seating/i, value: /\d{1,2}\b/, sameLine: true, confidence: 0.8 },
@@ -206,6 +233,7 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
   ],
   sum_insured: [
     { label: /Sum Insured(?:\s*\/\s*Jumlah(?:\s*Diinsuranskan)?)?|Jumlah Diinsuranskan/i, value: new RegExp(MONEY), confidence: 0.85 },
+    { label: bilingual(String.raw`Sum\s*Insured`), value: new RegExp(MONEY), confidence: 0.7 },
   ],
   ncd_pct: [
     { scan: /(?:NCD|NCB|Diskaun Tanpa Tuntutan)[^\d%]{0,40}(\d{1,3}(?:\.\d{1,2})?)\s*%/i, confidence: 0.85 },
@@ -230,6 +258,8 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
     { label: /Total Payable(?:\s*\/\s*Jumlah Berbayar)?(?:\s*\(OTC\))?/i, value: new RegExp(MONEY), confidence: 0.9 },
     { label: /Total\s*Due(?:\s*\/\s*Jumlah Berbayar)?/i, value: new RegExp(MONEY), confidence: 0.85 },
     { label: /Premium Payable|AMOUNT PAYABLE|Jumlah Berbayar/i, value: new RegExp(MONEY), confidence: 0.8 },
+    { label: bilingual(String.raw`Total\s*(?:Amount\s*)?Payable`), value: new RegExp(MONEY), confidence: 0.75 },
+    { label: bilingual(String.raw`Jumlah\s*(?:Perlu\s*)?Dibayar`), value: new RegExp(MONEY), confidence: 0.75 },
   ],
   type_of_cover: [
     { label: /Type of Cover(?:\s*\/\s*Jenis Perlindungan)?|Jenis Perlindungan/i, value: /(?:COMPREHENSIVE(?: PLUS)?|THIRD PARTY(?:,? FIRE (?:AND|&) THEFT)?|ACT ONLY)/i, confidence: 0.85 },

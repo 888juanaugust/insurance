@@ -49,7 +49,7 @@ invented.
 | Grouping Client | `/client-groups` | Group accounts and their members. |
 | Client Planning | `/client-planning` | Life and medical plans held alongside the general book. |
 | Insurance | `/insurance/general-motor`, `/insurance/non-motor` | Policy registers, 25 columns: principal chips (20 insurers), 15 class-of-business tabs on non-motor, date-range / vehicle / insured / NRIC search, sortable columns, totals row, pagination, CSV export, and bulk client/principal settlement. |
-| Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. See below. |
+| Upload PDF | `/insurance/[cls]/upload` | Read a policy document of any layout and add it to the register. The file itself is kept — see below. |
 | Create / edit policy | `/insurance/[cls]/new`, `/insurance/[cls]/[id]/edit` | Key a policy in or correct one. |
 | Quotations, Reconcile, Renewals, Employee Benefits | `/insurance/…` | Open quotations, receivable-vs-payable position, expiring cover, group schemes. |
 | Policy schedule | `/insurance/[cls]/[id]` | Full schedule: parties, vehicle or risk particulars, premium computation, extensions, collection and remittance. Collection can be recorded from this page, and a policy nothing has been paid on can be deleted — see below. |
@@ -92,6 +92,7 @@ more blanks to fill in. Configure the model pass with:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
 export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
+export IH_FILES=/path/to/documents         # optional, defaults beside the database
 ```
 
 ## Roles
@@ -161,6 +162,41 @@ save is refused with the figure — *ALLIANZ pays 10% on motor. A rate of 15% wo
 commission the insurer never pays.* Changing a rate sets the default for the **next** policy
 created; policies already written keep the rate they were written at, and the confirmation
 says so rather than leaving it to be discovered.
+
+## Keeping the documents
+
+Reading a PDF used to discard it. The file is now kept, so the agency can produce
+the schedule the insurer issued without going back to ask for it. Uploading a
+policy stores the document and ties it to the policy the review creates;
+`/insurance/[cls]/[id]` lists what is on file and takes more — a cover note, a
+receipt, an endorsement, a photo of a signed proposal (PDF, JPEG or PNG).
+
+Files live on disk under `IH_FILES` (default `data/documents`), not in the
+database: a schedule runs to a megabyte or more, and hundreds of them would
+multiply the size of every backup copy for bytes that never take part in a query.
+The consequence is that **the database alone is not a complete backup** — restore
+it without the documents directory and every policy shows an attachment that will
+not open. `deploy/backup.sh` takes both.
+
+Details that matter more than they look:
+
+- **Files are named after the document id, never the upload's own name.** Two
+  agencies both sending `policy.pdf` must not collide, and a filename from a
+  browser is attacker-controlled — it can carry slashes and dots that would walk
+  out of the directory.
+- **The download route looks the row up with the signed-in organisation as part
+  of the query**, so an id belonging to another agency is simply not found.
+  Guessing an id gets a 404, not someone else's policy schedule.
+- **The same file uploaded twice is flagged**, matched on a SHA-256 of the
+  contents so a rename does not hide it. That is how one policy ends up on the
+  register as two.
+- **Uploads read but never saved are swept after a week.** A document is stored
+  the moment the PDF is read — the review has to be able to show it — and reviews
+  get abandoned. Without the sweep those files would sit there for good:
+  unbounded storage, and somebody's personal data kept with nothing pointing at
+  it. The sweep records what it took in the audit trail.
+- **Deleting a policy takes its documents with it**, files as well as rows, and
+  the files go only after the database change succeeds.
 
 ## How the money adds up
 
@@ -263,3 +299,11 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
 - A plain POST does not invoke a Next.js Server Action; it needs the `Next-Action` header. An
   HTTP probe that forges a form post therefore proves nothing about a server-side check,
   either way. Test the query layer instead.
+- **Every export of a `'use server'` module must be an async function.** Next.js turns anything
+  else into a server reference, so a constant exported from there arrives on the client as an
+  opaque stub and the first `.map` over it throws. Typecheck and `next build` both pass; it
+  fails only when the page renders. Shared constants live in a plain module —
+  `src/lib/document-kinds.ts` is one.
+- Playwright's `waitForURL` waits for the `load` event, which an App Router soft navigation
+  never fires. Poll `location` instead, and don't wait on page text that also exists on the
+  page you are leaving.

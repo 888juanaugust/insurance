@@ -176,7 +176,13 @@ CREATE TABLE IF NOT EXISTS policy_document (
   warnings      TEXT,
   extracted_json TEXT,
   uploaded_by   TEXT,
-  uploaded_at   TEXT NOT NULL
+  uploaded_at   TEXT NOT NULL,
+  -- The file itself lives on disk under this key; the row is the index into it.
+  storage_key   TEXT,
+  content_type  TEXT,
+  sha256        TEXT,
+  kind          TEXT,          -- schedule | cover_note | receipt | endorsement | correspondence | other
+  note          TEXT
 );
 
 CREATE TABLE IF NOT EXISTS motor_detail (
@@ -409,6 +415,16 @@ function migrate(db: Database.Database) {
    * `client` is left alone: it is the role the (unbuilt) client portal will
    * use, and those accounts were never meant to reach the agency screens.
    */
+  const docColumns = new Set(
+    (db.prepare('PRAGMA table_info(policy_document)').all() as { name: string }[]).map((c) => c.name),
+  );
+  for (const [name, decl] of [
+    ['storage_key', 'TEXT'], ['content_type', 'TEXT'], ['sha256', 'TEXT'],
+    ['kind', 'TEXT'], ['note', 'TEXT'],
+  ] as [string, string][]) {
+    if (!docColumns.has(name)) db.exec(`ALTER TABLE policy_document ADD COLUMN ${name} ${decl}`);
+  }
+
   const legacyRoles = ['master', 'manager', 'finance', 'agent', 'viewer'];
   const stale = db
     .prepare(

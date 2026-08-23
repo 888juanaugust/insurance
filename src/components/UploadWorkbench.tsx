@@ -154,7 +154,19 @@ function Review({
           <div>
             <h2 className="text-[16px] font-semibold text-ink">Check what was read</h2>
             <p className="mt-1 text-[13px] text-ink-soft">
-              {state.filename} · {result.pageCount} page{result.pageCount === 1 ? '' : 's'} ·{' '}
+              {state.documentId ? (
+                <a
+                  href={`/api/documents/${state.documentId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-brand hover:underline"
+                >
+                  {state.filename}
+                </a>
+              ) : (
+                state.filename
+              )}{' '}
+              · {result.pageCount} page{result.pageCount === 1 ? '' : 's'} ·{' '}
               <span className="font-semibold text-ink">{found} of {total}</span> fields found
               {result.principal && (
                 <> · principal detected as <span className="font-semibold text-brand">{result.principal}</span></>
@@ -181,6 +193,15 @@ function Review({
               Open the existing record
             </Link>
             , or tick the confirmation at the bottom to save this one as well.
+          </p>
+        )}
+
+        {state.sameFileAs && (
+          <p className="mt-4 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2.5 text-[13px] text-[#7a5a10]">
+            This exact file is already on record as <strong>{state.sameFileAs.filename}</strong>,
+            uploaded {state.sameFileAs.uploaded_at}
+            {state.sameFileAs.policy_no && <> against policy <strong>{state.sameFileAs.policy_no}</strong></>}.
+            Saving again would put the same policy on the register twice.
           </p>
         )}
 
@@ -212,6 +233,7 @@ function Review({
         matchedClientId={state.matchedClient?.id ?? null}
         isDuplicate={Boolean(state.duplicateOf)}
         sourceFile={state.filename}
+        documentId={state.documentId ?? null}
       />
     </div>
   );

@@ -19,6 +19,8 @@ export type PolicyFormProps = {
   matchedClientId?: string | null;
   isDuplicate?: boolean;
   sourceFile?: string;
+  /** The stored upload, so saving ties the file to the policy it produced. */
+  documentId?: string | null;
 };
 
 function chipFor(f: { value: unknown; confidence: number; source: string } | undefined) {
@@ -123,6 +125,7 @@ function PSection({ title, children }: { title: string; children: React.ReactNod
 
 export default function PolicyForm({
   mode, cls, clients, principals, agents, initial, extraction, matchedClientId, isDuplicate, sourceFile,
+  documentId,
 }: PolicyFormProps) {
   const [state, action, pending] = useActionState(savePolicyAction, null as SaveState | null);
   const [useExisting, setUseExisting] = useState(Boolean(matchedClientId));
@@ -151,6 +154,7 @@ export default function PolicyForm({
       {mode === 'edit' && <input type="hidden" name="policy_id" value={v('policy_id')} />}
       <input type="hidden" name="class" value={cls} />
       {sourceFile && <input type="hidden" name="source_file" value={sourceFile} />}
+      {documentId && <input type="hidden" name="document_id" value={documentId} />}
       {extraction?.principal && <input type="hidden" name="principal_detected" value={extraction.principal} />}
       {allowDuplicate && <input type="hidden" name="allow_duplicate" value="1" />}
 

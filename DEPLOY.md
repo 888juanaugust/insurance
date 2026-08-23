@@ -63,12 +63,20 @@ chown insurhelp:insurhelp .env.production
 `IH_SECRET` is not optional — the app throws on start-up in production without
 it rather than fall back to the development value, which is in this repository.
 
-Create the database directory:
+Create the data directories:
 
 ```bash
-mkdir -p /var/www/insurhelp/data
-chown insurhelp:insurhelp /var/www/insurhelp/data
+mkdir -p /var/www/insurhelp/data/documents
+chown -R insurhelp:insurhelp /var/www/insurhelp/data
 ```
+
+`data/documents` holds the policy PDFs the insurers issued. They are kept on
+disk rather than in the database — a schedule runs to a megabyte or more, and
+hundreds of them would multiply the size of every backup copy for bytes that
+never take part in a query. The consequence is that **the database is not a
+complete backup on its own**: restore it without the documents directory and
+every policy shows an attachment that will not open. `deploy/backup.sh` takes
+both.
 
 ### 4. Build and start
 

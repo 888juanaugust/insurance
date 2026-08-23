@@ -11,6 +11,9 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 
+# uploaded policy documents
+data/documents/
+
 .env
 .env.local
 .DS_Store

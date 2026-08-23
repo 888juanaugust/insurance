@@ -780,15 +780,95 @@ export function recordUpload(row: {
   org_id: string; policy_id: string | null; filename: string; byte_size: number;
   page_count: number; principal_detected: string | null; used_claude: number;
   field_count: number; warnings: string; extracted_json: string; uploaded_by: string;
-}) {
+  storage_key: string | null; content_type: string | null; sha256: string | null;
+  kind: string; note: string | null;
+}): string {
+  const id = newId('doc');
   getDb()
     .prepare(
       `INSERT INTO policy_document (id, org_id, policy_id, filename, byte_size, page_count,
-         principal_detected, used_claude, field_count, warnings, extracted_json, uploaded_by, uploaded_at)
+         principal_detected, used_claude, field_count, warnings, extracted_json, uploaded_by,
+         uploaded_at, storage_key, content_type, sha256, kind, note)
        VALUES (@id, @org_id, @policy_id, @filename, @byte_size, @page_count, @principal_detected,
-         @used_claude, @field_count, @warnings, @extracted_json, @uploaded_by, @uploaded_at)`,
+         @used_claude, @field_count, @warnings, @extracted_json, @uploaded_by, @uploaded_at,
+         @storage_key, @content_type, @sha256, @kind, @note)`,
     )
-    .run({ ...row, id: newId('doc'), uploaded_at: today() });
+    .run({ ...row, id, uploaded_at: today() });
+  return id;
+}
+
+export type DocumentRow = {
+  id: string; org_id: string; policy_id: string | null; filename: string;
+  byte_size: number; page_count: number; uploaded_by: string | null; uploaded_at: string;
+  storage_key: string | null; content_type: string | null; sha256: string | null;
+  kind: string | null; note: string | null; used_claude: number;
+};
+
+export function getDocument(id: string, orgId: string): DocumentRow | undefined {
+  return getDb()
+    .prepare('SELECT * FROM policy_document WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as DocumentRow | undefined;
+}
+
+/** The documents held against one policy, newest first. */
+export function listPolicyDocuments(policyId: string, orgId: string) {
+  return getDb()
+    .prepare(
+      `SELECT d.*, u.name AS uploaded_by_name FROM policy_document d
+         LEFT JOIN app_user u ON u.id = d.uploaded_by
+        WHERE d.policy_id = ? AND d.org_id = ? AND d.storage_key IS NOT NULL
+        ORDER BY d.uploaded_at DESC, d.rowid DESC`,
+    )
+    .all(policyId, orgId) as Array<DocumentRow & { uploaded_by_name: string | null }>;
+}
+
+/**
+ * A document read out of a PDF starts life with no policy — the policy does
+ * not exist until the review is confirmed — so saving the policy is what ties
+ * the two together.
+ */
+export function attachDocumentToPolicy(docId: string, policyId: string, orgId: string): boolean {
+  return getDb()
+    .prepare('UPDATE policy_document SET policy_id = ? WHERE id = ? AND org_id = ? AND policy_id IS NULL')
+    .run(policyId, docId, orgId).changes > 0;
+}
+
+/**
+ * The same file uploaded twice is a common and expensive mistake — it is how
+ * one policy ends up on the register as two. Matching on the content hash
+ * catches it even when the file has been renamed.
+ */
+export function findDocumentByHash(orgId: string, hash: string, excludeId = '') {
+  return getDb()
+    .prepare(
+      `SELECT d.id, d.filename, d.uploaded_at, d.policy_id, p.policy_no
+         FROM policy_document d
+         LEFT JOIN policy p ON p.id = d.policy_id
+        WHERE d.org_id = ? AND d.sha256 = ? AND d.id != ?
+        ORDER BY d.uploaded_at LIMIT 1`,
+    )
+    .get(orgId, hash, excludeId) as
+    | { id: string; filename: string; uploaded_at: string; policy_id: string | null; policy_no: string | null }
+    | undefined;
+}
+
+/** Storage keys for everything held against a policy, so the files can go with it. */
+export function policyStorageKeys(policyId: string): string[] {
+  return (
+    getDb()
+      .prepare('SELECT storage_key FROM policy_document WHERE policy_id = ? AND storage_key IS NOT NULL')
+      .all(policyId) as Array<{ storage_key: string }>
+  ).map((r) => r.storage_key);
+}
+
+export function deleteDocumentRow(id: string, orgId: string): DocumentRow | undefined {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT * FROM policy_document WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as DocumentRow | undefined;
+  if (!row) return undefined;
+  db.prepare('DELETE FROM policy_document WHERE id = ? AND org_id = ?').run(id, orgId);
+  return row;
 }
 
 export function listUploads(orgId: string, limit = 30) {
@@ -1607,4 +1687,33 @@ export function auditFacets(orgId: string) {
       )
       .all(orgId) as Array<{ entity: string; n: number }>,
   };
+}
+
+/**
+ * A document is stored the moment the PDF is read, before the policy it
+ * describes exists — the review has to be able to show it. Reviews get
+ * abandoned, and without this those files would sit on disk for good:
+ * unbounded storage, and somebody's personal data kept with nothing pointing
+ * at it. Anything still unattached after a week goes.
+ */
+export function abandonedUploads(days = 7): Array<{ id: string; storage_key: string }> {
+  const cutoff = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  return getDb()
+    .prepare(
+      `SELECT id, storage_key FROM policy_document
+        WHERE policy_id IS NULL AND storage_key IS NOT NULL AND uploaded_at < ?`,
+    )
+    .all(cutoff) as Array<{ id: string; storage_key: string }>;
+}
+
+export function deleteDocumentRows(ids: string[]): number {
+  if (!ids.length) return 0;
+  const marks = ids.map(() => '?').join(',');
+  return getDb().prepare(`DELETE FROM policy_document WHERE id IN (${marks})`).run(...ids).changes;
+}
+
+export function setDocumentStorageKey(id: string, orgId: string, key: string): void {
+  getDb()
+    .prepare('UPDATE policy_document SET storage_key = ? WHERE id = ? AND org_id = ?')
+    .run(key, id, orgId);
 }
