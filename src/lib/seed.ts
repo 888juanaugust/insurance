@@ -842,6 +842,13 @@ export function seed(db: Database) {
   };
   shift('pol-v7226410', 30);
   shift('pol-t6169235', 7);
+  /*
+   * And one that has already run out and was never renewed. Nobody goes
+   * through a register flipping statuses by hand, so it stays 'active' with a
+   * date in the past — which is exactly the case an agent needs shown, and
+   * exactly the one a list that only looks forward never shows them.
+   */
+  shift('pol-sr8812445', -12);
 
   insertAll(db, 'policy', policyRows);
   insertAll(db, 'motor_detail', motorRows);

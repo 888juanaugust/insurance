@@ -103,68 +103,6 @@ export function Production({ rows }: { rows: Array<Record<string, any>> }) {
 
 /* ---------------------------------------------------------- renewal watch */
 
-export function RenewalWatch({ rows }: { rows: Array<Record<string, any>> }) {
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <IconClipboard className="h-[17px] w-[17px] text-[#b06fb0]" />
-        Renewal watch
-        <Help text="Cover falling due, so the renewal can be quoted before it lapses." />
-      </div>
-      <div className="scroll-x max-h-[340px] overflow-y-auto">
-        <table className="tbl">
-          <thead className="sticky top-0 z-10">
-            <tr>
-              <th>Agent / Staff</th>
-              <th>Insurance Sub Type</th>
-              <th className="num">Amount</th>
-              <th>Expiry Date</th>
-              <th className="num">Remaining</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td className="text-ink-soft">{r.agent_name ?? 'Unassigned'}</td>
-                <td className="text-ink">
-                  {r.product}
-                  <span className="block text-[12px] text-muted">{r.insured}</span>
-                </td>
-                <td className="num">{money(r.total_premium)}</td>
-                <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
-                <td className="num">
-                  <span className={`badge ${r.days_left <= 30 ? 'badge-red' : r.days_left <= 60 ? 'badge-amber' : 'badge-grey'}`}>
-                    {r.days_left}d
-                  </span>
-                </td>
-                <td>
-                  <Link href={policyHref(r.class, r.id)} className="text-[12.5px] text-[#3f7fc4] hover:underline">
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-[13px] text-muted">
-                  Nothing falling due.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-/* -------------------------------------------------------- motor compliance */
-
-/**
- * Road tax and PUSPAKOM inspection run on the same annual cycle as the policy,
- * so the policy period is what the tracker keys off.
- */
 export function MotorCompliance({ rows }: { rows: Array<Record<string, any>> }) {
   return (
     <section className="panel">

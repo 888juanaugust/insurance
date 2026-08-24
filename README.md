@@ -44,7 +44,9 @@ invented.
 | Client portal | `/portal`, `/portal/login`, `/portal/policy/[id]` | What a client sees of their own insurance. Separate sign-in, separate session, separate queries. |
 | Import | `/import` | Bring an existing book across from a spreadsheet. Every row is checked and shown before anything is written. |
 | Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
-| Executive strategic performance | `/` | KPI cards, birthday reminders, outstanding payment (client / principal tabs with search), recent sales. Filters by organisation and agent. |
+| Home | `/` | The agent's desk: add a policy, find a client, and what is running out — then the agency figures underneath. |
+| Expiring soon | `/expiring` | The worklist. Every policy running out, worst first, including the ones that already have. |
+| Everything else | `/more` | Claims, money, reports and settings, in one page, off the daily path. |
 | Audit trail | `/audit` | Every change, refusal and sign-in. |
 | Sub Agents | `/team`, `/team/new`, `/team/[id]/edit` | Add, edit, deactivate and delete sub agents. Commission structure per agent plus bank and TIN details for self-billed e-Invoice. Agent codes are unique, a rate that would pay out more than the principal pays in is refused, and an agent carrying policies cannot be deleted. |
 | Organisation | `/organisation` | Editable company particulars, invoice letterhead and collection account, plus subscription terms and quota usage. Each panel saves on its own, so a shared field edited in either place lands in the same column. |
@@ -220,6 +222,37 @@ The period is the months of business the statement answers for, matched on produ
 (issue date, falling back to created and then effective) rather than when the money arrived.
 The same statement cannot be imported twice under one reference — doing so would double every
 figure on it.
+
+## What is running out
+
+`/expiring` is the page the application is for. Every policy with cover running down, worst
+first, in four piles:
+
+| | |
+| --- | --- |
+| **Already expired** | Cover has run out and nobody renewed it. The client may be driving uninsured. |
+| **Within 7 days** | Call today — a renewal quote takes time to come back. |
+| **Within 30 days** | The usual window for getting a renewal out. |
+| **31 to 90 days** | Worth a look, nothing urgent. |
+
+Two decisions make it a worklist rather than a report.
+
+It **looks backwards as well as forwards**. `renewalsDue()` only ever looked ahead, which is
+the wrong shape: a policy that ran out last Tuesday is the most urgent thing on the desk and
+would not have appeared on the list at all. `expiringWork()` runs from sixty days behind to
+ninety ahead.
+
+And it **drops work already done** — anything a later policy points at through
+`renewed_from_policy_id` is gone from the list, so an agent is never chasing a renewal they
+have already written.
+
+Every row carries the client's phone number and two buttons: **Renew**, which opens a new
+policy pre-filled from the old one, and **Call**. The badge on the rail counts the first
+three piles only; counting ninety days of cover as work due today makes the number useless.
+
+The seeded book includes one policy that expired twelve days ago and was never renewed. It
+keeps its `active` status, because nobody goes through a register flipping statuses by hand
+— which is exactly why a list that only looks forward misses it.
 
 ## Renewal notices
 
@@ -493,6 +526,11 @@ sub agent's share is a separate record moving through `pending → approved → 
 
 ## Seed data
 
+One seeded policy is moved to have expired twelve days ago and left unrenewed, so the
+expiring worklist has something in its most urgent pile on a fresh database; two more are
+moved to expire in exactly 30 and 7 days. All three are relative to `today()` rather than a
+fixed date — otherwise the demo stops demonstrating anything a month after it was written.
+
 The seeded organisation **EXE Cheras** reproduces the reference dashboard exactly:
 RM 429.23 collected in 30 days, 3 cases created, RM 6,662.79 premium collected YTD 2026,
 RM 0.00 commission received, 17 client-outstanding items totalling MYR 21,375.64, 21
@@ -533,11 +571,29 @@ src/
 ```
 
 Navigation is a left rail (`src/components/SideNav.tsx`), driven by `src/lib/nav.ts`.
-Nineteen flat destinations are grouped into eight sections — Overview, Clients, Policies,
-Renewals, Accounts, Reports, Team, Settings — each holding the screens you move between
-while doing one job, so a task stays inside one section instead of crossing the whole menu.
-The section covering the current page expands on its own; the rest stay shut. Sections that
-can be behind — renewals due, money outstanding, quotations open — carry a live count from
+
+It carries six entries, and that is the point. Nineteen flat destinations became eight
+sections of roughly equal weight, which reads as an ERP — a menu that gives commission
+reconciliation the same standing as "find my client's policy" is saying they matter
+equally, and they do not. What an agent does is put a policy in, find one, see what is
+running out, and look after the clients. Those are the rail:
+
+```
+Home · Add a policy · Policies · Expiring soon · Clients · More
+```
+
+**Add a policy** is rendered as a button rather than a folder, because it starts work
+instead of listing it. **Expiring soon** carries a live count of what needs attention
+inside thirty days — not the full ninety, or the badge would cry wolf.
+
+Everything else is real and stays reachable. Claims, endorsements, commission payout,
+insurer statements, reports, sub agents, rates, the audit trail: all of it lives under
+**More**, listed on one page (`/more`) in four groups. `sectionFor()` falls back to that
+list, so walking straight to `/reports/retention` still lights the rail up rather than
+leaving it blank. A screen that exists in no menu is a screen nobody finds.
+
+The section covering the current page expands on its own; the rest stay shut. Entries that
+can be behind — expiring cover, quotations open, claims running — carry a live count from
 `navCounts()`, so the rail says what needs attention without a page load. The rail collapses
 to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
 

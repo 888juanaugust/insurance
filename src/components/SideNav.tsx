@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV, sectionFor, type CountKey, type IconKey, type NavSection } from '@/lib/nav';
 import {
   Logo, IconHome, IconClients, IconShield, IconClipboard, IconAccounting,
-  IconReports, IconUsers, IconSetting, IconChevron, IconBell, IconLogout,
+  IconReports, IconUsers, IconSetting, IconChevron, IconBell, IconLogout, IconUpload,
 } from './icons';
 import type { SessionUser } from '@/lib/session';
 import GlobalSearch from './GlobalSearch';
@@ -20,6 +20,7 @@ const ICONS: Record<IconKey, (p: { className?: string }) => React.ReactElement> 
   reports: IconReports,
   team: IconUsers,
   settings: IconSetting,
+  upload: IconUpload,
 };
 
 const COLLAPSE_KEY = 'insurhelp:nav-collapsed';
@@ -123,6 +124,29 @@ export default function SideNav({
           const sectionCount = s.count ? counts[s.count] : 0;
           const expandable = Boolean(s.children);
           const expanded = expandable && isOpen(s) && !collapsed;
+
+          /*
+           * The one entry that starts work rather than listing it. A rail
+           * where every row looks the same is a filing cabinet; putting a
+           * policy in is the thing an agent came here to do, so it looks
+           * like a button and not like a folder.
+           */
+          if (s.primary) {
+            return (
+              <Link
+                key={s.key}
+                href={s.href}
+                title={collapsed ? s.label : undefined}
+                aria-current={on ? 'page' : undefined}
+                className={`mb-2 mt-0.5 flex items-center gap-3 rounded bg-brand px-2.5 py-2 text-[13.5px] font-semibold text-white hover:brightness-110 ${
+                  collapsed ? 'justify-center' : ''
+                }`}
+              >
+                <Icon className="h-[17px] w-[17px] shrink-0" />
+                {!collapsed && <span className="truncate">{s.label}</span>}
+              </Link>
+            );
+          }
 
           return (
             <div key={s.key} className="mb-0.5">

@@ -63,6 +63,9 @@ export const IconCash = (p: P) => (
 export const IconClipboard = (p: P) => (
   <S {...p}><rect x="5" y="4.5" width="14" height="16" rx="2" /><path d="M9 4.5V3.2A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2v1.3Z" /><path d="M8.8 11h6.4" /><path d="M8.8 14.8h4" /></S>
 );
+export const IconUpload = (p: P) => (
+  <S {...p}><path d="M12 16V4" /><path d="m7.5 8.5 4.5-4.5 4.5 4.5" /><path d="M4 15v3.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V15" /></S>
+);
 export const IconSearch = (p: P) => (
   <S {...p}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></S>
 );

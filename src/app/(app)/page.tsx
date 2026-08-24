@@ -3,14 +3,14 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import {
   getKpis, listOrgs, listOutstanding, recentSales, upcomingBirthdays, listAgentOptions, getOrg,
-  productionSummary, motorCompliance, renewalsDue,
+  productionSummary, motorCompliance, renewalsDue, expiringBuckets,
 } from '@/lib/queries';
-import { classLabel, longDate, money, policyHref, today } from '@/lib/format';
+import { classLabel, classSlug, longDate, money, policyHref, today } from '@/lib/format';
 import FilterSelect from '@/components/FilterSelect';
 import OutstandingPanel from '@/components/OutstandingPanel';
 import { Help, SectionLabel, EmptyState } from '@/components/ui';
-import { Production, RenewalWatch, MotorCompliance, Calendar } from '@/components/HomeSections';
-import { IconGift, IconClipboard } from '@/components/icons';
+import { Production, MotorCompliance, Calendar } from '@/components/HomeSections';
+import { IconGift, IconClipboard, IconUpload, IconSearch } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +43,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const outPrincipal = listOutstanding(orgId, 'principal', validAgent);
   const sales = recentSales(orgId, validAgent, 10);
   const production = productionSummary(orgId, year, validAgent);
-  const renewalWatch = renewalsDue(orgId, 90);
   const compliance = motorCompliance(orgId, 12);
+  const expiring = expiringBuckets(orgId);
+  // The desk shows what has to be acted on; the full ninety days is a click away.
+  const needsDoing = [...expiring.piles.lapsed, ...expiring.piles.week, ...expiring.piles.month];
+  const justAdded = recentSales(orgId, validAgent, 6);
 
   // Expiries falling in the current month, for the calendar.
   const marks = new Map<string, number>();
@@ -60,15 +63,188 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     commissionYtd: money(kpis.commissionYtd),
   };
 
+  // Registers hold names in capitals. Shouting GOOD DAY, TAN at somebody is
+  // not a greeting, so the first name is cased down to look like one.
+  const raw = user.name.split(/\s+/)[0] ?? '';
+  const first = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  const urgentTone =
+    expiring.piles.lapsed.length > 0 ? 'bad' : expiring.urgent > 0 ? 'warn' : 'good';
+
   return (
-    <div className="panel px-6 py-6">
+    <div className="space-y-4">
+      {/* ------------------------------------------------------ the desk */}
+      <div className="panel px-6 py-6">
+        <h1 className="text-[25px] font-semibold leading-tight tracking-tight text-ink">
+          Good day, {first}
+        </h1>
+        <p className="mt-1 text-[13.5px] text-ink-soft">
+          {expiring.urgent === 0
+            ? 'Nothing is running out that needs chasing today.'
+            : `${expiring.urgent} ${expiring.urgent === 1 ? 'policy needs' : 'policies need'} attention — the rest can wait.`}
+        </p>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <Link
+            href="/insurance/general-motor/upload"
+            className="flex items-start gap-3.5 rounded border border-brand bg-brand-wash px-5 py-4 hover:brightness-[0.98]"
+          >
+            <IconUpload className="mt-0.5 h-[20px] w-[20px] shrink-0 text-brand" />
+            <span className="min-w-0">
+              <span className="block text-[14.5px] font-semibold text-brand">Add a policy</span>
+              <span className="mt-0.5 block text-[12.5px] text-ink-soft">
+                Upload the schedule and Insurhelp reads it — or key it in by hand.
+              </span>
+            </span>
+          </Link>
+
+          <form action="/search" className="rounded border border-line px-5 py-4">
+            <label htmlFor="desk-q" className="flex items-center gap-2 text-[14.5px] font-semibold text-ink">
+              <IconSearch className="h-[18px] w-[18px] text-ink-soft" />
+              Find a client or policy
+            </label>
+            <div className="mt-2 flex gap-2">
+              <input
+                id="desk-q"
+                name="q"
+                type="search"
+                placeholder="Name, NRIC, policy no or vehicle"
+                className="inp"
+              />
+              <button type="submit" className="btn btn-ghost shrink-0">Go</button>
+            </div>
+          </form>
+
+          <Link
+            href="/expiring"
+            className={`flex items-start gap-3.5 rounded border px-5 py-4 hover:brightness-[0.98] ${
+              urgentTone === 'bad' ? 'border-[#f3c9c5] bg-danger-wash'
+                : urgentTone === 'warn' ? 'border-[#f0dcb4] bg-warn-wash'
+                : 'border-[#bfe0cd] bg-ok-wash'
+            }`}
+          >
+            <IconClipboard className={`mt-0.5 h-[20px] w-[20px] shrink-0 ${
+              urgentTone === 'bad' ? 'text-danger' : urgentTone === 'warn' ? 'text-warn' : 'text-ok'
+            }`} />
+            <span className="min-w-0">
+              <span className={`block text-[14.5px] font-semibold ${
+                urgentTone === 'bad' ? 'text-danger' : urgentTone === 'warn' ? 'text-warn' : 'text-ok'
+              }`}>
+                {expiring.urgent} expiring soon
+              </span>
+              <span className="mt-0.5 block text-[12.5px] text-ink-soft">
+                {expiring.piles.lapsed.length > 0
+                  ? `${expiring.piles.lapsed.length} already ran out. Cover may have lapsed.`
+                  : 'Within the next 30 days, worst first.'}
+              </span>
+            </span>
+          </Link>
+        </div>
+      </div>
+
+      {/* ------------------------------------------- what has to be done */}
+      {needsDoing.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            Running out
+            <Link href="/expiring" className="ml-auto text-[12px] font-normal text-accent hover:underline">
+              All {expiring.rows.length} within 90 days
+            </Link>
+          </div>
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Client</th><th>Policy no</th><th>Vehicle or cover</th>
+                  <th>Expires</th><th>When</th><th>Do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {needsDoing.slice(0, 8).map((r) => (
+                  <tr key={r.id} className={r.days_left < 0 ? 'bg-danger-wash' : undefined}>
+                    <td>
+                      <Link href={`/clients/${r.client_id}`} className="text-ink hover:underline">
+                        {r.insured}
+                      </Link>
+                      {r.phone && <span className="block text-[11px] text-muted">{r.phone}</span>}
+                    </td>
+                    <td>
+                      <Link href={policyHref(r.class, r.id)} className="link-red">{r.policy_no}</Link>
+                    </td>
+                    <td className="text-ink-soft">{r.vehicle_no ?? r.product ?? '—'}</td>
+                    <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
+                    <td>
+                      <span className={`badge ${
+                        r.days_left < 0 ? 'badge-red' : r.days_left <= 7 ? 'badge-amber' : 'badge-blue'
+                      }`}>
+                        {r.days_left < 0
+                          ? `${Math.abs(r.days_left)}d ago`
+                          : r.days_left === 0 ? 'today' : `in ${r.days_left}d`}
+                      </span>
+                    </td>
+                    <td>
+                      <Link
+                        href={`/insurance/${classSlug(r.class)}/new?renewal=${r.id}`}
+                        className="btn btn-primary px-2.5 py-1 text-[12px]"
+                      >
+                        Renew
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ------------------------------------------------- your own work */}
+      <section className="panel">
+        <div className="panel-head">
+          Just added
+          <Link href="/insurance/general-motor" className="ml-auto text-[12px] font-normal text-accent hover:underline">
+            The whole register
+          </Link>
+        </div>
+        <div className="scroll-x">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Policy no</th><th>Insured</th><th>Insurer</th><th>Class</th>
+                <th>Added</th><th className="num">Premium</th>
+              </tr>
+            </thead>
+            <tbody>
+              {justAdded.map((s) => (
+                <tr key={s.id}>
+                  <td><Link href={policyHref(s.class, s.id)} className="link-red">{s.policy_no}</Link></td>
+                  <td className="text-ink">{s.insured}</td>
+                  <td className="font-semibold text-brand">{s.principal}</td>
+                  <td className="text-ink-soft">{classLabel(s.class)}</td>
+                  <td className="text-ink-soft">{longDate(s.created_date ?? s.issue_date)}</td>
+                  <td className="num">{money(s.total_premium)}</td>
+                </tr>
+              ))}
+              {justAdded.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-10 text-center text-[13px] text-muted">
+                    No policy has been added yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------ agency figures */}
+      <div className="panel px-6 py-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[25px] font-semibold leading-tight tracking-tight text-ink">
-            Agency overview
-          </h1>
+          <h2 className="text-[19px] font-semibold leading-tight tracking-tight text-ink">
+            How the agency is doing
+          </h2>
           <p className="mt-1 text-[13.5px] text-ink-soft">
-            What is owed, what was written, and what falls due next.
+            What is owed, what was written, and what falls due next. Nothing here needs doing today.
           </p>
           <p className="mt-1.5 text-[12.5px] text-muted">
             {org.name} · figures to {longDate(today())}
@@ -211,20 +387,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Production rows={production} />
       </div>
 
-      <div className="mt-7 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <div>
-          <SectionLabel>Falling due</SectionLabel>
-          <RenewalWatch rows={renewalWatch} />
-        </div>
-        <div>
-          <SectionLabel>This month</SectionLabel>
-          <Calendar today={today()} marks={marks} />
-        </div>
+      {/* What falls due lives on its own page now, worked rather than watched;
+          the calendar stays because a month at a glance is a different thing. */}
+      <div className="mt-7 max-w-[440px]">
+        <SectionLabel>This month</SectionLabel>
+        <Calendar today={today()} marks={marks} />
       </div>
 
       <div className="mt-7">
         <SectionLabel>Road tax and inspection</SectionLabel>
         <MotorCompliance rows={compliance} />
+      </div>
       </div>
     </div>
   );

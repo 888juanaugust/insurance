@@ -407,6 +407,81 @@ export function renewalsDue(orgId: string, days = 60) {
     .all({ org: orgId, t: today(), days }) as Array<Record<string, any>>;
 }
 
+/**
+ * The one question an agent opens the site to answer: whose cover is running
+ * out, and who has already been left to lapse.
+ *
+ * `renewalsDue` looks forward only, which is the wrong shape for a worklist —
+ * a policy that ran out last Tuesday is the most urgent thing on the desk and
+ * would not appear on it at all. This looks back as well, and drops anything
+ * a later policy already points at, so work that has been done stops being
+ * chased.
+ */
+export function expiringWork(orgId: string, back = 60, ahead = 90) {
+  return getDb()
+    .prepare(
+      `SELECT p.id, p.policy_no, p.class, p.product, p.type_of_cover,
+              p.expiry_date, p.total_premium, p.sum_insured,
+              c.id AS client_id, c.name AS insured, c.phone, c.email,
+              pr.short_name AS principal, m.vehicle_no, m.make_model,
+              CAST(julianday(p.expiry_date) - julianday(@t) AS INTEGER) AS days_left
+         FROM policy p
+         JOIN client c     ON c.id  = p.client_id
+         JOIN principal pr ON pr.id = p.principal_id
+         LEFT JOIN motor_detail m ON m.policy_id = p.id
+        WHERE p.org_id = @org
+          AND p.status IN ('active', 'expired')
+          AND julianday(p.expiry_date) - julianday(@t) BETWEEN -@back AND @ahead
+          -- Already renewed: a later policy points back at this one.
+          AND NOT EXISTS (SELECT 1 FROM policy r WHERE r.renewed_from_policy_id = p.id)
+        ORDER BY days_left`,
+    )
+    .all({ org: orgId, t: today(), back, ahead }) as ExpiringRow[];
+}
+
+export type ExpiringRow = {
+  id: string; policy_no: string; class: string; product: string | null;
+  type_of_cover: string | null; expiry_date: string; total_premium: number;
+  sum_insured: number; client_id: string; insured: string;
+  phone: string | null; email: string | null; principal: string;
+  vehicle_no: string | null; make_model: string | null; days_left: number;
+};
+
+export type ExpiringBucketKey = 'lapsed' | 'week' | 'month' | 'later';
+
+export const EXPIRING_BUCKETS: Array<{
+  key: ExpiringBucketKey; label: string; note: string;
+}> = [
+  { key: 'lapsed', label: 'Already expired', note: 'Cover has run out. The client may be driving uninsured.' },
+  { key: 'week',   label: 'Within 7 days',   note: 'Call today — a renewal quote takes time to come back.' },
+  { key: 'month',  label: 'Within 30 days',  note: 'The usual window for getting a renewal out.' },
+  { key: 'later',  label: '31 to 90 days',   note: 'Worth a look, nothing urgent.' },
+];
+
+/** Which pile a policy belongs in, by how long is left on it. */
+export function expiringBucket(daysLeft: number): ExpiringBucketKey {
+  if (daysLeft < 0) return 'lapsed';
+  if (daysLeft <= 7) return 'week';
+  if (daysLeft <= 30) return 'month';
+  return 'later';
+}
+
+/** The same work, already sorted into piles, for a page or a count. */
+export function expiringBuckets(orgId: string) {
+  const rows = expiringWork(orgId);
+  const piles: Record<ExpiringBucketKey, ExpiringRow[]> = {
+    lapsed: [], week: [], month: [], later: [],
+  };
+  for (const r of rows) piles[expiringBucket(r.days_left)].push(r);
+  return {
+    rows,
+    piles,
+    /* What the rail badge and the home tile count. Anything past 30 days is
+       not work yet, and counting it makes the badge cry wolf. */
+    urgent: piles.lapsed.length + piles.week.length + piles.month.length,
+  };
+}
+
 /* ------------------------------------------------------------ accounting */
 
 export function listCommissions(orgId: string, status = '') {
@@ -1444,6 +1519,9 @@ export function navCounts(orgId: string) {
       "SELECT COUNT(*) v FROM endorsement WHERE org_id = ? AND status IN ('draft','submitted')",
     ),
     notifications: one('SELECT COUNT(*) v FROM notification WHERE org_id = ? AND read_flag = 0'),
+    // What the rail badge on Expiring soon says. Anything past 30 days is not
+    // work yet, and counting it makes the badge cry wolf.
+    expiring: expiringBuckets(orgId).urgent,
   };
 }
 
