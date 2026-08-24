@@ -177,12 +177,31 @@ Also worth knowing before real clients are on it:
 
 - **Sign-in is throttled** to 8 attempts per 15 minutes, per address and per
   email. That count is held in memory, so it resets on restart and does not
-  work across multiple instances.
-- **There are no roles yet.** Every signed-in user can see and do everything
-  within their organisation, including approving their own commission.
-- **There is no audit trail.** Nothing records who approved a payout.
+  work across multiple instances. Run one instance, or move the counter to the
+  database before running two.
+- **Every change is recorded.** `/audit` holds who did what, including refused
+  attempts, with the actor's name and role denormalised so a deleted user does
+  not erase the history.
+- **There is one role, `admin`.** Every signed-in user can see and do everything
+  within their own organisation, including approving their own commission. What
+  they cannot do is reach another organisation's data: every query is scoped by
+  `org_id`, and an id posted from a form is checked against it.
 - **Password reset does not exist.** A locked-out user needs you to reset their
-  hash directly.
+  hash directly. Building it needs SMTP, which is not wired up.
+- **e-Invoice is not submitted to LHDN.** The billing identity, TIN and
+  self-billed flags are captured, but nothing is filed with MyInvois. If the
+  agency is over the turnover threshold this has to be handled outside
+  Insurhelp.
+- **PDPA consent and retention are not tracked.** Nothing records what a client
+  agreed to, and nothing ages data out.
+- **Reading a policy PDF needs `ANTHROPIC_API_KEY` to cover every layout.**
+  Without it the upload falls back to pattern rules alone, which are tuned to
+  the common Malaysian schedules; an unfamiliar layout comes through with blanks
+  to fill, and a scanned or photographed PDF comes through empty. See "Reading
+  policy documents" in the README for what each pass can and cannot do.
+- **Restore has not been rehearsed.** `deploy/backup.sh` is written and takes
+  both the database and the documents directory, but nobody has yet restored
+  from one onto a clean box. Do that once, deliberately, before you rely on it.
 
 ## If something breaks
 

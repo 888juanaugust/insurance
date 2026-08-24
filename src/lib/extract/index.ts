@@ -19,6 +19,14 @@ function sameValue(a: string | number | null, b: string | number | null): boolea
 
 const RULE_TRUSTED = 0.85;
 
+/**
+ * Below this much text across the whole document there is nothing to pattern
+ * match against — a schedule always runs to more than this. Kept lower than the
+ * model pass's own threshold, which decides per opening-pages rather than for
+ * the document as a whole.
+ */
+const SCANNED_BELOW_CHARS = 200;
+
 export type ExtractOptions = {
   /** Set false to skip the model pass even when credentials exist. */
   useClaude?: boolean;
@@ -38,19 +46,35 @@ export async function extractPolicy(
   const doc = await readPdf(pdfBytes);
   const ruleResult = extractWithRules(doc);
 
+  /*
+   * A PDF that is a photograph or a scan carries no text layer, and the rules
+   * read text. Handing somebody an empty form with no explanation is the worst
+   * outcome here: nothing is wrong with their document, and they cannot tell
+   * that from the screen. The model pass reads the pages as images and does
+   * cope, so say which of the two situations this is.
+   */
+  const scanned = doc.text.trim().length < SCANNED_BELOW_CHARS;
+
   const wantClaude = options.useClaude !== false && claudeAvailable();
   if (!wantClaude) {
-    if (!claudeAvailable()) {
-      ruleResult.warnings.push(
-        'Read using pattern rules only. Set ANTHROPIC_API_KEY to also read documents whose layout the rules do not cover.',
-      );
-    }
+    ruleResult.warnings.push(
+      scanned
+        ? 'This document has no text in it — it is a scan or a photograph, so the pattern rules ' +
+          'have nothing to read and every field has come through blank. Reading a scan needs the ' +
+          'model pass: set ANTHROPIC_API_KEY. Otherwise key the policy in by hand.'
+        : 'Read using pattern rules only. Set ANTHROPIC_API_KEY to also read documents whose layout the rules do not cover.',
+    );
     return ruleResult;
   }
 
   const ai = await extractWithClaude(doc, pdfBytes);
   if (!ai.ok) {
-    ruleResult.warnings.push(`Model-assisted reading unavailable: ${ai.error}`);
+    ruleResult.warnings.push(
+      scanned
+        ? `This document is a scan, so only the model pass can read it — and that failed: ${ai.error}. ` +
+          'Every field has come through blank. Key the policy in by hand, or try again.'
+        : `Model-assisted reading unavailable: ${ai.error}`,
+    );
     ruleResult.claudeError = ai.error;
     return ruleResult;
   }
