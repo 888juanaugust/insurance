@@ -14,8 +14,12 @@ data/*.db-shm
 # uploaded policy documents
 data/documents/
 
+# secrets. Only .env.example is ever committed — .env.production is created on
+# the server, inside this working tree, and holds IH_SECRET, the first
+# administrator's password and any API key. The repository is public.
 .env
-.env.local
+.env.*
+!.env.example
 .DS_Store
 npm-debug.log*
 

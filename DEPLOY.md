@@ -58,17 +58,26 @@ if no prebuilt binary matches your Node version.
 
 ```bash
 cd /var/www
-git clone <your-repo-url> insurhelp
-cd insurhelp
-git checkout <the branch you deploy>      # if it is not the default branch
+git clone -b <the branch you deploy> <your-repo-url> insurhelp
 chown -R insurhelp:insurhelp /var/www/insurhelp
 ```
 
-A private repository needs credentials the server can use: either a **deploy
-key** (`ssh-keygen -t ed25519`, add the public half to the repository's Deploy
-keys, clone over `git@github.com:...`) or a personal access token in the HTTPS
-URL. A deploy key is the better of the two — it is read-only and scoped to the
-one repository.
+A public repository clones over HTTPS with no credentials on the server at
+all, which is one fewer secret to keep. A private one needs either a **deploy
+key** (`ssh-keygen -t ed25519`, the public half added to the repository's
+Deploy keys, cloned over `git@github.com:...`) or a personal access token in
+the URL; the deploy key is the better of the two, being read-only and scoped
+to the one repository.
+
+Either way, nothing secret goes *into* the repository. `.env.production` is
+created in the next step inside this working tree and is ignored by git
+(`.env.*` is, `.env.example` is not) — that is what keeps `IH_SECRET`, the
+first administrator's password and any API key out of a public clone. Check it
+stayed that way after any change to `.gitignore`:
+
+```bash
+git check-ignore -v .env.production      # must print a matching rule
+```
 
 ### 3. Configure
 
