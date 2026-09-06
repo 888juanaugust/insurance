@@ -163,6 +163,55 @@ Bringing graded roles back means widening `isAdmin` in `src/lib/permissions.ts`
 into a permission lookup and giving `authorise` a permission argument again.
 Every mutation already routes through it, so nothing else has to move.
 
+### Sessions
+
+Sessions live in the `session` table (`src/lib/session-store.ts`). The cookie
+carries a random 32-byte token and nothing else; the row, keyed by the token's
+SHA-256, carries the expiry — eight hours for staff, two for the portal — and
+is deleted on sign-out, on a password change (every other session that person
+holds), when an account is disabled or reset, and when a portal code is
+withdrawn or reissued. The old cookie was a signed user id: it never expired
+on the server, sign-out did not touch it, a password change did not touch it,
+and it was the same string every time, so a copy taken once worked forever.
+
+In production the cookies are `Secure`, `HttpOnly`, `SameSite=Lax` with the
+`__Host-` prefix. The caller's address comes from `X-Real-IP`, which nginx
+sets from the connection; the first element of `X-Forwarded-For` is whatever
+the client sent, which is why it is not used (`src/lib/request.ts`).
+
+Passwords are scrypt with explicit parameters (N=2^17, r=8, p=1, a 64-byte key)
+and the parameters written into the hash; an older hash verifies at the old
+parameters and is replaced at the next sign-in (`src/lib/auth.ts`). The request
+paths use the asynchronous form so a derivation does not stall the process.
+
+### Headers
+
+`src/middleware.ts` sets a Content-Security-Policy with a fresh nonce on every
+response — scripts run only with the nonce, `frame-ancestors 'none'`,
+`form-action 'self'`, `object-src 'none'` — and `next.config.mjs` adds HSTS,
+`X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and an empty
+permissions policy. The middleware decides nothing about who is signed in;
+every page and action checks that itself, so bypassing it gains nothing.
+The inline theme script in the root layout takes its nonce from the request.
+
+### Tenant isolation
+
+Every lookup that returns one record takes the organisation as part of the
+query — `getPolicy(id, orgId)`, `getClient(id, orgId)` — rather than checking
+it afterwards, so no call site can forget. Ids posted from forms (a client, a
+sub agent, a client group, a policy to renew, a policy to request renewal on)
+are checked against the caller's organisation before anything is written or
+logged with their contents. The sweep of abandoned uploads is per agency and
+runs at most hourly per agency and from the daily run, not on every file of a
+batch. Record ids are UUIDs from the CSPRNG.
+
+### First start in production
+
+The seed will not create the demo accounts in production. It creates the
+administrator named by `IH_ADMIN_EMAIL` and `IH_ADMIN_PASSWORD` instead, and
+refuses to create a database at all if neither that nor `IH_SEED_DEMO=1` is
+set. See DEPLOY.md.
+
 ### Sign-in accounts
 
 **Team and agency → Sign-in accounts** lists everyone who can sign in to the
@@ -451,7 +500,9 @@ where a car would read "WXY 4471", and the rendered text is tidied so a missing
 detail never shows up as a double space.
 
 The daily run is `POST /api/cron/renewal-notices`, guarded by `IH_CRON_SECRET`.
-Without the secret set it returns 503 rather than running unauthenticated.
+Without the secret set it returns 503 rather than running unauthenticated; a GET
+answers only to the same bearer. The run also sweeps each agency's abandoned
+uploads and expired sessions.
 
 ## Retention and lapses
 
@@ -787,6 +838,25 @@ can be behind — expiring cover, quotations open, claims running — carry a li
 `navCounts()`, so the rail says what needs attention without a page load. The rail collapses
 to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
 
+## Tests
+
+```bash
+npm test          # unit tests, node:test through tsx
+npm run harness   # scores the document reader against tests/samples/*.pdf (not committed)
+npm run check     # typecheck + tests, what CI runs before the build
+```
+
+The tests cover what is pure and what has bitten: statement reading and
+matching (`statements.ts`), the premium arithmetic every policy goes through
+(`premium.ts` — a typed 0 commission is nil, a blank is worked out), the
+password rule, the address parse, the two throttles' bounds, the CSV formula
+guard, hashing and rehashing, and the extractor's date and amount validators.
+`.github/workflows/ci.yml` runs typecheck, tests and the build on every push.
+
+The reader's harness needs the real schedules, which carry real names and are
+never committed: put them in `tests/samples/` with a `truth.json` and run
+`npm run harness`.
+
 ## Known gaps
 
 - **Employee Benefits** is served from `/insurance/endorsement` to match the live route, but
@@ -797,6 +867,13 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
   are unknown.
 - **Reconcile** was never opened during capture, so its contents are a reasonable
   reading of the payment state the registers already track, not a copy.
+- **Money is stored as REAL.** Totals compared against a one-sen tolerance are
+  rounded at the aggregate, but the columns are floating point; moving to
+  integer sen is the durable fix.
+- **Payments have no history.** One row per leg; instalments overwrite each
+  other's method and reference.
+- **One role, no soft delete, no PDPA tooling, no LHDN submission** — see
+  DEPLOY.md's list of what is not built.
 - LOC and receipt documents render as print-ready pages rather than generated PDF files.
 - Quotations keyed in from the Quotations screen land on the policy register with status
   *Quotation*; the Quotations screen itself lists the separate quotation table and has no

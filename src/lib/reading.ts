@@ -25,9 +25,11 @@ export function resultFromDocument(doc: DocumentRow): ExtractionResult {
   } catch {
     /* an unreadable warnings column is not worth failing the reading over */
   }
-  const isMotor = Boolean(
-    fields.vehicle_no?.value || fields.chassis_no?.value || fields.engine_no?.value,
-  );
+  // The class the reader judged, stored with the reading. Older rows have
+  // none and fall back to what the fields say.
+  const isMotor = doc.detected_class
+    ? doc.detected_class === 'motor'
+    : Boolean(fields.vehicle_no?.value || fields.chassis_no?.value || fields.engine_no?.value);
   return {
     fields,
     principal: doc.principal_detected,

@@ -10,7 +10,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   const user = await requireAdmin();
 
   const { id } = await params;
-  const client = getClient(id);
+  const client = getClient(id, user.org_id);
   if (!client || client.org_id !== user.org_id) notFound();
 
   return (

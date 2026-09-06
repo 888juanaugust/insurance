@@ -50,7 +50,7 @@ export async function saveEndorsementAction(_prev: unknown, fd: FormData): Promi
   const policyId = str(fd, 'policy_id');
   if (!policyId) return reject(fd, 'policy_id', 'Choose the policy this endorsement alters.');
 
-  const data = getPolicy(policyId);
+  const data = getPolicy(policyId, user.org_id);
   if (!data || data.policy.org_id !== user.org_id) {
     return reject(fd, 'policy_id', 'That policy could not be found.');
   }

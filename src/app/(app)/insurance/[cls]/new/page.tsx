@@ -41,7 +41,7 @@ export default async function NewPolicyPage({
    * tell a renewal from a lapse — without the link the two are
    * indistinguishable afterwards.
    */
-  const previous = renewal ? getPolicy(renewal) : undefined;
+  const previous = renewal ? getPolicy(renewal, user.org_id) : undefined;
   const prior = previous && previous.policy.org_id === user.org_id ? previous : undefined;
   const p = prior?.policy as Record<string, any> | undefined;
   const motor = prior?.motor as Record<string, any> | undefined;

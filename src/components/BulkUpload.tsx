@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useRef, useState } from 'react';
 import {
-  readForBatchAction, saveBatchAction,
+  readForBatchAction, saveBatchAction, discardReadingAction,
   type BatchItem, type BatchSaveResult,
 } from '@/lib/bulk-actions';
 import { money, longDate, classSlug } from '@/lib/format';
@@ -11,7 +11,7 @@ import { money, longDate, classSlug } from '@/lib/format';
 const MAX_FILES = 40;
 const MAX_MB = 15;
 
-type Row = BatchItem & { key: string; state: 'waiting' | 'reading' | 'done'; chosen: boolean };
+type Row = BatchItem & { key: string; state: 'waiting' | 'reading' | 'done'; chosen: boolean; discarded?: boolean };
 
 const TONE: Record<string, { badge: string; label: string }> = {
   ready: { badge: 'badge-green', label: 'ready' },
@@ -298,6 +298,23 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
                               >
                                 Open it on the check screen
                               </Link>
+                            )}
+                            {(r.verdict === 'review' || r.verdict === 'duplicate') && r.documentId && !r.discarded && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const fd = new FormData();
+                                  fd.set('document_id', r.documentId!);
+                                  await discardReadingAction(fd);
+                                  setRows((rs) => rs.map((x, j) => (j === i ? { ...x, discarded: true, chosen: false } : x)));
+                                }}
+                                className="mt-0.5 block text-[11.5px] text-muted hover:text-danger hover:underline"
+                              >
+                                Discard this reading
+                              </button>
+                            )}
+                            {r.discarded && (
+                              <span className="mt-0.5 block text-[11.5px] text-muted">Discarded — the file and the reading are gone.</span>
                             )}
                           </>
                         )}

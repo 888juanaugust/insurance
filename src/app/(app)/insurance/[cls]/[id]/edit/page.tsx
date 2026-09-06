@@ -17,7 +17,7 @@ export default async function EditPolicyPage({
   const { cls: slug, id } = await params;
   if (!CLASS_BY_SLUG[slug]) notFound();
 
-  const data = getPolicy(id);
+  const data = getPolicy(id, user.org_id);
   if (!data || data.policy.org_id !== user.org_id) notFound();
 
   const { policy, motor, nonMotor } = data;

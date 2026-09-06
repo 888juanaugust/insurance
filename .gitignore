@@ -23,3 +23,6 @@ npm-debug.log*
 .verify/
 *.tmp.js
 *.tmp.sh
+
+# real policy schedules used to score the reader — never committed
+tests/samples/

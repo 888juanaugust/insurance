@@ -80,6 +80,11 @@ both.
 
 ### The daily renewal run
 
+The run is a **POST** with the bearer token; a GET answers only to the same
+bearer and only says it is wired up. Besides building and sending notices, the
+run removes each agency's uploads read but never saved (after seven days) and
+sessions past their expiry.
+
 Renewal notices are built and sent by a scheduled call. Add to the app user's
 crontab, after setting `IH_CRON_SECRET` in `.env.production`:
 
@@ -164,36 +169,75 @@ a backup on the same disk is not a backup.
 
 ## Before you let anyone else in
 
-The seeded demo accounts (`exemaster3@gmail.com`, `exemaster1@gmail.com` and
-`boonseng_agent@yahoo.com`, all `12345Abcdefg`) are in the seed file and
-therefore in your repository. Anyone who has seen the code can sign in with
-them. Retire them from inside the application, before the site is reachable:
+**A production database is never created with the demo accounts.** On the
+first start, with `NODE_ENV=production`, the seed creates one administrator
+from `IH_ADMIN_EMAIL` and `IH_ADMIN_PASSWORD` and no demo accounts at all;
+without those variables (and without `IH_SEED_DEMO=1`, which you should not
+set) the process refuses to create a database and says so. Set the two
+variables for the first start, sign in as that account, then remove them —
+they are read only when the database is created.
 
-1. Sign in as `exemaster3@gmail.com`.
-2. **More → Team and agency → Sign-in accounts → Add an account.** Give yourself
-   a name, your email and a password of at least 10 characters with a letter and
-   a number. The demo password is refused.
-3. Sign out and sign in as yourself.
-4. Back on the same panel, **Disable** the two seeded EXE accounts. The red banner
-   on Home goes away once no seeded account in your agency can sign in.
-5. The BS Agency demo account belongs to the other seeded organisation and is not
-   visible from yours. Sign in as it and disable it the same way, or remove it:
+Further accounts are added, disabled and reset under **More → Team and agency
+→ Sign-in accounts**. Passwords are ten characters or more with a letter and
+a number; the demo password is refused. Nothing is emailed: tell people
+their password in person.
+
+If you already have a database that was seeded with the demo accounts
+(`exemaster3@gmail.com`, `exemaster1@gmail.com`, `boonseng_agent@yahoo.com`,
+all `12345Abcdefg`, all in the repository): Home shows a red banner while any
+of them can sign in. Add your own account, sign in as yourself, and
+**Disable** them from the same panel. The BS Agency one belongs to the other
+seeded organisation; sign in as it and disable it, or:
 
 ```bash
 sqlite3 /var/www/insurhelp/data/insurhelp.db \
   "UPDATE app_user SET status = 'disabled' WHERE email = 'boonseng_agent@yahoo.com';"
 ```
 
-The sign-in page shows no credentials, and a disabled account is refused at
-sign-in with its session ended at the next request. Passwords are reset from the
-same panel; nothing is emailed.
+A disabled account is refused at sign-in and every session it holds ends at
+once.
+
+### Sessions, cookies and headers
+
+Sessions are rows in the database, not signed cookies: the cookie is a random
+token, the row has an eight-hour expiry (two for the client portal), and the
+row is deleted on sign-out, on a password change (every other session of that
+user), when an account is disabled, and when a portal code is withdrawn or
+reissued. A cookie copied from a browser is worthless once any of those has
+happened. In production both cookies are `Secure`, `HttpOnly`, `SameSite=Lax`
+and carry the `__Host-` prefix, so a browser will not send them over plain
+HTTP nor accept one set by another host.
+
+Every response carries a Content-Security-Policy with a per-response nonce
+(`frame-ancestors 'none'`, `form-action 'self'`, scripts only with the nonce),
+HSTS for a year, `X-Frame-Options: DENY`, `nosniff` and a strict referrer
+policy. The shipped `deploy/nginx.conf` answers port 80 with a redirect to
+HTTPS and nothing else.
+
+The application reads the caller's address from `X-Real-IP`, which nginx sets
+from the connection; do not remove that line from the proxy block, or the
+sign-in throttle falls back to the end of `X-Forwarded-For`.
+
+Password hashes are scrypt with N=2^17; a hash made under the old parameters
+is upgraded the next time that person signs in.
 
 Also worth knowing before real clients are on it:
 
 - **Sign-in is throttled** to 8 attempts per 15 minutes, per address and per
-  email. That count is held in memory, so it resets on restart and does not
-  work across multiple instances. Run one instance, or move the counter to the
-  database before running two.
+  email, and document readings to 100 per 15 minutes per user. Both counts are
+  held in memory and bounded, so they reset on restart and do not work across
+  multiple instances. Run one instance, or move the counters to the database
+  before running two.
+- **Unique keys are enforced by the database** — claim numbers, endorsement
+  numbers, agent codes, statement references per insurer, and policy numbers
+  per period — once the indexes are created on the first start after this
+  version. A database that already holds duplicates cannot take an index; the
+  log says which, the index is skipped, and the application-level checks carry
+  on. Fix the duplicates and restart.
+- **Errors are logged.** Every error a request produces is one JSON line on
+  stderr (`pm2 logs`) with the path, the route and the reference shown to the
+  person; the person sees an Insurhelp page with a way back, not the
+  framework's.
 - **Every change is recorded.** `/audit` holds who did what, including refused
   attempts, with the actor's name and role denormalised so a deleted user does
   not erase the history.

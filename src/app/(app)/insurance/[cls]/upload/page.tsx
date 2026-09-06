@@ -40,7 +40,7 @@ export default async function UploadPage({
   if (docId) {
     const doc = getDocument(docId, user.org_id);
     if (doc?.policy_id) {
-      const owner = getPolicy(doc.policy_id);
+      const owner = getPolicy(doc.policy_id, user.org_id);
       redirect(owner ? policyHref(owner.policy.class as string, doc.policy_id) : `/insurance/${slug}`);
     }
     reopened = readingFromDocument(docId, user.org_id);

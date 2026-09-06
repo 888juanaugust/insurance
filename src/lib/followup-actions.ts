@@ -5,6 +5,8 @@ import { authorise } from './guard';
 import { audit } from './audit';
 import { addFollowUp } from './queries';
 import { isFollowUpOutcome, OUTCOME_LABEL, RESUME_OUTCOME } from './follow-up';
+import { today } from './format';
+import { isCalendarDate } from './dates';
 
 export type FollowUpState = {
   ok?: boolean;
@@ -21,7 +23,7 @@ export type FollowUpState = {
   values?: { outcome: string; note: string; next_at: string };
 };
 
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
 
 /**
  * Record what happened when the client was contacted.
@@ -46,7 +48,11 @@ export async function logFollowUpAction(_prev: unknown, fd: FormData): Promise<F
   const refuse = (error: string): FollowUpState => ({ error, values });
 
   if (!isFollowUpOutcome(outcome) || outcome === RESUME_OUTCOME) return refuse('Choose what happened.');
-  if (nextAt && !ISO.test(nextAt)) return refuse('The call-back date is not a date.');
+  if (nextAt && !isCalendarDate(nextAt)) return refuse('The call-back date is not a date.');
+  if (nextAt && nextAt <= today()) {
+    // A call-back in the past drops the case off nothing and raises it nowhere.
+    return refuse('The call-back date has to be after today.');
+  }
   if (outcome === 'callback' && !nextAt) {
     // Without the date it is not a call back, it is a note — and the case
     // would sit on the list being chased anyway.

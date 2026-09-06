@@ -6,8 +6,8 @@ import { audit } from './audit';
 import { uploadPolicyAction, buildInputFrom, type UploadState } from './policy-actions';
 import {
   getDocument, findPolicyByNumber, findPrincipalByName, findDocumentByHash,
-  findClientByIdentity, createClientFromPolicy, createPolicy,
-  attachDocumentToPolicy, deleteDocumentRow,
+  findClientByIdentity, createClientFromPolicy, createPolicyWithLinks,
+  deleteDocumentRow,
 } from './queries';
 import { deleteDocument } from './files';
 import { today, money } from './format';
@@ -97,9 +97,15 @@ function judge(
     reasons.push('the number is the cover note — the insurer has not issued a policy number yet');
   }
 
-  // Anything else the reader itself was unsure of.
-  const shaky = REQUIRED.filter(
-    (k) => r.fields[k].value !== null && r.fields[k].confidence < 0.8 && r.fields[k].source !== 'derived',
+  // Anything else the reader itself was unsure of — the premium included. A
+  // gross premium the model alone read at 0.85, or a rule at 0.5, used to be
+  // "ready" as long as the four figures agreed, which they always do when one
+  // was derived from the other three. The one field this exists to ask about
+  // was the one it did not.
+  const shaky = [...REQUIRED, 'gross_premium', 'total_payable'].filter(
+    (k) => r.fields[k as FieldKey].value !== null
+      && r.fields[k as FieldKey].confidence < 0.8
+      && r.fields[k as FieldKey].source !== 'derived',
   );
   if (shaky.length) {
     reasons.push(`the ${shaky.map((k) => k.replace(/_/g, ' ')).join(', ')} reading is uncertain`);
@@ -234,12 +240,12 @@ export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<Bat
           );
 
       /*
-       * Motor or not, decided from what the document turned out to hold. The
-       * document row's `kind` says 'schedule' for every upload, and the class
-       * cannot come from the browser: it picks the register the policy lands
-       * on and the commission rate it earns.
+       * Motor or not, exactly as the agent was shown: the class the reader
+       * judged is stored with the reading and read back here. Re-deriving it
+       * at save time put a motor schedule whose plate failed validation on
+       * the non-motor register — at the non-motor commission rate.
        */
-      const isMotor = Boolean(val('vehicle_no') || val('chassis_no') || val('engine_no'));
+      const isMotor = reading.cls === 'motor';
 
       // Built through the same function the review form uses, so a policy
       // saved in a batch and one saved one at a time cannot disagree about
@@ -268,8 +274,9 @@ export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<Bat
       put('source_file', doc.filename);
 
       const input = await buildInputFrom(form, user.org_id, clientId, principal.id as string);
-      const id = createPolicy(input, { uploadedAt: today() });
-      attachDocumentToPolicy(documentId, id, user.org_id);
+      // Policy and its document in one transaction: never a policy whose
+      // schedule is on disk but unreachable.
+      const { id } = createPolicyWithLinks(input, { uploadedAt: today(), documentId });
       saved++;
 
       await audit(user, {

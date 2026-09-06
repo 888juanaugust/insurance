@@ -68,6 +68,7 @@ Rules:
 
 /** A document with no meaningful text layer is a scan — send the pages as images. */
 const TEXT_LAYER_MIN_CHARS = 400;
+const DOCUMENT_MODE_MAX_PAGES = 10;
 
 export type ClaudeOutcome =
   | { ok: true; data: ClaudePolicy; model: string; mode: 'text' | 'document' }
@@ -88,6 +89,16 @@ export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Prom
   // The schedule always sits in the opening pages; the rest is policy wording.
   const head = doc.pages.slice(0, 5).flat().join('\n');
   const useDocument = head.trim().length < TEXT_LAYER_MIN_CHARS;
+
+  // A scan is sent as the whole file, page images and all. Past ten pages
+  // that is a large paid request for a document that is almost certainly not
+  // a schedule, and there is no metering on this path other than this.
+  if (useDocument && doc.pageCount > DOCUMENT_MODE_MAX_PAGES) {
+    return {
+      ok: false,
+      error: `This scan is ${doc.pageCount} pages; scans of more than ${DOCUMENT_MODE_MAX_PAGES} are not sent to the model. Key the policy in by hand.`,
+    };
+  }
 
   const content: Anthropic.ContentBlockParam[] = useDocument
     ? [

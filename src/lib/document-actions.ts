@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { authorise, forbid } from './guard';
 import { audit } from './audit';
+import { safeBack } from './request';
 import {
   recordUpload, setDocumentStorageKey, deleteDocumentRow, getPolicy,
   findDocumentByHash, getClaim, setDocumentClaim,
@@ -48,7 +49,7 @@ export async function attachDocumentAction(_prev: unknown, fd: FormData): Promis
     label = claim.claim_no;
     back = `/claims/${claim.id}`;
   } else {
-    const data = getPolicy(ownerId);
+    const data = getPolicy(ownerId, user.org_id);
     if (!data || data.policy.org_id !== user.org_id) return { error: 'That policy could not be found.' };
     label = data.policy.policy_no as string;
     back = `/insurance/${classSlug(data.policy.class as string)}/${ownerId}`;
@@ -123,7 +124,7 @@ export async function deleteDocumentAction(fd: FormData) {
   const user = guard.user;
 
   const row = deleteDocumentRow(id, user.org_id);
-  const back = String(fd.get('back') ?? '/');
+  const back = safeBack(fd.get('back'), '/');
   if (!row) redirect(back);
 
   if (row.storage_key) deleteDocument(row.storage_key);

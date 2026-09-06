@@ -3,10 +3,10 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getDb } from './db';
-import { verifyPassword } from './auth';
+import { verifyPassword, hashPassword, needsRehash } from './auth';
+import { clientIp, safeBack } from './request';
 import { createSession, destroySession, currentUser } from './session';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
-import { headers } from 'next/headers';
 import {
   setCommissionStatus, recordPayment, getCommissionForOrg, getPaymentForOrg,
 } from './queries';
@@ -21,9 +21,9 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   if (!email || !password) return { error: 'Please enter your email address and password.' };
 
   // Throttle per address and per email, so neither one account nor one source
-  // can be worked through at network speed.
-  const hdrs = await headers();
-  const ip = (hdrs.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
+  // can be worked through at network speed. The address is the one the proxy
+  // vouches for, not one the client wrote into a header.
+  const ip = (await clientIp()) ?? 'unknown';
   const keys = [`ip:${ip}`, `email:${email}`];
 
   for (const key of keys) {
@@ -40,7 +40,7 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     | { id: string; org_id: string; name: string; role: string; password_hash: string; status: string }
     | undefined;
 
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
     for (const key of keys) recordFailure(key);
     // A failed attempt against a real account is the one worth keeping — an
     // unknown address has no organisation to file it under.
@@ -57,9 +57,16 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   }
 
   for (const key of keys) clearFailures(key);
+
+  // A hash made under older parameters is replaced now, while the password
+  // is in hand — the only moment it can be.
+  if (needsRehash(user.password_hash)) {
+    getDb().prepare('UPDATE app_user SET password_hash = ? WHERE id = ?').run(await hashPassword(password), user.id);
+  }
+
   await auditAuth(user.org_id, { id: user.id, name: user.name, role: user.role },
     'auth.login', `Signed in from ${ip}.`);
-  await createSession(user.id);
+  await createSession(user.id, user.org_id, ip === 'unknown' ? null : ip);
   redirect('/');
 }
 
@@ -105,7 +112,8 @@ export async function recordPaymentAction(formData: FormData) {
 
   const guard = await authorise({ action: 'payment.record', entity: 'payment', entityId: id });
   if (!guard.ok) forbid(guard.message);
-  if (!id || !(amount > 0)) redirect(String(formData.get('back') ?? '/'));
+  const back = safeBack(formData.get('back'), '/');
+  if (!id || !(amount > 0)) redirect(back);
 
   const before = getPaymentForOrg(id, guard.user.org_id);
   const result = recordPayment(id, amount, method, reference, guard.user.org_id);
@@ -121,7 +129,7 @@ export async function recordPaymentAction(formData: FormData) {
     });
   }
   revalidatePath('/');
-  revalidatePath(String(formData.get('back') ?? '/'));
+  revalidatePath(back);
 }
 
 export async function markNotificationsReadAction() {

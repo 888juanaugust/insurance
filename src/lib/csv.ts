@@ -82,7 +82,11 @@ export function normaliseHeader(header: string): string {
  * still round-trips through this parser.
  */
 export function toCsv(headers: string[], rows: string[][]): string {
-  const cell = (v: string) =>
-    /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const cell = (v: string) => {
+    // A leading =, +, - or @ would run as a formula when the file is opened
+    // in a spreadsheet; the same guard the register export uses.
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+    return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
   return [headers, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
 }

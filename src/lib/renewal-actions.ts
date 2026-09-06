@@ -20,7 +20,10 @@ export async function renewalActionForm(fd: FormData) {
   if (!guard.ok) forbid(guard.message);
   const user = guard.user;
 
-  const label = policyId ? (getPolicy(policyId)?.policy?.policy_no ?? null) : null;
+  const label = policyId ? (getPolicy(policyId, user.org_id)?.policy?.policy_no ?? null) : null;
+  // A policy id that is not this agency's is refused before anything is
+  // written or logged with its number.
+  if (policyId && label === null) forbid('That policy is not on your register.');
 
   if (op === 'request' && policyId) {
     requestRenewal(user.org_id, policyId, 'Expiry watch');

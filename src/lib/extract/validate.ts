@@ -1,4 +1,5 @@
 import type { FieldKey, FieldResult } from './types';
+import { isCalendarDate } from '../dates';
 
 /**
  * A wrongly-confident value is worse than a blank one: it survives review and
@@ -89,7 +90,7 @@ function inRange(v: string | number, lo: number, hi: number): boolean {
 }
 
 function isDate(v: string | number): boolean {
-  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  if (typeof v !== 'string' || !isCalendarDate(v)) return false;
   const year = Number(v.slice(0, 4));
   return year >= 1990 && year <= 2100;
 }

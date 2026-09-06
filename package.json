@@ -2,19 +2,22 @@
   "name": "insurhelp",
   "version": "1.0.0",
   "private": true,
-  "description": "Insurhelp — policy, collection and commission management for insurance agencies",
+  "description": "Insurhelp \u2014 policy, collection and commission management for insurance agencies",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:reset": "rm -f data/insurhelp.db data/insurhelp.db-wal data/insurhelp.db-shm"
+    "db:reset": "rm -f data/insurhelp.db data/insurhelp.db-wal data/insurhelp.db-shm",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test",
+    "harness": "tsx tests/profiles.harness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
     "better-sqlite3": "^11.8.1",
-    "next": "15.1.6",
+    "next": "15.5.25",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "unpdf": "^0.12.1",
@@ -28,6 +31,7 @@
     "@types/react-dom": "19.0.3",
     "postcss": "8.5.1",
     "tailwindcss": "^4.3.3",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "tsx": "^4.19.0"
   }
 }

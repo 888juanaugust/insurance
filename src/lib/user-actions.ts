@@ -6,6 +6,7 @@ import { audit } from './audit';
 import { hashPassword } from './auth';
 import { passwordProblem } from './passwords';
 import { ADMIN } from './permissions';
+import { revokeAllSessions } from './session';
 import {
   getAppUser, createAppUser, setAppUserStatus, setAppUserPassword,
   findAppUserByEmail, activeUserCount,
@@ -49,7 +50,7 @@ export async function addAccountAction(_prev: unknown, fd: FormData): Promise<Ac
   if (password !== confirm) return refuse('The password and its confirmation do not match.');
 
   const id = createAppUser({
-    org_id: user.org_id, email, name, role: ADMIN, password_hash: hashPassword(password),
+    org_id: user.org_id, email, name, role: ADMIN, password_hash: await hashPassword(password),
   });
   await audit(user, {
     action: 'account.create', entity: 'app_user', entityId: id, entityLabel: name,
@@ -81,6 +82,7 @@ export async function setAccountStatusAction(_prev: unknown, fd: FormData): Prom
   }
 
   setAppUserStatus(id, user.org_id, to);
+  if (to === 'disabled') revokeAllSessions(id);
   await audit(user, {
     action: `account.${to === 'active' ? 'enable' : 'disable'}`, entity: 'app_user', entityId: id, entityLabel: target.name,
     summary: to === 'active'
@@ -109,7 +111,8 @@ export async function resetPasswordAction(_prev: unknown, fd: FormData): Promise
   if (problem) return { error: problem };
   if (password !== confirm) return { error: 'The password and its confirmation do not match.' };
 
-  setAppUserPassword(id, user.org_id, hashPassword(password));
+  setAppUserPassword(id, user.org_id, await hashPassword(password));
+  revokeAllSessions(id);
   await audit(user, {
     action: 'account.reset_password', entity: 'app_user', entityId: id, entityLabel: target.name,
     summary: `${user.name} set a new password for ${target.name} (${target.email}).`,

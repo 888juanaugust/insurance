@@ -61,7 +61,7 @@ export default async function PolicyDetailPage({
 
   const { cls: slug, id } = await params;
   const { blocked: blockedParam } = await searchParams;
-  const data = getPolicy(id);
+  const data = getPolicy(id, user.org_id);
   if (!data || data.policy.org_id !== user.org_id) notFound();
 
   const { policy, motor, nonMotor, extensions, payments, commission, client, principalRow } = data;

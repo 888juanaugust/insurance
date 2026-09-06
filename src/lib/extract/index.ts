@@ -27,6 +27,19 @@ const RULE_TRUSTED = 0.85;
  */
 const SCANNED_BELOW_CHARS = 200;
 
+/** How long one reading may take before it is abandoned. */
+const BUDGET_MS = 30_000;
+
+function withBudget<T>(work: Promise<T>, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${what} took longer than ${BUDGET_MS / 1000} seconds and was abandoned.`)),
+      BUDGET_MS,
+    );
+    work.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
 export type ExtractOptions = {
   /** Set false to skip the model pass even when credentials exist. */
   useClaude?: boolean;
@@ -43,7 +56,7 @@ export async function extractPolicy(
   pdfBytes: Uint8Array,
   options: ExtractOptions = {},
 ): Promise<ExtractionResult> {
-  const doc = await readPdf(pdfBytes);
+  const doc = await withBudget(readPdf(pdfBytes), 'Reading the PDF');
   const ruleResult = extractWithRules(doc);
 
   /*
@@ -67,7 +80,7 @@ export async function extractPolicy(
     return ruleResult;
   }
 
-  const ai = await extractWithClaude(doc, pdfBytes);
+  const ai = await withBudget(extractWithClaude(doc, pdfBytes), 'The model pass');
   if (!ai.ok) {
     ruleResult.warnings.push(
       scanned

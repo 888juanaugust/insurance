@@ -23,7 +23,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   if (!user) redirect('/login');
 
   const { id } = await params;
-  const client = getClient(id);
+  const client = getClient(id, user.org_id);
   if (!client || client.org_id !== user.org_id) notFound();
 
   const policies = listClientPolicies(id);

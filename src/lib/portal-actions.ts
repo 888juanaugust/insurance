@@ -3,14 +3,14 @@
 import crypto from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { headers } from 'next/headers';
+import { clientIp } from './request';
 import { hashPassword, verifyPassword } from './auth';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
-import { createPortalSession, destroyPortalSession, currentPortalClient } from './portal-session';
+import { createPortalSession, destroyPortalSession, currentPortalClient, revokePortalSessions } from './portal-session';
 import { authorise, forbid } from './guard';
 import { audit } from './audit';
 import {
-  findClientForPortal, setPortalCode, touchPortalSeen, portalRenewalState,
+  findClientsForPortal, setPortalCode, touchPortalSeen, portalRenewalState,
   requestRenewal, getClient,
 } from './queries';
 
@@ -26,8 +26,7 @@ export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<
   const code = String(fd.get('code') ?? '').trim();
   if (!identification || !code) return { error: 'Enter your NRIC or company registration number and your access code.' };
 
-  const hdrs = await headers();
-  const ip = (hdrs.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
+  const ip = (await clientIp()) ?? 'unknown';
   const keys = [`portal-ip:${ip}`, `portal-id:${identification.replace(/[^A-Za-z0-9]/g, '')}`];
   for (const key of keys) {
     const verdict = checkRate(key);
@@ -36,8 +35,6 @@ export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<
       return { error: `Too many attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
     }
   }
-
-  const client = findClientForPortal(identification);
 
   /*
    * One message for every failure. Saying "no such client" would turn the
@@ -49,12 +46,18 @@ export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<
     return { error: 'Those details do not match an account. Ask the agency to check your access code.' };
   };
 
-  if (!client || !client.portal_enabled || !client.portal_code_hash) return refuse();
-  if (!verifyPassword(code, client.portal_code_hash)) return refuse();
+  // Two agencies can hold the same NRIC. The code is checked against each
+  // client the identifier could mean, and the one it opens is the one.
+  let client: { id: string; org_id: string } | null = null;
+  for (const c of findClientsForPortal(identification)) {
+    if (!c.portal_enabled || !c.portal_code_hash) continue;
+    if (await verifyPassword(code, c.portal_code_hash)) { client = c; break; }
+  }
+  if (!client) return refuse();
 
   for (const key of keys) clearFailures(key);
   touchPortalSeen(client.id);
-  await createPortalSession(client.id);
+  await createPortalSession(client.id, client.org_id, ip === 'unknown' ? null : ip);
   redirect('/portal');
 }
 
@@ -103,7 +106,7 @@ export async function issuePortalCodeAction(_prev: unknown, fd: FormData): Promi
   if (!guard.ok) return { error: guard.message };
   const user = guard.user;
 
-  const client = getClient(clientId);
+  const client = getClient(clientId, user.org_id);
   if (!client || client.org_id !== user.org_id) return { error: 'That client could not be found.' };
   if (!client.nric && !client.business_reg) {
     return {
@@ -118,7 +121,9 @@ export async function issuePortalCodeAction(_prev: unknown, fd: FormData): Promi
     .join('')
     .replace(/(.{5})(.{5})/, '$1-$2');
 
-  setPortalCode(clientId, user.org_id, hashPassword(code));
+  setPortalCode(clientId, user.org_id, await hashPassword(code));
+  // A new code ends whatever the old one opened.
+  revokePortalSessions(clientId);
   await audit(user, {
     action: 'portal.issue_code', entity: 'client', entityId: clientId, entityLabel: client.name,
     summary: `Portal access code issued to ${client.name}. The code itself is stored hashed and is not recoverable.`,
@@ -133,10 +138,11 @@ export async function revokePortalAccessAction(fd: FormData) {
   if (!guard.ok) forbid(guard.message);
   const user = guard.user;
 
-  const client = getClient(clientId);
+  const client = getClient(clientId, user.org_id);
   if (!client || client.org_id !== user.org_id) redirect('/clients');
 
   setPortalCode(clientId, user.org_id, null);
+  revokePortalSessions(clientId);
   await audit(user, {
     action: 'portal.revoke', entity: 'client', entityId: clientId, entityLabel: client.name,
     summary: `Portal access withdrawn from ${client.name}. Any session they hold stops at their next request.`,

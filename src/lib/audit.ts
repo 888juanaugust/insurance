@@ -1,4 +1,5 @@
-import { headers } from 'next/headers';
+import crypto from 'node:crypto';
+import { clientIp } from './request';
 import { getDb } from './db';
 import type { SessionUser } from './session';
 
@@ -37,14 +38,9 @@ export function diff(
 }
 
 async function callerIp(): Promise<string | null> {
-  try {
-    const hdrs = await headers();
-    return (hdrs.get('x-forwarded-for') ?? '').split(',')[0].trim() || null;
-  } catch {
-    // Outside a request (a script, a test) there are no headers, and a
-    // missing address must never cost the entry itself.
-    return null;
-  }
+  // Outside a request (a script, a test) there are no headers, and a missing
+  // address must never cost the entry itself — clientIp returns null then.
+  return clientIp();
 }
 
 /**
@@ -68,7 +64,7 @@ export async function audit(
             @entity_label, @outcome, @summary, @changes, @ip)`,
       )
       .run({
-        id: `aud-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+        id: `aud-${crypto.randomUUID()}`,
         org_id: user.org_id,
         at: new Date().toISOString(),
         user_id: user.id,

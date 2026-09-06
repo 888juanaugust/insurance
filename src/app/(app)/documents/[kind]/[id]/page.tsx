@@ -32,7 +32,7 @@ export default async function DocumentPage({
   const title = KINDS[kind];
   if (!title) notFound();
 
-  const data = getPolicy(id);
+  const data = getPolicy(id, user.org_id);
   if (!data || data.policy.org_id !== user.org_id) notFound();
 
   const { policy, motor, client, principalRow, payments } = data;

@@ -2,7 +2,7 @@ import type { Database } from 'better-sqlite3';
 import { DEFAULT_TEMPLATES } from './messaging';
 import { calculateEndorsement } from './endorsements';
 import { readStatement, reconcile, type BookPolicy } from './statements';
-import { hashPassword } from './auth';
+import { hashPasswordSync } from './auth';
 import { inferClassOfBusiness } from './classes';
 import { today } from './format';
 
@@ -687,18 +687,31 @@ const RENEWAL_REQUESTS: Row[] = [
  */
 export const DEMO_USER_IDS: string[] = USERS.map((u) => u.id);
 
-export function seed(db: Database) {
+export type SeedOptions = {
+  /** Create the demo sign-in accounts. Never by default in production. */
+  demoUsers: boolean;
+  /** The first real administrator, in the primary organisation. */
+  admin: { email: string; password: string } | null;
+};
+
+export function seed(db: Database, options: SeedOptions = { demoUsers: true, admin: null }) {
   insertAll(db, 'organisation', ORGS);
   insertAll(db, 'principal', PRINCIPALS);
 
-  insertAll(
-    db,
-    'app_user',
-    USERS.map((u) => ({
-      id: u.id, org_id: u.org_id, email: u.email, password_hash: hashPassword(u.password),
-      name: u.name, role: u.role, agent_code: u.agent_code, phone: u.phone, status: u.status,
-    })),
-  );
+  const users: Row[] = options.demoUsers
+    ? USERS.map((u) => ({
+        id: u.id, org_id: u.org_id, email: u.email, password_hash: hashPasswordSync(u.password),
+        name: u.name, role: u.role, agent_code: u.agent_code, phone: u.phone, status: u.status,
+      }))
+    : [];
+  if (options.admin) {
+    users.push({
+      id: 'usr-admin-first', org_id: 'org-exe', email: options.admin.email,
+      password_hash: hashPasswordSync(options.admin.password),
+      name: 'Administrator', role: 'admin', agent_code: null, phone: null, status: 'active',
+    });
+  }
+  insertAll(db, 'app_user', users);
 
   insertAll(db, 'sub_agent', SUB_AGENTS);
   insertAll(db, 'client_group', GROUPS);

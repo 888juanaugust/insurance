@@ -6,6 +6,7 @@ import { authorise, forbid } from './guard';
 import { audit, diff } from './audit';
 import { extractPolicy, type ExtractionResult, type FieldKey } from './extract';
 import {
+  createPolicyWithLinks, clientBelongsToOrg, subAgentBelongsToOrg,
   createPolicy, updatePolicy, deletePolicy, policyDeleteBlock, bulkMarkPaid, recordUpload,
   findClientByIdentity, createClientFromPolicy, findPolicyByNumber, findPrincipalByName,
   listPrincipals, getPolicy, attachDocumentToPolicy, findDocumentByHash,
@@ -16,6 +17,9 @@ import {
   contentTypeFor, storageKeyFor, writeDocument, deleteDocument, sha256,
 } from './files';
 import { classSlug, today, money } from './format';
+import { checkUploadRate } from './rate-limit';
+import { safeBack } from './request';
+import { policyFigures } from './premium';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
@@ -41,6 +45,15 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
   // Housekeeping, here because this is the only place documents arrive: a
   // review that was read and then abandoned leaves a file nothing references.
   await sweepAbandonedUploads(user);
+
+  // Reading a PDF is CPU on the one process, and the model pass is paid for.
+  // Sixty readings in fifteen minutes is a whole afternoon's stack; past
+  // that the person is asked to wait rather than the server made to.
+  const uploads = checkUploadRate(`upload:${user.id}`);
+  if (!uploads.allowed) {
+    const mins = Math.ceil(uploads.retryAfterSec / 60);
+    return { ok: false, error: `That is a lot of documents in a short time. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+  }
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) {
@@ -104,6 +117,7 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
     field_count: found,
     warnings: JSON.stringify(result.warnings),
     extracted_json: JSON.stringify(result.fields),
+    detected_class: result.cls,
     uploaded_by: user.id,
     storage_key: null,
     content_type: type,
@@ -148,9 +162,17 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
  * somebody's document is worth a line in the trail even when nobody asked for
  * it, so the sweep records what it took.
  */
+const lastSweep = new Map<string, number>();
+const SWEEP_EVERY_MS = 60 * 60 * 1000;
+
 async function sweepAbandonedUploads(user: { id: string; org_id: string; name: string; role: string }) {
+  // Once an hour per agency, not on every file of a thirty-file batch; and
+  // only this agency's uploads — it used to remove every organisation's.
+  const now = Date.now();
+  if (now - (lastSweep.get(user.org_id) ?? 0) < SWEEP_EVERY_MS) return;
+  lastSweep.set(user.org_id, now);
   try {
-    const stale = abandonedUploads(7);
+    const stale = abandonedUploads(user.org_id, 7);
     if (!stale.length) return;
     deleteDocumentRows(stale.map((d) => d.id));
     for (const d of stale) deleteDocument(d.storage_key);
@@ -173,7 +195,6 @@ function numOf(fd: FormData, key: string): number {
   const n = Number(String(fd.get(key) ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 }
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Shared with the batch importer, so a policy saved one at a time and one
@@ -187,27 +208,9 @@ export async function buildInputFrom(
 
 function buildInput(fd: FormData, orgId: string, clientId: string, principalId: string): PolicyInput {
   const cls = str(fd, 'class') === 'non_motor' ? 'non_motor' : 'motor';
-  const gross = numOf(fd, 'gross_premium');
-  const tax = numOf(fd, 'service_tax');
-  const stamp = numOf(fd, 'stamp_duty');
-  const totalField = numOf(fd, 'total_premium');
-  const total = totalField > 0 ? totalField : r2(gross + tax + stamp);
-
-  const commissionRate = numOf(fd, 'commission_rate');
-  /*
-   * Blank means "work it out"; a typed 0 means nil. A staff policy or an
-   * accommodation case earns nothing, and treating the zero as a blank booked
-   * commission on it anyway — which the insurer's statement then showed as
-   * short-paid, every month, for a case that was never going to pay.
-   */
-  const commissionAmt = str(fd, 'commission_amt') === ''
-    ? r2(gross * (commissionRate / 100))
-    : numOf(fd, 'commission_amt');
-
-  const ncdPct = numOf(fd, 'ncd_pct');
-  const extra = numOf(fd, 'extra_premium');
-  const basicField = numOf(fd, 'basic_premium');
-  const basic = basicField > 0 ? basicField : ncdPct < 100 ? r2((gross - extra) / (1 - ncdPct / 100)) : gross;
+  // The arithmetic lives in premium.ts, where it can be tested with plain
+  // values; this only maps the form onto the row.
+  const f = policyFigures((name) => String(fd.get(name) ?? ''));
 
   return {
     org_id: orgId,
@@ -225,16 +228,16 @@ function buildInput(fd: FormData, orgId: string, clientId: string, principalId: 
     expiry_date: str(fd, 'expiry_date'),
     issue_date: str(fd, 'issue_date') || str(fd, 'effective_date'),
     sum_insured: numOf(fd, 'sum_insured'),
-    basic_premium: basic,
-    ncd_pct: ncdPct,
-    ncd_amount: r2(basic - (gross - extra)),
-    extra_premium: extra,
-    gross_premium: gross,
-    service_tax: tax,
-    stamp_duty: stamp,
-    total_premium: total,
-    commission_rate: commissionRate,
-    commission_amt: commissionAmt,
+    basic_premium: f.basic_premium,
+    ncd_pct: f.ncd_pct,
+    ncd_amount: f.ncd_amount,
+    extra_premium: f.extra_premium,
+    gross_premium: f.gross_premium,
+    service_tax: f.service_tax,
+    stamp_duty: f.stamp_duty,
+    total_premium: f.total_premium,
+    commission_rate: f.commission_rate,
+    commission_amt: f.commission_amt,
     agent_commission: numOf(fd, 'agent_commission'),
     referral_fee: numOf(fd, 'referral_fee'),
     excess: numOf(fd, 'excess'),
@@ -325,7 +328,16 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
 
   // Resolve the client: an existing one, or create from what the document gave.
+  // An id posted from the form has to be one of this agency's — a client id
+  // from another agency would have put their name and NRIC on this policy's page.
   let clientId = str(fd, 'client_id');
+  if (clientId && !clientBelongsToOrg(clientId, user.org_id)) {
+    return { error: 'That client is not on your register.', values: submitted(fd) };
+  }
+  const subAgentId = str(fd, 'sub_agent_id');
+  if (subAgentId && !subAgentBelongsToOrg(subAgentId, user.org_id)) {
+    return { error: 'That servicing agent is not one of yours.', values: submitted(fd) };
+  }
   if (!clientId) {
     const name = str(fd, 'insured_name');
     if (!name) return { error: 'Enter the insured name, or pick an existing client.' , values: submitted(fd) };
@@ -339,10 +351,28 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   const editingId = str(fd, 'policy_id');
   const input = buildInput(fd, user.org_id, clientId, principalId);
 
+  // The sub agent's share cannot exceed what the agency earns on the case.
+  if (input.agent_commission > input.commission_amt + 0.005) {
+    return {
+      error: `Agent commission of ${money(input.agent_commission)} is more than the ${money(input.commission_amt)} the agency earns on this policy.`,
+      values: submitted(fd),
+    };
+  }
+
   if (editingId) {
+    // The same duplicate check as on create: a policy number changed on edit
+    // to one already on file went straight in, and the statement matcher then
+    // booked the insurer's payment against whichever row it reached first.
+    const clash = findPolicyByNumber(user.org_id, policyNo);
+    if (clash && clash.id !== editingId && str(fd, 'allow_duplicate') !== '1') {
+      return {
+        error: `Policy ${policyNo} already exists. Tick "save anyway" to record it a second time.`,
+        values: submitted(fd),
+      };
+    }
     const documentId = str(fd, 'document_id');
     if (documentId) attachDocumentToPolicy(documentId, editingId, user.org_id);
-    const previous = getPolicy(editingId)?.policy as Record<string, unknown> | undefined;
+    const previous = getPolicy(editingId, user.org_id)?.policy as Record<string, unknown> | undefined;
     const ok = updatePolicy(editingId, user.org_id, input);
     if (!ok) return { error: 'That policy could not be found.' , values: submitted(fd) };
     await audit(user, {
@@ -364,18 +394,16 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
     };
   }
 
-  const id = createPolicy(input, { uploadedAt: today() });
-
   // The document was stored before the policy existed, so this is where the
-  // two are tied together. Without it the schedule the policy was read from
-  // is on disk but unreachable from the policy itself.
+  // two are tied together — in the same transaction as the policy, so the
+  // schedule it was read from can never be on disk but unreachable. The
+  // renewal link likewise: it is the only thing distinguishing a renewal from
+  // a lapse afterwards.
   const documentId = str(fd, 'document_id');
-  const attached = documentId ? attachDocumentToPolicy(documentId, id, user.org_id) : false;
-
-  // What this renewed, if anything. The retention report reads this link, and
-  // it is the only thing distinguishing a renewal from a lapse afterwards.
   const renewedFrom = str(fd, 'renewed_from');
-  if (renewedFrom) linkRenewal(id, renewedFrom, user.org_id);
+  const { id, attached } = createPolicyWithLinks(input, {
+    uploadedAt: today(), documentId: documentId || null, renewedFrom: renewedFrom || null,
+  });
 
   await audit(user, {
     action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,
@@ -401,7 +429,7 @@ export async function deletePolicyAction(fd: FormData) {
   // The page hides the button when the policy cannot go, but the page it was
   // rendered from may be minutes old — a collection recorded in between has to
   // stop the delete, not be discovered afterwards.
-  const existing = getPolicy(id)?.policy as { policy_no: string; total_premium: number } | undefined;
+  const existing = getPolicy(id, user.org_id)?.policy as { policy_no: string; total_premium: number } | undefined;
   const blocked = policyDeleteBlock(id, user.org_id);
   if (blocked) {
     await audit(user, {
@@ -442,7 +470,7 @@ export async function bulkPaidAction(fd: FormData) {
       summary: `${n} ${kind === 'client' ? 'client collection' : 'principal remittance'}${n === 1 ? '' : 's'} marked settled across ${ids.length} ${ids.length === 1 ? 'policy' : 'policies'}.`,
     });
   }
-  revalidatePath(String(fd.get('back') ?? '/insurance/general-motor'));
+  revalidatePath(safeBack(fd.get('back'), '/insurance/general-motor'));
   revalidatePath('/');
 }
 

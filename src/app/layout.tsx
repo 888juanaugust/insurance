@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import './globals.css';
 import { THEME_SCRIPT } from '@/components/UserMenu';
 
@@ -7,7 +8,11 @@ export const metadata: Metadata = {
   description: 'Insurhelp — policy, collection and commission management for insurance agencies.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The nonce the middleware minted for this response; the CSP lets only
+  // scripts carrying it run, and the theme script below is inline.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="en">
       <head>
@@ -23,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Settles light or dark before the first paint. Without it a person
             who chose dark gets a white flash on every navigation while React
             mounts and reads the stored choice. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>{children}</body>
     </html>

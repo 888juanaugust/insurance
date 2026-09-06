@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { currentUser } from './session';
+import { currentUser, revokeOtherSessions } from './session';
 import { audit, diff } from './audit';
 import { hashPassword, verifyPassword } from './auth';
 import { passwordProblem } from './passwords';
@@ -53,11 +53,14 @@ export async function changePasswordAction(_prev: unknown, fd: FormData): Promis
   if (next === current) return { error: 'The new password must differ from the current one.' };
 
   const stored = getUserPasswordHash(user.id);
-  if (!stored || !verifyPassword(current, stored)) {
+  if (!stored || !(await verifyPassword(current, stored))) {
     return { error: 'The current password is not correct.' };
   }
 
-  changePassword(user.id, hashPassword(next));
+  changePassword(user.id, await hashPassword(next));
+  // A password is changed because the old one may be known. Every session
+  // but this one ends with it.
+  await revokeOtherSessions(user.id);
   await audit(user, {
     action: 'settings.password', entity: 'app_user', entityId: user.id, entityLabel: user.name,
     summary: `${user.name} changed their own password.`,

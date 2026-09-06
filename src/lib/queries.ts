@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { getDb } from './db';
 import { DEMO_USER_IDS } from './seed';
 import type { FollowUpOutcome } from './follow-up';
@@ -86,13 +87,33 @@ export function listClients(orgId: string, search = '', type = '') {
     .all(orgId, search, like, like, like, like, type, type) as Array<Record<string, any>>;
 }
 
-export function getClient(id: string) {
+/**
+ * The organisation is part of the lookup, not a check made afterwards. A
+ * policy could be created against another agency's client id, and the policy
+ * page then fetched that client unscoped and displayed their name, NRIC and
+ * address. With the filter in the query there is no call site that can forget
+ * it.
+ */
+export function getClient(id: string, orgId: string) {
   return getDb()
     .prepare(
       `SELECT c.*, g.name AS group_name FROM client c
-       LEFT JOIN client_group g ON g.id = c.group_id WHERE c.id = ?`,
+       LEFT JOIN client_group g ON g.id = c.group_id WHERE c.id = ? AND c.org_id = ?`,
     )
-    .get(id) as Record<string, any> | undefined;
+    .get(id, orgId) as Record<string, any> | undefined;
+}
+
+/** Whether a client id posted from a form is this agency's. */
+export function clientBelongsToOrg(id: string, orgId: string): boolean {
+  return Boolean(getDb().prepare('SELECT 1 FROM client WHERE id = ? AND org_id = ?').get(id, orgId));
+}
+
+export function subAgentBelongsToOrg(id: string, orgId: string): boolean {
+  return Boolean(getDb().prepare('SELECT 1 FROM sub_agent WHERE id = ? AND org_id = ?').get(id, orgId));
+}
+
+export function clientGroupBelongsToOrg(id: string, orgId: string): boolean {
+  return Boolean(getDb().prepare('SELECT 1 FROM client_group WHERE id = ? AND org_id = ?').get(id, orgId));
 }
 
 export function listGroups(orgId: string) {
@@ -158,9 +179,9 @@ export function listPolicies(
     .all(orgId, cls, cls, status, status, principal, principal, agent, agent, search, like, like, like, like) as PolicyRow[];
 }
 
-export function getPolicy(id: string) {
+export function getPolicy(id: string, orgId: string) {
   const db = getDb();
-  const policy = db.prepare(`${POLICY_SELECT} WHERE p.id = ?`).get(id) as PolicyRow | undefined;
+  const policy = db.prepare(`${POLICY_SELECT} WHERE p.id = ? AND p.org_id = ?`).get(id, orgId) as PolicyRow | undefined;
   if (!policy) return undefined;
   return {
     policy,
@@ -169,7 +190,7 @@ export function getPolicy(id: string) {
     extensions: db.prepare('SELECT * FROM policy_extension WHERE policy_id = ? ORDER BY id').all(id) as Array<Record<string, any>>,
     payments: db.prepare('SELECT * FROM payment WHERE policy_id = ? ORDER BY kind').all(id) as Array<Record<string, any>>,
     commission: db.prepare('SELECT * FROM commission WHERE policy_id = ?').get(id) as Record<string, any> | undefined,
-    client: db.prepare('SELECT * FROM client WHERE id = ?').get(policy.client_id) as Record<string, any>,
+    client: db.prepare('SELECT * FROM client WHERE id = ? AND org_id = ?').get(policy.client_id, orgId) as Record<string, any>,
     principalRow: db.prepare('SELECT * FROM principal WHERE id = ?').get(policy.principal_id) as Record<string, any>,
   };
 }
@@ -533,9 +554,9 @@ export function listCommissions(orgId: string, status = '') {
 export function commissionTotals(orgId: string) {
   return getDb()
     .prepare(
-      `SELECT COALESCE(SUM(CASE WHEN cm.status='pending'  THEN cm.net_amount ELSE 0 END),0) AS pending,
-              COALESCE(SUM(CASE WHEN cm.status='approved' THEN cm.net_amount ELSE 0 END),0) AS approved,
-              COALESCE(SUM(CASE WHEN cm.status='paid'     THEN cm.net_amount ELSE 0 END),0) AS paid
+      `SELECT ROUND(COALESCE(SUM(CASE WHEN cm.status='pending'  THEN cm.net_amount ELSE 0 END),0), 2) AS pending,
+              ROUND(COALESCE(SUM(CASE WHEN cm.status='approved' THEN cm.net_amount ELSE 0 END),0), 2) AS approved,
+              ROUND(COALESCE(SUM(CASE WHEN cm.status='paid'     THEN cm.net_amount ELSE 0 END),0), 2) AS paid
          FROM commission cm JOIN policy p ON p.id = cm.policy_id WHERE p.org_id = ?`,
     )
     .get(orgId) as { pending: number; approved: number; paid: number };
@@ -694,8 +715,15 @@ export type PolicyInput = {
   };
 };
 
+/**
+ * Record ids. A UUID from the CSPRNG, not a timestamp plus Math.random():
+ * V8's Math.random is a seeded generator whose state can be recovered from a
+ * few observed outputs, and a tenant can observe as many of its own ids as it
+ * likes. Every id in the application is a guess away from another agency's
+ * record only if it can be guessed.
+ */
 function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 /** Create a policy plus its class detail and the two payment records. */
@@ -764,10 +792,39 @@ export function createPolicy(input: PolicyInput, opts: { uploadedAt?: string } =
   return id;
 }
 
+/**
+ * Create a policy and, in the same transaction, tie it to the document it was
+ * read from and the policy it renewed. Done as three writes, a failure between
+ * them left a policy whose schedule was on disk but unreachable, or a renewal
+ * the retention report counted as a lapse.
+ */
+export function createPolicyWithLinks(
+  input: PolicyInput,
+  opts: { uploadedAt?: string; documentId?: string | null; renewedFrom?: string | null },
+): { id: string; attached: boolean; linked: boolean } {
+  const db = getDb();
+  return db.transaction(() => {
+    const id = createPolicy(input, { uploadedAt: opts.uploadedAt });
+    const attached = opts.documentId ? attachDocumentToPolicy(opts.documentId, id, input.org_id) : false;
+    const linked = opts.renewedFrom ? linkRenewal(id, opts.renewedFrom, input.org_id) : false;
+    return { id, attached, linked };
+  })();
+}
+
+/**
+ * Everything createPolicy writes, updatePolicy revises — both payment legs
+ * (the principal's net of commission), the class detail for either class, and
+ * the commission row while it is still pending. It used to touch the policy,
+ * the motor detail and the client leg only: correct a premium from 1,900 to
+ * 2,400 and the agency still owed the insurer a figure computed from 1,900,
+ * a non-motor risk edited on screen was discarded, and Accounting went on
+ * approving the original commission.
+ */
 export function updatePolicy(id: string, orgId: string, input: PolicyInput) {
   const db = getDb();
   const owned = db.prepare('SELECT id FROM policy WHERE id = ? AND org_id = ?').get(id, orgId);
   if (!owned) return false;
+  const dueToPrincipal = Math.round((input.total_premium - input.commission_amt) * 100) / 100;
 
   const tx = db.transaction(() => {
     db.prepare(
@@ -784,18 +841,51 @@ export function updatePolicy(id: string, orgId: string, input: PolicyInput) {
     ).run({ ...input, id });
 
     if (input.class === 'motor' && input.motor) {
-      db.prepare(
+      const changed = db.prepare(
         `UPDATE motor_detail SET vehicle_no=@vehicle_no, make_model=@make_model, body_type=@body_type,
            engine_no=@engine_no, chassis_no=@chassis_no, engine_cc=@engine_cc, year_make=@year_make,
            seating=@seating, hire_purchase=@hire_purchase, windscreen_si=@windscreen_si,
            named_drivers=@named_drivers WHERE policy_id=@policy_id`,
-      ).run({ policy_id: id, ...input.motor });
+      ).run({ policy_id: id, ...input.motor }).changes;
+      if (!changed) {
+        db.prepare(
+          `INSERT INTO motor_detail (policy_id, vehicle_no, make_model, body_type, engine_no,
+             chassis_no, engine_cc, year_make, seating, hire_purchase, windscreen_si,
+             named_drivers, extensions, rtd_code)
+           VALUES (@policy_id, @vehicle_no, @make_model, @body_type, @engine_no, @chassis_no,
+             @engine_cc, @year_make, @seating, @hire_purchase, @windscreen_si, @named_drivers,
+             @extensions, @rtd_code)`,
+        ).run({ policy_id: id, ...input.motor });
+      }
     }
 
-    // Keep the client-side amount in step with a corrected premium.
+    if (input.class === 'non_motor' && input.nonMotor) {
+      const changed = db.prepare(
+        `UPDATE non_motor_detail SET risk_type=@risk_type, risk_address=@risk_address,
+           occupancy=@occupancy, period_desc=@period_desc, benefits=@benefits
+         WHERE policy_id=@policy_id`,
+      ).run({ policy_id: id, ...input.nonMotor }).changes;
+      if (!changed) {
+        db.prepare(
+          `INSERT INTO non_motor_detail (policy_id, risk_type, risk_address, occupancy, period_desc, benefits)
+           VALUES (@policy_id, @risk_type, @risk_address, @occupancy, @period_desc, @benefits)`,
+        ).run({ policy_id: id, ...input.nonMotor });
+      }
+    }
+
+    // Both legs follow a corrected premium, while they are still open.
     db.prepare(
       `UPDATE payment SET amount = @amount WHERE policy_id = @id AND kind = 'client' AND status != 'paid'`,
     ).run({ id, amount: input.total_premium });
+    db.prepare(
+      `UPDATE payment SET amount = @amount WHERE policy_id = @id AND kind = 'principal' AND status != 'paid'`,
+    ).run({ id, amount: dueToPrincipal });
+
+    // The sub agent's share, while nobody has approved or paid it yet.
+    db.prepare(
+      `UPDATE commission SET sub_agent_id = @sub_agent_id, gross_amount = @gross, net_amount = @gross + override_amt
+        WHERE policy_id = @id AND status = 'pending'`,
+    ).run({ id, sub_agent_id: input.sub_agent_id, gross: input.agent_commission });
   });
 
   tx();
@@ -830,6 +920,18 @@ export function policyDeleteBlock(id: string, orgId: string): string | null {
     .get(id) as { status: string } | undefined;
   if (commission) {
     return `Commission on this policy is already ${commission.status}. Cancel it instead of deleting it.`;
+  }
+
+  // Claims and endorsements cascade with the policy. A policy carrying either
+  // is the record those hang off, and deleting it would take an RM 8,000
+  // own-damage claim, its documents and its settlement with it, unseen.
+  const claims = (db.prepare('SELECT COUNT(*) n FROM claim WHERE policy_id = ?').get(id) as { n: number }).n;
+  if (claims) {
+    return `${claims} claim${claims === 1 ? ' is' : 's are'} recorded on this policy. Cancel it instead, so the claim keeps its policy.`;
+  }
+  const endorsements = (db.prepare('SELECT COUNT(*) n FROM endorsement WHERE policy_id = ?').get(id) as { n: number }).n;
+  if (endorsements) {
+    return `${endorsements} endorsement${endorsements === 1 ? ' is' : 's are'} recorded on this policy. Cancel it instead.`;
   }
 
   return null;
@@ -884,19 +986,19 @@ export function recordUpload(row: {
   page_count: number; principal_detected: string | null; used_claude: number;
   field_count: number; warnings: string; extracted_json: string; uploaded_by: string;
   storage_key: string | null; content_type: string | null; sha256: string | null;
-  kind: string; note: string | null;
+  kind: string; note: string | null; detected_class?: 'motor' | 'non_motor' | null;
 }): string {
   const id = newId('doc');
   getDb()
     .prepare(
       `INSERT INTO policy_document (id, org_id, policy_id, filename, byte_size, page_count,
          principal_detected, used_claude, field_count, warnings, extracted_json, uploaded_by,
-         uploaded_at, storage_key, content_type, sha256, kind, note)
+         uploaded_at, storage_key, content_type, sha256, kind, note, detected_class)
        VALUES (@id, @org_id, @policy_id, @filename, @byte_size, @page_count, @principal_detected,
          @used_claude, @field_count, @warnings, @extracted_json, @uploaded_by, @uploaded_at,
-         @storage_key, @content_type, @sha256, @kind, @note)`,
+         @storage_key, @content_type, @sha256, @kind, @note, @detected_class)`,
     )
-    .run({ ...row, id, uploaded_at: today() });
+    .run({ detected_class: null, ...row, id, uploaded_at: today() });
   return id;
 }
 
@@ -908,6 +1010,8 @@ export type DocumentRow = {
   /** What the reader found, kept so a reading can be reopened or re-judged. */
   principal_detected: string | null; field_count: number;
   warnings: string | null; extracted_json: string | null;
+  /** motor or non_motor, as the reader judged it — what the agent was shown. */
+  detected_class: string | null;
 };
 
 export function getDocument(id: string, orgId: string): DocumentRow | undefined {
@@ -1349,7 +1453,7 @@ export function listRenewalRequests(orgId: string, tab: 'inbox' | 'expiring' | '
     .prepare(
       `SELECT rr.*, p.policy_no, p.class, c.name AS client_name, pr.short_name AS principal
          FROM renewal_request rr
-         JOIN policy p     ON p.id  = rr.policy_id
+         JOIN policy p     ON p.id  = rr.policy_id AND p.org_id = rr.org_id
          JOIN client c     ON c.id  = p.client_id
          JOIN principal pr ON pr.id = p.principal_id
         WHERE rr.org_id = ? AND rr.status IN ${statuses}
@@ -1377,6 +1481,10 @@ export function setRenewalStatus(id: string, orgId: string, status: string) {
 
 export function requestRenewal(orgId: string, policyId: string, source = 'Home') {
   const db = getDb();
+  // The id came off a form. Another agency's policy must not be pulled into
+  // this agency's inbox, where its number, insurer and client would render.
+  const owned = db.prepare('SELECT 1 FROM policy WHERE id = ? AND org_id = ?').get(policyId, orgId);
+  if (!owned) return false;
   const existing = db
     .prepare("SELECT id FROM renewal_request WHERE org_id = ? AND policy_id = ? AND status IN ('inbox','processing')")
     .get(orgId, policyId);
@@ -1384,7 +1492,7 @@ export function requestRenewal(orgId: string, policyId: string, source = 'Home')
   db.prepare(
     `INSERT INTO renewal_request (id, org_id, policy_id, status, source, requested_at, note)
      VALUES (@id, @org, @policy, 'inbox', @source, @at, NULL)`,
-  ).run({ id: `rr-${Date.now().toString(36)}`, org: orgId, policy: policyId, source, at: today() });
+  ).run({ id: newId('rr'), org: orgId, policy: policyId, source, at: today() });
   return true;
 }
 
@@ -1886,7 +1994,7 @@ export function auditFacets(orgId: string) {
  * unbounded storage, and somebody's personal data kept with nothing pointing
  * at it. Anything still unattached after a week goes.
  */
-export function abandonedUploads(days = 7): Array<{ id: string; storage_key: string }> {
+export function abandonedUploads(orgId: string, days = 7): Array<{ id: string; storage_key: string }> {
   /*
    * Measured on the application's clock, not the machine's. `uploaded_at` is
    * written with today(), which IH_TODAY can pin; a cutoff taken from
@@ -1897,9 +2005,9 @@ export function abandonedUploads(days = 7): Array<{ id: string; storage_key: str
   return getDb()
     .prepare(
       `SELECT id, storage_key FROM policy_document
-        WHERE policy_id IS NULL AND storage_key IS NOT NULL AND uploaded_at < ?`,
+        WHERE org_id = ? AND policy_id IS NULL AND storage_key IS NOT NULL AND uploaded_at < ?`,
     )
-    .all(cutoff) as Array<{ id: string; storage_key: string }>;
+    .all(orgId, cutoff) as Array<{ id: string; storage_key: string }>;
 }
 
 export function deleteDocumentRows(ids: string[]): number {
@@ -2441,49 +2549,62 @@ export function importClients(orgId: string, rows: ImportedClient[]): number {
 export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
   const db = getDb();
   /*
-   * Imported policies used to arrive with no commission at all — absent from
-   * every commission report and short-paid on every insurer statement. The
-   * rate on file for the insurer and class is the same one a keyed policy
-   * would get, so it is applied here and the two legs of the money follow.
+   * Through createPolicy, so an imported policy is a policy: both payment
+   * legs, the commission row, the class detail. Written directly, imported
+   * policies had no commission and no commission row — absent from every
+   * commission report, and short-paid on every insurer statement.
    */
   const rateOf = db.prepare('SELECT motor_rate, non_motor_rate FROM principal WHERE id = ?');
-  const policy = db.prepare(
-    `INSERT INTO policy (id, org_id, client_id, principal_id, policy_no, class, product,
-       type_of_cover, status, case_type, effective_date, expiry_date, issue_date, created_date,
-       sum_insured, basic_premium, ncd_pct, ncd_amount, extra_premium, gross_premium,
-       service_tax, stamp_duty, total_premium, commission_rate, commission_amt, excess,
-       referral_fee, agent_commission, consultant_commission, uploaded_at, source_file, remarks)
-     VALUES (@id, @org_id, @client_id, @principal_id, @policy_no, @class, @product,
-       @product, 'active', 'new', @effective_date, @expiry_date, @effective_date, @created,
-       @sum_insured, @gross_premium, @ncd_pct, 0, 0, @gross_premium,
-       @service_tax, @stamp_duty, @total_premium, @commission_rate, @commission_amt, 0,
-       0, 0, 0, @created, 'imported', @remarks)`,
-  );
-  const motor = db.prepare(
-    `INSERT INTO motor_detail (policy_id, vehicle_no, make_model, windscreen_si)
-     VALUES (?, ?, ?, 0)`,
-  );
-  // Both legs of the money, so an imported policy behaves like a keyed one on
-  // the dashboard rather than showing nothing outstanding.
-  const payment = db.prepare(
-    `INSERT INTO payment (id, policy_id, kind, amount, paid_amount, due_date, status)
-     VALUES (@id, @policy_id, @kind, @amount, 0, @due_date, 'outstanding')`,
-  );
-
   const tx = db.transaction((batch: ImportedPolicy[]) => {
     for (const r of batch) {
-      const id = newId('pol');
       const rates = rateOf.get(r.principal_id) as { motor_rate: number; non_motor_rate: number } | undefined;
-      const commission_rate = Number((r.class === 'motor' ? rates?.motor_rate : rates?.non_motor_rate) ?? 0);
+      const cls: 'motor' | 'non_motor' = r.class === 'non_motor' ? 'non_motor' : 'motor';
+      const commission_rate = Number((cls === 'motor' ? rates?.motor_rate : rates?.non_motor_rate) ?? 0);
       const commission_amt = Math.round(r.gross_premium * (commission_rate / 100) * 100) / 100;
-      policy.run({ ...r, id, org_id: orgId, created: today(), commission_rate, commission_amt });
-      if (r.class === 'motor' && (r.vehicle_no || r.make_model)) {
-        motor.run(id, r.vehicle_no, r.make_model);
-      }
-      payment.run({ id: `${id}-pay-c`, policy_id: id, kind: 'client', amount: r.total_premium, due_date: r.effective_date });
-      payment.run({
-        id: `${id}-pay-p`, policy_id: id, kind: 'principal',
-        amount: Math.round((r.total_premium - commission_amt) * 100) / 100, due_date: r.effective_date,
+      const basic = r.ncd_pct > 0 && r.ncd_pct < 100
+        ? Math.round((r.gross_premium / (1 - r.ncd_pct / 100)) * 100) / 100
+        : r.gross_premium;
+      createPolicy({
+        org_id: orgId,
+        client_id: r.client_id,
+        principal_id: r.principal_id,
+        sub_agent_id: null,
+        policy_no: r.policy_no,
+        cover_note_no: null,
+        class: cls,
+        product: r.product ?? (cls === 'motor' ? 'Private Car' : 'General'),
+        type_of_cover: r.product ?? 'Comprehensive',
+        status: 'active',
+        case_type: 'new',
+        effective_date: r.effective_date,
+        expiry_date: r.expiry_date,
+        issue_date: r.effective_date,
+        sum_insured: r.sum_insured,
+        basic_premium: basic,
+        ncd_pct: r.ncd_pct,
+        ncd_amount: Math.round((basic - r.gross_premium) * 100) / 100,
+        extra_premium: 0,
+        gross_premium: r.gross_premium,
+        service_tax: r.service_tax,
+        stamp_duty: r.stamp_duty,
+        total_premium: r.total_premium,
+        commission_rate,
+        commission_amt,
+        agent_commission: 0,
+        referral_fee: 0,
+        excess: 0,
+        remarks: r.remarks,
+        source_file: 'imported',
+        motor: cls === 'motor'
+          ? {
+              vehicle_no: r.vehicle_no ?? '', make_model: r.make_model ?? '', body_type: null,
+              engine_no: '', chassis_no: '', engine_cc: '', year_make: '', seating: 0,
+              hire_purchase: null, windscreen_si: 0, named_drivers: null, extensions: null, rtd_code: null,
+            }
+          : undefined,
+        nonMotor: cls === 'non_motor'
+          ? { risk_type: r.product ?? 'General', risk_address: '', occupancy: '', period_desc: '12 months', benefits: '' }
+          : undefined,
       });
     }
     return batch.length;
@@ -2503,18 +2624,24 @@ export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
  * it, and nobody would notice.
  */
 
-export function findClientForPortal(identification: string) {
+/**
+ * Every client the identifier could mean. Two agencies can legitimately hold
+ * the same NRIC, and taking whichever row came first let one agency's client
+ * stand in front of another's at the portal door — the access code, checked
+ * against each, is what tells them apart.
+ */
+export function findClientsForPortal(identification: string) {
   const bare = identification.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!bare) return [];
   return getDb()
     .prepare(
       `SELECT id, org_id, name, portal_enabled, portal_code_hash
          FROM client
         WHERE upper(replace(replace(COALESCE(nric,''),'-',''),' ','')) = ?
-           OR upper(replace(replace(COALESCE(business_reg,''),'-',''),' ','')) = ?`,
+           OR upper(replace(replace(COALESCE(business_reg,''),'-',''),' ','')) = ?
+        ORDER BY id`,
     )
-    .get(bare, bare) as
-    | { id: string; org_id: string; name: string; portal_enabled: number; portal_code_hash: string | null }
-    | undefined;
+    .all(bare, bare) as Array<{ id: string; org_id: string; name: string; portal_enabled: number; portal_code_hash: string | null }>;
 }
 
 export function setPortalCode(clientId: string, orgId: string, hash: string | null): boolean {
@@ -2821,8 +2948,12 @@ export function updateRenewalSetting(
 
 export function linkRenewal(newPolicyId: string, previousPolicyId: string, orgId: string): boolean {
   return getDb()
-    .prepare('UPDATE policy SET renewed_from_policy_id = ? WHERE id = ? AND org_id = ?')
-    .run(previousPolicyId, newPolicyId, orgId).changes > 0;
+    .prepare(
+      `UPDATE policy SET renewed_from_policy_id = ?
+        WHERE id = ? AND org_id = ?
+          AND EXISTS (SELECT 1 FROM policy q WHERE q.id = ? AND q.org_id = ?)`,
+    )
+    .run(previousPolicyId, newPolicyId, orgId, previousPolicyId, orgId).changes > 0;
 }
 
 /* -------------------------------------------- commission reconciliation */
@@ -2961,7 +3092,7 @@ export function saveStatement(
   lines: Array<Omit<StatementLineRecord, 'id' | 'org_id' | 'statement_id'>>,
 ): string {
   const db = getDb();
-  const id = `stm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const id = newId('stm');
 
   db.transaction(() => {
     db.prepare(
@@ -3028,6 +3159,21 @@ export function assignStatementLine(
     .run(policyId, policyId ? 'manual' : 'none', lineId, orgId).changes > 0;
 }
 
+/**
+ * Assign and recompute in one transaction. Done as two writes, a failure
+ * between them left the statement list and the statement detail showing
+ * different totals — exactly what recomputeStatementTotals exists to prevent.
+ */
+export function assignStatementLineAndRecompute(
+  lineId: string, orgId: string, statementId: string, policyId: string | null,
+): boolean {
+  return getDb().transaction(() => {
+    const ok = assignStatementLine(lineId, orgId, policyId);
+    if (ok) recomputeStatementTotals(statementId, orgId);
+    return ok;
+  })();
+}
+
 export function acceptStatementLine(
   lineId: string, orgId: string, note: string, accepted: boolean,
 ): boolean {
@@ -3086,7 +3232,7 @@ export function statementExposure(orgId: string) {
   const db = getDb();
   const open = db
     .prepare(
-      `SELECT COUNT(*) n, COALESCE(SUM(total_paid),0) paid, COALESCE(SUM(total_expected),0) expected
+      `SELECT COUNT(*) n, ROUND(COALESCE(SUM(total_paid),0), 2) paid, ROUND(COALESCE(SUM(total_expected),0), 2) expected
          FROM commission_statement WHERE org_id = ? AND status = 'open'`,
     )
     .get(orgId) as { n: number; paid: number; expected: number };

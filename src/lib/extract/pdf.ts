@@ -15,6 +15,14 @@ export type PdfDoc = {
  * belongs to which label. Group text items by their y position so each visual
  * row comes back as one line, which is what the field matchers key off.
  */
+/**
+ * Nothing downstream reads past the opening pages — a schedule is the first
+ * few, the rest is policy wording — and a 2 MB file can declare tens of
+ * thousands of pages. Parsing is synchronous CPU on the one process every
+ * other user is waiting on, so the reader stops here.
+ */
+export const MAX_PAGES = 40;
+
 export async function readPdf(data: Uint8Array): Promise<PdfDoc> {
   // pdf.js transfers the buffer it is handed, detaching it for the caller.
   // The upload path reads the same bytes again to send the document onward,
@@ -22,7 +30,7 @@ export async function readPdf(data: Uint8Array): Promise<PdfDoc> {
   const pdf = await getDocumentProxy(new Uint8Array(data));
   const pages: string[][] = [];
 
-  for (let n = 1; n <= pdf.numPages; n++) {
+  for (let n = 1; n <= Math.min(pdf.numPages, MAX_PAGES); n++) {
     const page = await pdf.getPage(n);
     const content = await page.getTextContent();
 

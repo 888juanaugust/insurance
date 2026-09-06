@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { authorise, forbid } from './guard';
 import { audit, diff } from './audit';
 import {
-  createClient, updateClient, deleteClient, getClient, clientPolicyCount,
+  createClient, updateClient, deleteClient, getClient, clientGroupBelongsToOrg, clientPolicyCount,
   findClientByIdentification, dobFromNric, type ClientInput,
 } from './queries';
 
@@ -120,8 +120,13 @@ export async function saveClientAction(_prev: unknown, fd: FormData): Promise<Cl
     portal_enabled: fd.get('portal_enabled') ? 1 : 0,
   };
 
+  // A group id came off a form; it has to be one of this agency's groups.
+  if (input.group_id && !clientGroupBelongsToOrg(input.group_id, user.org_id)) {
+    return { error: 'That client group is not one of yours.', values: submitted(fd) };
+  }
+
   if (id) {
-    const existing = getClient(id);
+    const existing = getClient(id, user.org_id);
     if (!existing || existing.org_id !== user.org_id) {
       return { error: 'That client could not be found.', values: submitted(fd) };
     }
@@ -153,7 +158,7 @@ export async function deleteClientAction(fd: FormData) {
 
   if (!id) redirect('/clients');
 
-  const existing = getClient(id);
+  const existing = getClient(id, user.org_id);
   if (!existing || existing.org_id !== user.org_id) redirect('/clients');
 
   // A client carrying policies is history, not a mistake — keep it.

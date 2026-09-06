@@ -18,6 +18,14 @@ export async function register() {
     problems.push('IH_SECRET is still the development value from the repository.');
   }
 
+  const adminPassword = process.env.IH_ADMIN_PASSWORD ?? '';
+  if (adminPassword && (adminPassword.length < 10 || !/[A-Za-z]/.test(adminPassword) || !/\d/.test(adminPassword))) {
+    problems.push('IH_ADMIN_PASSWORD must be at least 10 characters with a letter and a number.');
+  }
+  if (adminPassword === '12345Abcdefg') {
+    problems.push('IH_ADMIN_PASSWORD is the demo password from the repository.');
+  }
+
   if (problems.length) {
     console.error(
       '\n  Insurhelp cannot start:\n' +
@@ -26,4 +34,32 @@ export async function register() {
     );
     throw new Error(`Insurhelp configuration invalid: ${problems.join(' ')}`);
   }
+}
+
+/**
+ * Every error a request produces, as one structured line on stderr — the
+ * path, the kind of work, the digest the person was shown, and the message.
+ * `pm2 logs` is then an answer to "the batch save did nothing", where it used
+ * to be empty. Nothing from the request body is logged, so no client's data
+ * ends up in a log file.
+ */
+export async function onRequestError(
+  error: unknown,
+  request: { path: string; method: string },
+  context: { routerKind: string; routePath: string; routeType: string },
+) {
+  const e = error as { message?: string; digest?: string; name?: string };
+  console.error(
+    JSON.stringify({
+      at: new Date().toISOString(),
+      level: 'error',
+      method: request.method,
+      path: request.path,
+      route: context.routePath,
+      kind: context.routeType,
+      digest: e?.digest ?? null,
+      error: e?.name ?? 'Error',
+      message: e?.message ?? String(error),
+    }),
+  );
 }

@@ -24,10 +24,12 @@ export default async function SubAgentsPage() {
    * password everyone who has seen the code knows, so an account created by
    * hand with that same password is flagged as loudly as a seeded one.
    */
-  const accounts = listAppUsers(user.org_id).map(({ password_hash, ...a }) => ({
-    id: a.id, name: a.name, email: a.email, status: a.status, demo: a.demo,
-    demoPassword: a.status === 'active' && verifyPassword(DEMO_PASSWORD, password_hash),
-  }));
+  const accounts = await Promise.all(
+    listAppUsers(user.org_id).map(async ({ password_hash, ...a }) => ({
+      id: a.id, name: a.name, email: a.email, status: a.status, demo: a.demo,
+      demoPassword: a.status === 'active' && (await verifyPassword(DEMO_PASSWORD, password_hash)),
+    })),
+  );
   const active = agents.filter((a) => a.status === 'active').length;
   const commission = agents.reduce((s, a) => s + Number(a.commission_total ?? 0), 0);
 

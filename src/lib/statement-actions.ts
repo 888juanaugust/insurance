@@ -9,7 +9,7 @@ import { readStatement, reconcile, type Reconciliation, type StatementRow } from
 import { statementView } from './statement-run';
 import {
   bookForStatement, saveStatement, findStatement, listPrincipals,
-  assignStatementLine, acceptStatementLine, getStatementLine, getStatement,
+  assignStatementLineAndRecompute, acceptStatementLine, getStatementLine, getStatement,
   setStatementStatus, deleteStatement, recomputeStatementTotals,
 } from './queries';
 
@@ -242,10 +242,9 @@ export async function assignLineAction(_prev: unknown, fd: FormData): Promise<Li
   const target = policyId === '__none__' ? null : policyId;
   if (policyId === '') return { error: 'Choose the policy this line belongs to, or mark it as not yours.' };
 
-  if (!assignStatementLine(lineId, user.org_id, target)) {
+  if (!assignStatementLineAndRecompute(lineId, user.org_id, statementId, target)) {
     return { error: 'That policy is not on your register, so the line was left as it was.' };
   }
-  recomputeStatementTotals(statementId, user.org_id);
 
   await audit(user, {
     action: 'statement.assign',

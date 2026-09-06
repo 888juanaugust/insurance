@@ -1,30 +1,20 @@
-import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
 import { getDb } from './db';
-
-const COOKIE = 'ih_session';
+import { issueSession, resolveSession, revokeSession, revokeSessionsFor } from './session-store';
 
 /**
- * The session cookie is only as good as this secret. A public deployment that
- * fell back to the development value would let anyone who has read this
- * repository mint a session for any user, so refuse to serve instead.
+ * The agency's session cookie.
  *
- * Resolved per call rather than at import: `next build` runs with
- * NODE_ENV=production, and throwing there would fail the build on a machine
- * that has no business holding the production secret.
+ * The cookie holds a random token and nothing else; what it means is a row
+ * in the session table (see session-store.ts), which is what expires and what
+ * gets deleted. In production the cookie is `Secure` and carries the
+ * `__Host-` prefix, so a browser will neither send it over plain HTTP nor
+ * accept one set from any other host or path. The prefix is only honoured on
+ * a secure cookie, which is why development uses the plain name.
  */
-function sessionSecret(): string {
-  const configured = process.env.IH_SECRET;
-  if (configured && configured.length >= 16) return configured;
-
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'IH_SECRET is not set, or is shorter than 16 characters. Set it to a long random ' +
-        'value before starting Insurhelp in production — for example: openssl rand -hex 32',
-    );
-  }
-  return 'insurhelp-dev-secret-change-me';
-}
+const SECURE = process.env.NODE_ENV === 'production';
+export const COOKIE = SECURE ? '__Host-ih_session' : 'ih_session';
+const TTL_SECONDS = 60 * 60 * 8;
 
 export type SessionUser = {
   id: string;
@@ -35,46 +25,52 @@ export type SessionUser = {
   agent_code: string | null;
 };
 
-function sign(value: string): string {
-  const mac = crypto.createHmac('sha256', sessionSecret()).update(value).digest('hex');
-  return `${value}.${mac}`;
-}
-
-function unsign(signed: string): string | null {
-  const idx = signed.lastIndexOf('.');
-  if (idx < 0) return null;
-  const value = signed.slice(0, idx);
-  const mac = signed.slice(idx + 1);
-  const expected = crypto.createHmac('sha256', sessionSecret()).update(value).digest('hex');
-  const a = Buffer.from(mac);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  return value;
-}
-
-export async function createSession(userId: string) {
+export async function createSession(userId: string, orgId: string, ip: string | null) {
+  const token = issueSession('staff', userId, orgId, TTL_SECONDS, ip);
   const jar = await cookies();
-  jar.set(COOKIE, sign(userId), {
+  jar.set(COOKIE, token, {
     httpOnly: true,
+    secure: SECURE,
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 8,
+    maxAge: TTL_SECONDS,
   });
 }
 
+/** Ends this session on the server and forgets the cookie. */
 export async function destroySession() {
   const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+  if (token) revokeSession(token);
   jar.delete(COOKIE);
+}
+
+/** The token in hand, so a password change can spare the session that made it. */
+export async function currentSessionToken(): Promise<string | undefined> {
+  const jar = await cookies();
+  return jar.get(COOKIE)?.value;
+}
+
+/** Ends every other session this user holds — after a password change. */
+export async function revokeOtherSessions(userId: string) {
+  revokeSessionsFor('staff', userId, await currentSessionToken());
+}
+
+/** Ends every session an account holds — when it is disabled or reset. */
+export function revokeAllSessions(userId: string) {
+  revokeSessionsFor('staff', userId);
 }
 
 export async function currentUser(): Promise<SessionUser | null> {
   const jar = await cookies();
-  const raw = jar.get(COOKIE)?.value;
-  if (!raw) return null;
-  const userId = unsign(raw);
-  if (!userId) return null;
+  const token = jar.get(COOKIE)?.value;
+  if (!token) return null;
+  const session = resolveSession('staff', token);
+  if (!session) return null;
+  // The account is read every time rather than trusted from the session, so
+  // a disabled account stops at its next request.
   const row = getDb()
     .prepare('SELECT id, org_id, email, name, role, agent_code FROM app_user WHERE id = ? AND status = ?')
-    .get(userId, 'active') as SessionUser | undefined;
+    .get(session.subject_id, 'active') as SessionUser | undefined;
   return row ?? null;
 }

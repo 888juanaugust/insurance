@@ -48,7 +48,13 @@ export default function FollowUp({
    */
   const echo = state?.values;
   const stamp = echo ? `${echo.outcome}|${echo.note}|${echo.next_at}` : '';
-  if (echo && echo.outcome !== outcome) setOutcome(echo.outcome);
+  // Once per response. Re-syncing on every render pinned the dropdown to the
+  // refused outcome: change it to "Spoke to them" and it snapped back.
+  const [echoSeen, setEchoSeen] = useState('');
+  if (echo && stamp !== echoSeen) {
+    setEchoSeen(stamp);
+    setOutcome(echo.outcome);
+  }
 
   // Closing on success would hide the confirmation; the row re-renders from
   // the server anyway, so the panel just goes quiet.

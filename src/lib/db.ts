@@ -189,7 +189,8 @@ CREATE TABLE IF NOT EXISTS policy_document (
   sha256        TEXT,
   kind          TEXT,          -- schedule | cover_note | receipt | endorsement | correspondence | other
   note          TEXT,
-  claim_id      TEXT REFERENCES claim(id) ON DELETE CASCADE
+  claim_id      TEXT REFERENCES claim(id) ON DELETE CASCADE,
+  detected_class TEXT               -- motor | non_motor, as the reader judged it
 );
 
 CREATE TABLE IF NOT EXISTS motor_detail (
@@ -561,12 +562,46 @@ CREATE INDEX IF NOT EXISTS idx_policy_client  ON policy(client_id);
 CREATE INDEX IF NOT EXISTS idx_policy_created ON policy(created_date);
 CREATE INDEX IF NOT EXISTS idx_payment_policy ON payment(policy_id);
 CREATE INDEX IF NOT EXISTS idx_client_org     ON client(org_id);
+
+/* Sessions live here, not in the cookie: a row with an expiry that sign-out,
+   a password change, a disabled account or a withdrawn portal code deletes.
+   The id is the SHA-256 of the token the browser holds, so a copy of this
+   table is not a copy of anyone's session. */
+CREATE TABLE IF NOT EXISTS session (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,        -- staff | portal
+  subject_id   TEXT NOT NULL,        -- app_user.id or client.id
+  org_id       TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  ip           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_session_subject ON session(kind, subject_id);
+CREATE INDEX IF NOT EXISTS idx_session_expiry  ON session(expires_at);
 `;
 
 /**
  * CREATE TABLE IF NOT EXISTS leaves existing tables alone, so columns added
  * after a database was first created have to be applied by hand.
  */
+function ensureUniqueIndex(db: Database.Database, name: string, table: string, cols: string[]) {
+  const exists = db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(name);
+  if (exists) return;
+  const list = cols.join(', ');
+  const dupes = db
+    .prepare(`SELECT ${list}, COUNT(*) n FROM ${table} GROUP BY ${list} HAVING COUNT(*) > 1 LIMIT 5`)
+    .all() as Array<Record<string, unknown>>;
+  if (dupes.length) {
+    console.error(
+      `Insurhelp: cannot make ${table}(${list}) unique — duplicates exist. Fix these and restart: ` +
+        JSON.stringify(dupes),
+    );
+    return;
+  }
+  db.exec(`CREATE UNIQUE INDEX ${name} ON ${table}(${list})`);
+}
+
 function migrate(db: Database.Database) {
   const columns = new Set(
     (db.prepare('PRAGMA table_info(policy)').all() as { name: string }[]).map((c) => c.name),
@@ -643,10 +678,27 @@ function migrate(db: Database.Database) {
   );
   for (const [name, decl] of [
     ['storage_key', 'TEXT'], ['content_type', 'TEXT'], ['sha256', 'TEXT'],
-    ['kind', 'TEXT'], ['note', 'TEXT'], ['claim_id', 'TEXT'],
+    ['kind', 'TEXT'], ['note', 'TEXT'], ['claim_id', 'TEXT'], ['detected_class', 'TEXT'],
   ] as [string, string][]) {
     if (!docColumns.has(name)) db.exec(`ALTER TABLE policy_document ADD COLUMN ${name} ${decl}`);
   }
+
+  /*
+   * Business keys that must be unique within an agency, enforced by the
+   * database rather than by whichever code path remembered to check. A
+   * database that already holds duplicates cannot take the index; it is
+   * reported loudly and the application-level checks carry on alone, so an
+   * existing install is not bricked at boot by a duplicate it let in years
+   * ago — but the report says what to fix.
+   *
+   * Policy numbers are unique per period, not outright: an insurer commonly
+   * keeps the same number across renewals, and those are different policies.
+   */
+  ensureUniqueIndex(db, 'uq_policy_no_period', 'policy', ['org_id', 'policy_no', 'effective_date']);
+  ensureUniqueIndex(db, 'uq_claim_no', 'claim', ['org_id', 'claim_no']);
+  ensureUniqueIndex(db, 'uq_endorsement_no', 'endorsement', ['org_id', 'endorsement_no']);
+  ensureUniqueIndex(db, 'uq_agent_code', 'sub_agent', ['org_id', 'agent_code']);
+  ensureUniqueIndex(db, 'uq_statement_reference', 'commission_statement', ['org_id', 'principal_id', 'reference']);
 
   const legacyRoles = ['master', 'manager', 'finance', 'agent', 'viewer'];
   const stale = db
@@ -675,7 +727,28 @@ export function getDb(): Database.Database {
 
   const seeded = db.prepare('SELECT COUNT(*) AS n FROM organisation').get() as { n: number };
   if (seeded.n === 0) {
-    seed(db);
+    /*
+     * The seed's sign-in accounts have a password that is in this repository.
+     * In production they are only created on request (IH_SEED_DEMO=1);
+     * otherwise the first administrator comes from IH_ADMIN_EMAIL and
+     * IH_ADMIN_PASSWORD, and without either the process refuses to create a
+     * database at all — the same stance as a missing IH_SECRET.
+     */
+    const production = process.env.NODE_ENV === 'production';
+    const adminEmail = (process.env.IH_ADMIN_EMAIL ?? '').trim().toLowerCase();
+    const adminPassword = process.env.IH_ADMIN_PASSWORD ?? '';
+    const demoWanted = process.env.IH_SEED_DEMO === '1';
+    if (production && !demoWanted && !(adminEmail && adminPassword)) {
+      throw new Error(
+        'Insurhelp will not create its first database in production without an administrator. ' +
+          'Set IH_ADMIN_EMAIL and IH_ADMIN_PASSWORD (10+ characters, a letter and a number) for the ' +
+          'first start, or IH_SEED_DEMO=1 to seed the demo accounts whose password is public. See DEPLOY.md.',
+      );
+    }
+    seed(db, {
+      demoUsers: !production || demoWanted,
+      admin: adminEmail && adminPassword ? { email: adminEmail, password: adminPassword } : null,
+    });
   }
 
   _db = db;
