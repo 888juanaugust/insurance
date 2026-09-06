@@ -63,11 +63,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 rounded border border-line bg-canvas px-3 py-2.5 text-[12px] leading-relaxed text-muted">
-            <span className="font-semibold text-ink-soft">Demo login</span>
-            <br />
-            exemaster3@gmail.com &nbsp;/&nbsp; 12345Abcdefg
-          </div>
+          <p className="mt-6 text-[12px] leading-relaxed text-muted">
+            Forgotten your password? An administrator at your agency can reset it under
+            Team and agency.
+          </p>
         </div>
 
         <p className="mt-6 text-center text-[12px] text-muted">

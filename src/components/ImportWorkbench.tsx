@@ -33,6 +33,7 @@ export default function ImportWorkbench() {
   const [fileName, setFileName] = useState('');
   const [sizeError, setSizeError] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const done = commitState?.written;
   const analysis = commitState?.analysis ?? state?.analysis;
@@ -65,9 +66,32 @@ export default function ImportWorkbench() {
 
         {commitState?.correctionsCsv && (
           <div className="panel">
-            <div className="panel-head">Rows left out</div>
+            <div className="panel-head">
+              Rows left out
+              <span className="ml-auto flex items-center gap-2 font-normal">
+                <a
+                  href={`data:text/csv;charset=utf-8,${encodeURIComponent('\ufeff' + commitState.correctionsCsv)}`}
+                  download="corrections.csv"
+                  className="btn btn-ghost px-2.5 py-1 text-[12px]"
+                >
+                  Download CSV
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(commitState.correctionsCsv ?? '').then(
+                      () => setCopied(true),
+                      () => setCopied(false),
+                    );
+                  }}
+                  className="btn btn-ghost px-2.5 py-1 text-[12px]"
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </span>
+            </div>
             <p className="border-b border-line px-5 py-2.5 text-[12.5px] text-muted">
-              Copy this into a file, correct the problem column, and import it on its own.
+              Download it, correct the problem column, and import that file on its own.
             </p>
             <pre className="scroll-x max-h-64 overflow-y-auto px-5 py-4 text-[12px] leading-relaxed text-ink-soft">
               {commitState.correctionsCsv}

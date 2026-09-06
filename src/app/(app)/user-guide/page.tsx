@@ -7,9 +7,9 @@ export const dynamic = 'force-dynamic';
 
 const MODULES = [
   {
-    href: '/organisation',
-    title: 'User Management',
-    body: 'Agent roster, commission structure per agent, and the e-Invoice details used for self-billed commission payouts.',
+    href: '/team',
+    title: 'Team and agency',
+    body: 'Sub agent roster and commission structure, the accounts that can sign in, and the e-Invoice details used for self-billed payouts.',
   },
   {
     href: '/clients',
@@ -37,19 +37,19 @@ const MODULES = [
     body: 'Approve commission payouts and maintain the billing details used for e-Invoice and commission payment.',
   },
   {
-    href: '/setting/notifications',
-    title: 'Schedule Notification',
+    href: '/settings/notifications',
+    title: 'Broadcasts',
     body: 'Send or broadcast a message to all users in the system, including sub agents and insured clients.',
   },
   {
-    href: '/setting/renewal',
-    title: 'Renewal Setting',
+    href: '/settings/renewal',
+    title: 'Renewal reminders',
     body: 'Set the renewal notification sent to the insured and review the policies falling due.',
   },
   {
-    href: '/setting/global',
-    title: 'Global',
-    body: 'Commission rates setting, company e-Invoice setting and insurance companies setting.',
+    href: '/settings/global',
+    title: 'Rates and insurers',
+    body: 'Commission rates per insurer and class, company e-Invoice particulars and insurance company records.',
   },
 ];
 
@@ -87,8 +87,9 @@ export default async function UserGuidePage() {
             particulars, TIN and SST numbers under Organisation — they are printed on every e-Invoice.
           </li>
           <li>
-            <span className="font-semibold text-ink">2. Add your insurance companies and rates.</span> Setting →
-            Global holds the principals you place business with and the default commission rate per class.
+            <span className="font-semibold text-ink">2. Add your insurance companies and rates.</span> More →
+            Settings → Rates and insurers holds the principals you place business with and the default commission
+            rate per class.
           </li>
           <li>
             <span className="font-semibold text-ink">3. Register sub agents.</span> Each sub agent carries their own

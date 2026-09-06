@@ -194,7 +194,15 @@ function buildInput(fd: FormData, orgId: string, clientId: string, principalId: 
   const total = totalField > 0 ? totalField : r2(gross + tax + stamp);
 
   const commissionRate = numOf(fd, 'commission_rate');
-  const commissionAmt = numOf(fd, 'commission_amt') || r2(gross * (commissionRate / 100));
+  /*
+   * Blank means "work it out"; a typed 0 means nil. A staff policy or an
+   * accommodation case earns nothing, and treating the zero as a blank booked
+   * commission on it anyway — which the insurer's statement then showed as
+   * short-paid, every month, for a case that was never going to pay.
+   */
+  const commissionAmt = str(fd, 'commission_amt') === ''
+    ? r2(gross * (commissionRate / 100))
+    : numOf(fd, 'commission_amt');
 
   const ncdPct = numOf(fd, 'ncd_pct');
   const extra = numOf(fd, 'extra_premium');
@@ -312,7 +320,7 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   }
   if (!principalId) {
     const first = listPrincipals()[0];
-    if (!first) return { error: 'No insurance companies are configured. Add one under Setting → Global.' , values: submitted(fd) };
+    if (!first) return { error: 'No insurance companies are configured. Add one under More → Settings → Rates and insurers.' , values: submitted(fd) };
     return { error: 'Choose the principal for this policy.' , values: submitted(fd) };
   }
 

@@ -680,6 +680,13 @@ const RENEWAL_REQUESTS: Row[] = [
  * Seed
  * ------------------------------------------------------------------ */
 
+/**
+ * The seeded sign-in accounts, whose passwords are in this file and therefore
+ * public. The application flags them while they can still sign in, so an
+ * agency that went live without retiring them is told, on screen, every day.
+ */
+export const DEMO_USER_IDS: string[] = USERS.map((u) => u.id);
+
 export function seed(db: Database) {
   insertAll(db, 'organisation', ORGS);
   insertAll(db, 'principal', PRINCIPALS);

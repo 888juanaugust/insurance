@@ -134,8 +134,9 @@ export async function markNotificationsReadAction() {
 }
 
 /**
- * The bulk controls on Accounting. Approve and reject move every pending
- * commission at once; the report actions recompute the payout run.
+ * The two bulk controls on Accounting. Approve moves every pending commission
+ * to approved; revert sends every approved one back. Nothing here touches a
+ * record already paid — paid is final and the button says so.
  */
 export async function bulkCommissionAction(formData: FormData) {
   const op = String(formData.get('op') ?? '');
@@ -154,15 +155,13 @@ export async function bulkCommissionAction(formData: FormData) {
       summary: `${n} pending commission ${n === 1 ? 'entry' : 'entries'} approved in bulk.`,
     });
   }
-  if (op === 'reject') {
+  if (op === 'revert') {
     const n = bulkSetCommissionStatus(user.org_id, 'approved', 'pending');
     await audit(user, {
-      action: 'commission.bulk_reject', entity: 'commission',
+      action: 'commission.bulk_revert', entity: 'commission',
       summary: `${n} approved commission ${n === 1 ? 'entry' : 'entries'} sent back to pending.`,
     });
   }
-  // "Generate" and "Force regenerate" recompute the same figures the payout
-  // table already derives, so there is nothing to persist for them here.
 
   revalidatePath('/accounting');
 }

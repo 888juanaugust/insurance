@@ -42,7 +42,10 @@ export default async function NoticesPage({
           <p role="status" className="mt-4 rounded border border-line bg-ok-wash px-4 py-3 text-[13px] text-ok">
             {str('generated') && <>{str('generated')} notice{str('generated') === '1' ? '' : 's'} built. </>}
             {str('skipped') && str('skipped') !== '0' && (
-              <>{str('skipped')} policy skipped for want of a phone number or email. </>
+              <>{str('skipped')} polic{str('skipped') === '1' ? 'y' : 'ies'} skipped for want of a phone number or email. </>
+            )}
+            {str('declined') && str('declined') !== '0' && (
+              <>{str('declined')} left out because the client said they are not renewing. </>
             )}
             {str('sent') && <>{str('sent')} sent. </>}
             {str('waiting') && str('waiting') !== '0' && (

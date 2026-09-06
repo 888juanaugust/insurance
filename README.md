@@ -17,13 +17,20 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-Sign in with:
+Sign in with one of the seeded accounts:
 
 | Login ID | Password | Organisation |
 | --- | --- | --- |
 | `exemaster3@gmail.com` | `12345Abcdefg` | EXE Cheras |
 | `exemaster1@gmail.com` | `12345Abcdefg` | EXE Cheras |
 | `boonseng_agent@yahoo.com` | `12345Abcdefg` | BS Agency |
+
+These are **demo accounts whose password is in this file**. The application knows
+which they are: while any of them can still sign in, Home carries a red banner and
+the Sign-in accounts panel under Team and agency flags them. Add your own account
+there, sign in as yourself, and disable them before the site is reachable from
+outside — see "Sign-in accounts" below and DEPLOY.md. The sign-in page itself
+shows no credentials.
 
 The SQLite database is created and seeded automatically at `data/insurhelp.db` on first
 request. `npm run db:reset` deletes it so the next request reseeds from scratch.
@@ -156,6 +163,56 @@ Bringing graded roles back means widening `isAdmin` in `src/lib/permissions.ts`
 into a permission lookup and giving `authorise` a permission argument again.
 Every mutation already routes through it, so nothing else has to move.
 
+### Sign-in accounts
+
+**Team and agency → Sign-in accounts** lists everyone who can sign in to the
+agency, and is where accounts are added, disabled, re-enabled and given a new
+password. Until this existed the only accounts were the seeded ones and the only
+way to retire one was a shell on the server; "delete the demo accounts before
+go-live" was advice nobody could follow from inside the product.
+
+- Passwords are at least 10 characters with a letter and a number, the same rule
+  for a new account, a reset and a person changing their own (`src/lib/passwords.ts`).
+  The seeded demo password is refused outright.
+- You cannot disable the account you are signed in with, and you cannot disable
+  the last active account in the agency — add another first.
+- A disabled account is refused at sign-in and any session it holds ends at its
+  next request.
+- The seeded accounts are flagged **seeded demo account** while active; an
+  account created by hand that still uses the seeded password is flagged
+  **demo password** (the hash is checked against it on that page only). Home
+  shows a banner while any seeded account in the agency can still sign in.
+- Every one of these actions is on the audit trail, including refusals.
+
+Passwords are never emailed. Tell the person theirs in person.
+
+### Before it does anything irreversible
+
+Six controls settled money, destroyed a statement or withdrew a client's access
+the instant they were pressed. Each now asks first, and the question carries the
+consequence — "record RM 4,120.00 as collected across 3 policies" — rather than
+"are you sure" (`src/components/Confirm.tsx`):
+
+| Control | What the question says |
+| --- | --- |
+| Bulk client paid / Bulk principal paid | The sum and count that would be settled, unpaid legs only |
+| Approve everything pending | The count and sum being approved |
+| Send approved back to pending | The count and sum going back (the old label, "Bulk reject (all pending)", said the opposite of what it did) |
+| Mark paid on a commission row | That paid is final |
+| Delete on a statement | The line count, the sum, and that every assignment made against it goes too |
+| Close it off on a statement | See below |
+| Withdraw access on a client's portal | That their code stops at their next click |
+| Remove on an attached document | That the file is deleted from the server |
+
+**Close it off** also checks. A clean statement closes with one confirmation. One
+that is short, has unplaced lines or cases left off is offered **Close it off
+anyway**, which names the unaccounted sum and posts an acknowledgement; the
+server refuses to close a short statement without it (and records the refusal),
+and the audit entry for a statement closed short says so and by whom.
+
+The two report buttons on Accounting that did nothing have gone; the tables
+recalculate on every visit.
+
 ## Audit trail
 
 `/audit` records every mutation, every refusal, and every sign-in — who, what,
@@ -267,12 +324,16 @@ that cannot be read costs only itself.
 Each reading is then judged, and only a clean one is offered for an unattended
 save:
 
-| Verdict | What it means |
-| --- | --- |
-| **ready** | Everything a policy needs, read confidently, no duplicate. Ticked by default. |
-| **needs a look** | Something is missing, uncertain, or the premium figures disagree. The reason is shown on the row. |
-| **already on file** | The policy number, or the file itself, is on the register. |
-| **could not read** | The PDF defeated both passes. |
+| Verdict | What it means | Can it be ticked? |
+| --- | --- | --- |
+| **ready** | Everything a policy needs, read confidently, no duplicate. | Yes, and ticked by default. |
+| **needs a look** | Something is missing, uncertain, or the premium figures disagree. The reason is shown on the row. | No. The row links to **Open it on the check screen**, the same review a single upload gets. |
+| **already on file** | The policy number, or the file itself, is on the register. | No. The row links to the one on file. |
+| **could not read** | The PDF defeated both passes. | No. |
+
+Motor or non-motor is decided from each document — anything with a vehicle,
+chassis or engine number is motor — whichever register the batch was started
+from, and the table says which in a Class column.
 
 The judging is deliberately strict, because a batch save that quietly writes a
 policy with the wrong premium is worse than one that asks: nobody looks again
@@ -281,10 +342,22 @@ that the number is the cover note's and the insurer has not issued a policy
 number yet — that row will need correcting when it does.
 
 Saving re-reads the extraction **from the stored document**, not from the
-browser, and builds the policy through the same function the review form uses.
-What lands on the register is therefore exactly what was read and shown, and a
-policy saved in a batch cannot disagree with one saved on its own about the
-arithmetic.
+browser, **judges it again on the server**, and builds the policy through the
+same function the review form uses. Only a reading that is ready goes in: a
+document id smuggled into the form for a row the screen would not offer comes
+back in the "Left out" list with the reason. What lands on the register is
+therefore exactly what was read and shown, and a policy saved in a batch cannot
+disagree with one saved on its own about the arithmetic.
+
+A stored reading can be reopened on the check screen at
+`/insurance/<class>/upload?doc=<document id>` (`src/lib/reading.ts` rebuilds
+the upload state from the document row, looking duplicates and client matches up
+afresh). A reading already saved to a policy redirects to that policy.
+
+Uploads read but never saved are swept after seven days, measured on the
+application's clock — `today()`, which `IH_TODAY` can pin — not the machine's.
+Measured on the machine's clock, a pinned demo swept every reading on the very
+next upload, and a batch of five kept only the last.
 
 ## What is running out
 
@@ -328,6 +401,16 @@ them move the case off the chase list:
   it is a note, and the case would sit there being chased anyway — so the date is required.
 - **Not renewing** requires a reason, and the case moves to a list of its own. A lapse with
   no reason teaches the agency nothing, and the retention report is the poorer for it.
+
+Both lists have a way back. **Put it back on the list** records a line of its own — *back on
+the list*, by whom — and the case returns to the chase; a case is never quietly un-marked, and
+the note that took it off stays in the history. The waiting list also takes a follow-up, for the
+client who rings first.
+
+**The renewal-notice scheduler reads these.** A client whose latest note is *not renewing* is
+left out when notices are built, and the run says how many were left out for that reason. Until
+this, someone who had said a fortnight ago that they sold the car got a WhatsApp saying they
+were about to be uninsured.
 
 The rail badge and the header counts follow, so the number an agent sees is what is actually
 left to do. Every note goes to the audit trail with who wrote it.
@@ -715,6 +798,11 @@ to icons (remembered in `localStorage`) and becomes a drawer below `lg`.
 - **Reconcile** was never opened during capture, so its contents are a reasonable
   reading of the payment state the registers already track, not a copy.
 - LOC and receipt documents render as print-ready pages rather than generated PDF files.
+- Quotations keyed in from the Quotations screen land on the policy register with status
+  *Quotation*; the Quotations screen itself lists the separate quotation table and has no
+  controls of its own.
+- Reconcile, Renewal reminders, Client groups, Life planning, Employee benefits and the
+  reports are look-only screens.
 
 ## Notes
 

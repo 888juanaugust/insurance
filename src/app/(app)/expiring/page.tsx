@@ -5,6 +5,7 @@ import { expiringBuckets, EXPIRING_BUCKETS, type ExpiringWithNote } from '@/lib/
 import { longDate, money, policyHref, classSlug } from '@/lib/format';
 import { PageHeader, EmptyState } from '@/components/ui';
 import FollowUp from '@/components/FollowUp';
+import PutBack from '@/components/PutBack';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,7 +174,7 @@ export default async function ExpiringPage() {
           <div className="scroll-x">
             <table className="tbl">
               <thead>
-                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Call back</th><th>What they said</th></tr>
+                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Call back</th><th>What they said</th><th>Do</th></tr>
               </thead>
               <tbody>
                 {waiting.map((r) => (
@@ -183,6 +184,14 @@ export default async function ExpiringPage() {
                     <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
                     <td><span className="badge badge-amber">{longDate(r.follow_up?.next_at)}</span></td>
                     <td className="wrap text-ink-soft">{r.follow_up?.note ?? '—'}</td>
+                    <td>
+                      {/* Marked by mistake, or the client rang first: a way
+                          back that does not wait for the date. */}
+                      <div className="flex flex-wrap items-start gap-2">
+                        <PutBack policyId={r.id} clientId={r.client_id} />
+                        <FollowUp policyId={r.id} clientId={r.client_id} last={null} />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -196,13 +205,13 @@ export default async function ExpiringPage() {
           <div className="panel-head">
             Not renewing
             <span className="ml-auto text-[12px] font-normal text-muted">
-              said so themselves — kept here so the reason is not lost
+              said so themselves — kept here so the reason is not lost, and no reminder goes to them
             </span>
           </div>
           <div className="scroll-x">
             <table className="tbl">
               <thead>
-                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Told us</th><th>Why</th></tr>
+                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Told us</th><th>Why</th><th>Do</th></tr>
               </thead>
               <tbody>
                 {settled.map((r) => (
@@ -212,6 +221,7 @@ export default async function ExpiringPage() {
                     <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
                     <td className="text-ink-soft">{longDate(r.follow_up?.at)}</td>
                     <td className="wrap text-ink-soft">{r.follow_up?.note ?? '—'}</td>
+                    <td><PutBack policyId={r.id} clientId={r.client_id} /></td>
                   </tr>
                 ))}
               </tbody>

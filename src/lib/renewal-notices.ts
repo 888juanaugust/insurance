@@ -1,6 +1,6 @@
 import {
   policiesDueForNotice, queueMessage, queuedMessages, markMessage,
-  listRenewalSettingsFull, getOrg,
+  listRenewalSettingsFull, getOrg, latestFollowUps,
 } from './queries';
 import {
   render, deliver, isChannel, DEFAULT_TEMPLATES, type Channel, type MergeFields,
@@ -10,7 +10,7 @@ import { money, longDate, today } from './format';
 export type GenerateResult = {
   considered: number;
   queued: number;
-  skipped: Array<{ policy_no: string; why: string }>;
+  skipped: Array<{ policy_no: string; why: string; because: 'no_contact' | 'not_renewing' }>;
 };
 
 export type SendResult = {
@@ -48,6 +48,7 @@ export function generateRenewalNotices(orgId: string): GenerateResult {
   const settings = listRenewalSettingsFull(orgId).filter((s) => s.enabled === 1);
   const result: GenerateResult = { considered: 0, queued: 0, skipped: [] };
   const stamp = today();
+  const said = latestFollowUps(orgId);
 
   for (const setting of settings) {
     const channel: Channel = isChannel(setting.channel) ? setting.channel : 'whatsapp';
@@ -59,6 +60,21 @@ export function generateRenewalNotices(orgId: string): GenerateResult {
     for (const p of policiesDueForNotice(orgId, setting.days_before)) {
       result.considered++;
 
+      /*
+       * Somebody who told the agency a fortnight ago that they sold the car
+       * must not get a WhatsApp saying they are about to be uninsured. The
+       * worklist already keeps that answer; the scheduler reads it.
+       */
+      const last = said.get(p.id);
+      if (last?.outcome === 'not_renewing') {
+        result.skipped.push({
+          policy_no: p.policy_no,
+          why: `${p.client_name} told the agency they are not renewing${last.note ? ` — ${last.note}` : ''}.`,
+          because: 'not_renewing',
+        });
+        continue;
+      }
+
       const to = addressFor(channel, p);
       if (!to) {
         // Queued anyway would be a message with nowhere to go; saying so lets
@@ -66,6 +82,7 @@ export function generateRenewalNotices(orgId: string): GenerateResult {
         result.skipped.push({
           policy_no: p.policy_no,
           why: `${p.client_name} has no ${channel === 'email' ? 'email address' : 'phone number'} on file.`,
+          because: 'no_contact',
         });
         continue;
       }

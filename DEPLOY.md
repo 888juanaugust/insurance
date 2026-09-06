@@ -164,14 +164,29 @@ a backup on the same disk is not a backup.
 
 ## Before you let anyone else in
 
-The seeded demo accounts (`exemaster3@gmail.com` and `boonseng_agent@yahoo.com`,
-both `12345Abcdefg`) are in the seed file and therefore in your repository.
-Delete them and create your own before the site is reachable:
+The seeded demo accounts (`exemaster3@gmail.com`, `exemaster1@gmail.com` and
+`boonseng_agent@yahoo.com`, all `12345Abcdefg`) are in the seed file and
+therefore in your repository. Anyone who has seen the code can sign in with
+them. Retire them from inside the application, before the site is reachable:
+
+1. Sign in as `exemaster3@gmail.com`.
+2. **More → Team and agency → Sign-in accounts → Add an account.** Give yourself
+   a name, your email and a password of at least 10 characters with a letter and
+   a number. The demo password is refused.
+3. Sign out and sign in as yourself.
+4. Back on the same panel, **Disable** the two seeded EXE accounts. The red banner
+   on Home goes away once no seeded account in your agency can sign in.
+5. The BS Agency demo account belongs to the other seeded organisation and is not
+   visible from yours. Sign in as it and disable it the same way, or remove it:
 
 ```bash
 sqlite3 /var/www/insurhelp/data/insurhelp.db \
-  "DELETE FROM app_user WHERE email IN ('exemaster3@gmail.com','boonseng_agent@yahoo.com');"
+  "UPDATE app_user SET status = 'disabled' WHERE email = 'boonseng_agent@yahoo.com';"
 ```
+
+The sign-in page shows no credentials, and a disabled account is refused at
+sign-in with its session ended at the next request. Passwords are reset from the
+same panel; nothing is emailed.
 
 Also worth knowing before real clients are on it:
 
@@ -186,8 +201,14 @@ Also worth knowing before real clients are on it:
   within their own organisation, including approving their own commission. What
   they cannot do is reach another organisation's data: every query is scoped by
   `org_id`, and an id posted from a form is checked against it.
-- **Password reset does not exist.** A locked-out user needs you to reset their
-  hash directly. Building it needs SMTP, which is not wired up.
+- **Password reset is done by an administrator**, under Team and agency →
+  Sign-in accounts, and told to the person in person. There is no self-service
+  reset by email, because nothing is wired up to send one.
+- **Nothing irreversible happens on one click.** Bulk settlement, bulk approval,
+  marking commission paid, deleting or closing a statement, withdrawing portal
+  access and removing a document each ask first, with the figures in the
+  question; closing a short statement has to be acknowledged and is recorded as
+  closed short.
 - **e-Invoice is not submitted to LHDN.** The billing identity, TIN and
   self-billed flags are captured, but nothing is filed with MyInvois. If the
   agency is over the turnover threshold this has to be handled outside

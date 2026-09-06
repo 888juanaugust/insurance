@@ -13,12 +13,16 @@ type Props = {
   principals: Array<Option & { motor_rate: number; non_motor_rate: number }>;
   agents: Option[];
   claudeReady: boolean;
+  /** A reading stored earlier — a batch row sent here for a proper look. */
+  initialState?: UploadState | null;
 };
 
 const MAX_MB = 15;
 
-export default function UploadWorkbench({ cls, clients, principals, agents, claudeReady }: Props) {
-  const [state, action, pending] = useActionState(uploadPolicyAction, null as UploadState | null);
+export default function UploadWorkbench({
+  cls, clients, principals, agents, claudeReady, initialState = null,
+}: Props) {
+  const [state, action, pending] = useActionState(uploadPolicyAction, initialState);
   const [fileName, setFileName] = useState('');
   const [sizeError, setSizeError] = useState('');
 
@@ -94,8 +98,8 @@ export default function UploadWorkbench({ cls, clients, principals, agents, clau
               <> The document is then also read by the model, and the two readings are compared: agreement
               raises confidence, and disagreement is flagged for you rather than settled silently.</>
             ) : (
-              <> Model-assisted reading is switched off because no <code>ANTHROPIC_API_KEY</code> is set, so
-              layouts the rules do not cover will come through with blanks for you to fill.</>
+              <> Model-assisted reading is not switched on for this server, so layouts the rules do not
+              cover come through with blanks for you to fill. Whoever runs the server can enable it.</>
             )}
           </p>
         </div>

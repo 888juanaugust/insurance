@@ -6,6 +6,7 @@ import { authorise } from './guard';
 import { audit } from './audit';
 import { money } from './format';
 import { readStatement, reconcile, type Reconciliation, type StatementRow } from './statements';
+import { statementView } from './statement-run';
 import {
   bookForStatement, saveStatement, findStatement, listPrincipals,
   assignStatementLine, acceptStatementLine, getStatementLine, getStatement,
@@ -310,6 +311,30 @@ export async function settleStatementAction(fd: FormData): Promise<void> {
   const statement = getStatement(id, user.org_id);
   if (!statement) return;
 
+  /*
+   * Closing checks. A statement RM 5,000 short with a dozen unplaced lines
+   * used to close as happily as a clean one, and once closed nobody looked
+   * again. Short is still allowed — an agency can decide a difference is not
+   * worth chasing — but only when the form says so, and the trail says it did.
+   */
+  let shortNote = '';
+  if (to === 'settled') {
+    const view = statementView(id, user.org_id);
+    if (view && !view.clean) {
+      if (String(fd.get('acknowledge') ?? '') !== '1') {
+        await audit(user, {
+          action: 'statement.settle', entity: 'statement', entityId: id, entityLabel: statement.reference,
+          outcome: 'denied',
+          summary: `Statement ${statement.reference} not closed: ${money(view.totals.outstanding)} unaccounted for and the shortfall was not acknowledged.`,
+        });
+        redirect(`/accounting/statements/${id}?blocked=1`);
+      }
+      shortNote =
+        ` with ${money(view.totals.outstanding)} unaccounted for` +
+        ` (${view.short.length} short-paid, ${view.unmatched.length} unplaced, ${view.missing.length} left off) — closed short by ${user.name}`;
+    }
+  }
+
   if (setStatementStatus(id, user.org_id, to)) {
     await audit(user, {
       action: 'statement.settle',
@@ -318,7 +343,7 @@ export async function settleStatementAction(fd: FormData): Promise<void> {
       entityLabel: statement.reference,
       summary:
         to === 'settled'
-          ? `Statement ${statement.reference} closed off at ${money(statement.total_paid)}.`
+          ? `Statement ${statement.reference} closed off at ${money(statement.total_paid)}${shortNote}.`
           : `Statement ${statement.reference} reopened.`,
     });
   }

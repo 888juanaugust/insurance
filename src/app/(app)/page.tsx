@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import {
   getKpis, listOrgs, listOutstanding, recentSales, upcomingBirthdays, listAgentOptions, getOrg,
-  productionSummary, motorCompliance, renewalsDue, expiringBuckets,
+  productionSummary, motorCompliance, renewalsDue, expiringBuckets, activeDemoAccounts,
 } from '@/lib/queries';
 import { classLabel, classSlug, longDate, money, policyHref, today } from '@/lib/format';
 import FilterSelect from '@/components/FilterSelect';
@@ -38,6 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const kpis = getKpis(orgId, validAgent);
   const year = today().slice(0, 4);
+  const demoAccounts = activeDemoAccounts(user.org_id);
   const birthdays = upcomingBirthdays(orgId, 30);
   const outClient = listOutstanding(orgId, 'client', validAgent);
   const outPrincipal = listOutstanding(orgId, 'principal', validAgent);
@@ -72,6 +73,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-4">
+      {/* The seeded accounts arrive with a password that is in the code. Until
+          every one of them is retired, the desk says so, every day, to the
+          people who can fix it. */}
+      {demoAccounts.length > 0 && (
+        <p role="alert" className="rounded-3xl border border-danger-line bg-danger-wash px-6 py-4 text-[13.5px] text-danger">
+          <strong>This agency can still be signed into with a public password.</strong>{' '}
+          {demoAccounts.map((a) => `${a.name} (${a.email})`).join(', ')}{' '}
+          {demoAccounts.length === 1 ? 'is a seeded demo account' : 'are seeded demo accounts'} whose password is in the
+          source code.{' '}
+          <Link href="/team" className="font-semibold underline">Add your own account and disable {demoAccounts.length === 1 ? 'it' : 'them'}</Link>{' '}
+          before anyone outside the agency can reach this address.
+        </p>
+      )}
+
       {/* ------------------------------------------------------ the desk */}
       <div className="panel px-6 py-6">
         <h1 className="text-[25px] font-semibold leading-tight tracking-tight text-ink">

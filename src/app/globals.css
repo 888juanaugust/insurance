@@ -269,7 +269,17 @@ body {
   }
 
   .btn-ghost:hover {
-    background: #F1F5F9;
+    background: var(--color-line-soft);
+  }
+
+  /* For the one button in a confirmation that cannot be taken back. */
+  .btn-danger {
+    background: var(--color-danger);
+    color: #fff;
+  }
+
+  .btn-danger:hover {
+    filter: brightness(0.92);
   }
 
   /* The bar across the top of every screen: 56px, white, one line. */

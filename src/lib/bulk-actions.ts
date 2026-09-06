@@ -5,12 +5,13 @@ import { authorise } from './guard';
 import { audit } from './audit';
 import { uploadPolicyAction, buildInputFrom, type UploadState } from './policy-actions';
 import {
-  getDocument, findPolicyByNumber, findPrincipalByName,
+  getDocument, findPolicyByNumber, findPrincipalByName, findDocumentByHash,
   findClientByIdentity, createClientFromPolicy, createPolicy,
   attachDocumentToPolicy, deleteDocumentRow,
 } from './queries';
 import { deleteDocument } from './files';
 import { today, money } from './format';
+import { resultFromDocument } from './reading';
 import type { ExtractionResult, FieldKey } from './extract';
 
 /**
@@ -63,7 +64,7 @@ function valueOf(r: ExtractionResult, key: FieldKey): string | number | null {
  */
 function judge(
   r: ExtractionResult,
-  state: UploadState,
+  state: Pick<UploadState, 'duplicateOf' | 'sameFileAs'>,
 ): { verdict: BatchVerdict; reasons: string[] } {
   const reasons: string[] = [];
 
@@ -160,8 +161,11 @@ export type BatchSaveResult = {
  * Write the readings the agent accepted.
  *
  * The extraction is re-read from the stored document rather than taken from
- * the browser: what gets saved is then exactly what was read and shown, and no
- * amount of tampering with the page can put a different premium on a policy.
+ * the browser, and JUDGED AGAIN here: only a reading that is ready goes in.
+ * What gets saved is then exactly what was read and shown, and no amount of
+ * tampering with the page — ticking a row the screen would not offer — can
+ * put a doubtful premium on a policy. A row that needs a look is saved from
+ * the check screen, where somebody has looked.
  */
 export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<BatchSaveResult> {
   const guard = await authorise({ action: 'policy.bulk_create', entity: 'policy' });
@@ -180,22 +184,41 @@ export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<Bat
       failed.push({ filename: documentId, why: 'the reading was no longer on file' });
       continue;
     }
+    if (doc.policy_id) {
+      failed.push({ filename: doc.filename, why: 'this reading has already been saved to a policy' });
+      continue;
+    }
     try {
-      const fields = JSON.parse(
-        (doc as unknown as { extracted_json: string }).extracted_json || '{}',
-      ) as ExtractionResult['fields'];
+      const reading = resultFromDocument(doc);
+      const fields = reading.fields;
       const val = (k: FieldKey) => fields[k]?.value ?? null;
 
       const policyNo = String(val('policy_no') ?? '');
-      if (!policyNo) { failed.push({ filename: doc.filename, why: 'no policy number' }); continue; }
-      if (findPolicyByNumber(user.org_id, policyNo)) {
-        failed.push({ filename: doc.filename, why: `policy ${policyNo} is already on the register` });
+      const duplicateOf = policyNo ? findPolicyByNumber(user.org_id, policyNo) : undefined;
+      /*
+       * The same file counts against this reading only once it is on a policy.
+       * Two copies of one schedule in the same batch would otherwise refuse
+       * each other — the first, judged clean when it was read, would be
+       * turned away at save time for matching the second. Whichever copy is
+       * saved first, the other then fails on the policy number, which is the
+       * refusal that means something.
+       */
+      const sameFile = doc.sha256 ? findDocumentByHash(user.org_id, doc.sha256, doc.id) : undefined;
+      const verdict = judge(reading, {
+        duplicateOf,
+        sameFileAs: sameFile && sameFile.policy_id
+          ? { filename: sameFile.filename, uploaded_at: sameFile.uploaded_at, policy_no: sameFile.policy_no }
+          : null,
+      });
+      if (verdict.verdict !== 'ready') {
+        failed.push({
+          filename: doc.filename,
+          why: (verdict.verdict === 'review' ? 'needs a look before it can be saved: ' : '') + verdict.reasons.join('; '),
+        });
         continue;
       }
 
-      const principal = findPrincipalByName(
-        (doc as unknown as { principal_detected: string | null }).principal_detected ?? '',
-      );
+      const principal = findPrincipalByName(doc.principal_detected ?? '');
       if (!principal) { failed.push({ filename: doc.filename, why: 'the insurer could not be matched' }); continue; }
 
       const name = String(val('insured_name') ?? '');

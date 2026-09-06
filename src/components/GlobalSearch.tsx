@@ -33,13 +33,20 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        } else {
+          // The rail is collapsed or in a drawer, so there is no box to focus;
+          // the search page has one, and a shortcut that does nothing teaches
+          // people not to press it.
+          router.push('/search');
+        }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {

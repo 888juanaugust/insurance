@@ -45,6 +45,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ cls:
     vehicle: get('vehicle'),
     insured: get('insured'),
     nric: get('nric'),
+    // The non-motor class tab. Without it the export of the Fire tab was every
+    // class, and nobody noticed until an accountant counted the rows.
+    cob: get('cob'),
     sort: get('sort'),
     dir: get('dir') === 'asc' ? 'asc' : 'desc',
   });

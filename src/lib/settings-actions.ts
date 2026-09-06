@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { currentUser } from './session';
 import { audit, diff } from './audit';
 import { hashPassword, verifyPassword } from './auth';
+import { passwordProblem } from './passwords';
 import { saveBillingProfile, changePassword, getUserPasswordHash } from './queries';
 
 export type ProfileState = { ok?: boolean; error?: string };
@@ -47,7 +48,8 @@ export async function changePasswordAction(_prev: unknown, fd: FormData): Promis
 
   if (!current || !next || !confirm) return { error: 'Fill in all three password fields.' };
   if (next !== confirm) return { error: 'The new password and its confirmation do not match.' };
-  if (next.length < 8) return { error: 'The new password must be at least 8 characters.' };
+  const problem = passwordProblem(next);
+  if (problem) return { error: problem };
   if (next === current) return { error: 'The new password must differ from the current one.' };
 
   const stored = getUserPasswordHash(user.id);

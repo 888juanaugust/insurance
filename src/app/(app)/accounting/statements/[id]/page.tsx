@@ -7,6 +7,7 @@ import { settleStatementAction, deleteStatementAction } from '@/lib/statement-ac
 import { longDate, money } from '@/lib/format';
 import { PageHeader, Crumb, Help } from '@/components/ui';
 import StatementLine from '@/components/StatementLine';
+import ConfirmSubmit from '@/components/Confirm';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,9 +30,15 @@ function Tile({ label, value, tone = 'plain', note }: {
   );
 }
 
-export default async function StatementPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StatementPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ blocked?: string }>;
+}) {
   const user = await requireAdmin({ action: 'statement.view', entity: 'statement' });
   const { id } = await params;
+  const { blocked } = await searchParams;
 
   const view = statementView(id, user.org_id);
   if (!view) notFound();
@@ -63,17 +70,64 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
               <form action={settleStatementAction}>
                 <input type="hidden" name="id" value={statement.id} />
                 <input type="hidden" name="to" value={statement.status === 'settled' ? 'open' : 'settled'} />
-                <button type="submit" className={`btn ${statement.status === 'settled' ? 'btn-ghost' : 'btn-primary'}`}>
-                  {statement.status === 'settled' ? 'Reopen' : 'Close it off'}
-                </button>
+                {statement.status === 'settled' ? (
+                  <button type="submit" className="btn btn-ghost">Reopen</button>
+                ) : view.clean ? (
+                  <ConfirmSubmit
+                    label="Close it off"
+                    className="btn btn-primary"
+                    yes="Close it"
+                    question={<>Close <strong>{statement.reference}</strong> off? Everything on it is accounted for. It can be reopened later.</>}
+                  />
+                ) : (
+                  <>
+                    {/* Closing a short statement is allowed — an agency may
+                        decide a shortfall is not worth chasing — but it is
+                        said out loud, and the action records that it was. */}
+                    <input type="hidden" name="acknowledge" value="1" />
+                    <ConfirmSubmit
+                      label="Close it off anyway"
+                      className="btn btn-ghost"
+                      danger
+                      yes="Close it short"
+                      question={
+                        <>
+                          <strong>{money(totals.outstanding)}</strong> is still unaccounted for on{' '}
+                          {statement.reference}: {view.short.length} short-paid case{view.short.length === 1 ? '' : 's'},{' '}
+                          {view.unmatched.length} line{view.unmatched.length === 1 ? '' : 's'} not yet placed,{' '}
+                          {view.missing.length} case{view.missing.length === 1 ? '' : 's'} left off. Close it anyway?
+                          The audit trail will record that it was closed short.
+                        </>
+                      }
+                    />
+                  </>
+                )}
               </form>
               <form action={deleteStatementAction}>
                 <input type="hidden" name="id" value={statement.id} />
-                <button type="submit" className="btn btn-ghost">Delete</button>
+                <ConfirmSubmit
+                  label="Delete"
+                  className="btn btn-ghost"
+                  danger
+                  yes="Delete it"
+                  question={
+                    <>
+                      Delete <strong>{statement.reference}</strong> — {statement.line_count} line{statement.line_count === 1 ? '' : 's'} worth{' '}
+                      {money(statement.total_paid)}, and every assignment and set-aside anyone made against it? This cannot be undone.
+                    </>
+                  }
+                />
               </form>
             </div>
           }
         />
+
+        {blocked === '1' && (
+          <p role="alert" className="mt-4 rounded-xl border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
+            Not closed. {money(totals.outstanding)} is still unaccounted for on this statement — use{' '}
+            <strong>Close it off anyway</strong> if that is a decision, not an oversight.
+          </p>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Tile label="The insurer paid" value={money(totals.paid)} note={`${statement.line_count} lines`} />

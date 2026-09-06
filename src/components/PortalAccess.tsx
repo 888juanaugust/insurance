@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { issuePortalCodeAction, revokePortalAccessAction, type PortalAdminState } from '@/lib/portal-actions';
+import ConfirmSubmit from './Confirm';
 
 export default function PortalAccess({
   clientId, clientName, access,
@@ -59,7 +60,13 @@ export default function PortalAccess({
           {live && (
             <form action={revokePortalAccessAction}>
               <input type="hidden" name="client_id" value={clientId} />
-              <button type="submit" className="btn btn-ghost text-danger">Withdraw access</button>
+              <ConfirmSubmit
+                label="Withdraw access"
+                className="btn btn-ghost text-danger"
+                danger
+                yes="Withdraw it"
+                question={<>Withdraw {clientName}'s portal access? Their code stops working at their very next click, and they will need a new one from you to get back in.</>}
+              />
             </form>
           )}
         </div>

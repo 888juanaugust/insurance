@@ -19,6 +19,7 @@ const BADGE: Record<string, string> = {
   no_answer: 'badge-grey',
   callback: 'badge-amber',
   not_renewing: 'badge-red',
+  back_on_list: 'badge-grey',
 };
 
 /**

@@ -23,9 +23,22 @@ export type PolicyFormProps = {
   documentId?: string | null;
 };
 
-function chipFor(f: { value: unknown; confidence: number; source: string } | undefined) {
+function chipFor(f: { value: unknown; confidence: number; source: string } | undefined, key: string) {
   if (!f || f.value === null) {
     return { label: 'not found', cls: 'badge-grey', title: 'The document did not state this — please enter it.' };
+  }
+  /*
+   * A cover note carries no policy number, so the reader stands the cover
+   * note's number in and says so. That is not "worked out from the other
+   * premium figures", and a tooltip that said it was taught people to
+   * distrust the badge — this one says what actually happened.
+   */
+  if (f.source === 'derived' && key === 'policy_no') {
+    return {
+      label: 'from cover note',
+      cls: 'badge-amber',
+      title: 'No policy number has been issued yet; the cover note number is standing in. Correct it when the insurer issues one.',
+    };
   }
   if (f.confidence >= 0.95) {
     return { label: 'confirmed', cls: 'badge-green', title: 'Both the pattern rules and the model read the same value.' };
@@ -157,7 +170,7 @@ export default function PolicyForm({
     const meta = extraction?.fields[READ_AS[name] ?? (name as FieldKey)];
     return {
       defaultValue: v(name),
-      chip: extraction ? chipFor(meta) : null,
+      chip: extraction ? chipFor(meta, READ_AS[name] ?? name) : null,
       evidence: meta?.evidence && meta.confidence < 0.95 ? meta.evidence : undefined,
     };
   };

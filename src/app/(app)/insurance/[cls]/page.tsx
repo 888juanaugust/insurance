@@ -108,7 +108,7 @@ export default async function RegisterPage({
       </div>
 
       <p className="mt-3 text-[12px] text-muted">
-        Showing {org.name}. The C and P badges are the client and principal payment status for each policy.
+        Showing {org.name}. <span className="font-semibold">Client Paid</span> and <span className="font-semibold">Paid Principal</span> are the two legs of each policy's money — what the client has settled with you, and what you have settled with the insurer.
       </p>
     </div>
   );

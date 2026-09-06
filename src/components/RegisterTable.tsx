@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { bulkPaidAction } from '@/lib/policy-actions';
 import { money, shortDate } from '@/lib/format';
 import { StatusBadge } from './ui';
+import ConfirmSubmit from './Confirm';
 
 export type RegisterRow = Record<string, any>;
 
@@ -41,7 +42,6 @@ const COLUMNS: Col[] = [
   { key: 'status', label: 'Policy Status', sortable: true },
   { key: 'uploaded_at', label: 'Upload Date', sortable: true },
   { key: 'client_paid', label: 'Client Paid' },
-  { key: 'loc_no', label: 'LOC' },
   { key: 'principal_paid', label: 'Paid Principal' },
 ];
 
@@ -96,6 +96,22 @@ export default function RegisterTable({
     else setParam({ sort: key, dir: 'desc', page: '1' });
   }
 
+  /*
+   * What the two bulk buttons would actually settle, so the question they ask
+   * carries a figure and a count rather than "are you sure". Only the unpaid
+   * leg counts: a policy already settled on that side is untouched.
+   */
+  const chosen = useMemo(() => rows.filter((r) => selected.includes(r.id)), [rows, selected]);
+  const owed = (leg: 'client' | 'principal') => {
+    const open = chosen.filter((r) => (leg === 'client' ? r.client_paid : r.principal_paid) !== 'paid');
+    const sum = open.reduce(
+      (s, r) => s + Number((leg === 'client' ? r.total_premium : r.principal_nett_amount) ?? 0), 0,
+    );
+    return { n: open.length, sum };
+  };
+  const clientLeg = owed('client');
+  const principalLeg = owed('principal');
+
   const allOnPage = visible.length > 0 && visible.every((r) => selected.includes(r.id));
   const toggleAll = () =>
     setSelected(allOnPage
@@ -110,24 +126,34 @@ export default function RegisterTable({
       ))}
 
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
-        <button
-          type="submit"
+        <ConfirmSubmit
           name="kind"
           value="client"
           disabled={selected.length === 0}
           className="btn btn-ghost disabled:opacity-50"
-        >
-          Bulk client paid
-        </button>
-        <button
-          type="submit"
+          label="Bulk client paid"
+          yes={`Settle ${clientLeg.n} collection${clientLeg.n === 1 ? '' : 's'}`}
+          question={
+            clientLeg.n === 0
+              ? `Every one of the ${selected.length} selected is already marked paid by the client. Nothing would change.`
+              : <>Record <strong>{money(clientLeg.sum, 'MYR ')}</strong> as collected from the client across{' '}
+                <strong>{clientLeg.n}</strong> polic{clientLeg.n === 1 ? 'y' : 'ies'}, paid in full today? There is no undo.</>
+          }
+        />
+        <ConfirmSubmit
           name="kind"
           value="principal"
           disabled={selected.length === 0}
           className="btn btn-ghost disabled:opacity-50"
-        >
-          Bulk principal paid
-        </button>
+          label="Bulk principal paid"
+          yes={`Settle ${principalLeg.n} remittance${principalLeg.n === 1 ? '' : 's'}`}
+          question={
+            principalLeg.n === 0
+              ? `Every one of the ${selected.length} selected is already marked paid to the principal. Nothing would change.`
+              : <>Record <strong>{money(principalLeg.sum, 'MYR ')}</strong> as remitted to the insurer across{' '}
+                <strong>{principalLeg.n}</strong> polic{principalLeg.n === 1 ? 'y' : 'ies'}, paid in full today? There is no undo.</>
+          }
+        />
         {selected.length > 0 && (
           <span className="text-[12.5px] text-muted">{selected.length} selected</span>
         )}
@@ -295,8 +321,6 @@ function renderCell(c: Col, r: RegisterRow, slug: string): React.ReactNode {
           {v === 'paid' ? 'Paid' : 'Unpaid'}
         </span>
       );
-    case 'loc_no':
-      return v ? <span className="badge badge-blue">{String(v)}</span> : <span className="text-muted">—</span>;
     default:
       return v === null || v === undefined || v === '' ? '—' : String(v);
   }

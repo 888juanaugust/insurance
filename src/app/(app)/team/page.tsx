@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { listSubAgents, getOrg } from '@/lib/queries';
+import { listSubAgents, getOrg, listAppUsers } from '@/lib/queries';
+import { verifyPassword } from '@/lib/auth';
+import { DEMO_PASSWORD } from '@/lib/passwords';
+import AccountsPanel from '@/components/AccountsPanel';
 import { money, longDate, num } from '@/lib/format';
 import Link from 'next/link';
 import { PageHeader, StatusBadge, Help } from '@/components/ui';
@@ -15,11 +18,23 @@ export default async function SubAgentsPage() {
 
   const agents = listSubAgents(user.org_id);
   const orgName = getOrg(user.org_id)?.name ?? '';
+
+  /*
+   * The hash never reaches the browser. It is checked here against the one
+   * password everyone who has seen the code knows, so an account created by
+   * hand with that same password is flagged as loudly as a seeded one.
+   */
+  const accounts = listAppUsers(user.org_id).map(({ password_hash, ...a }) => ({
+    id: a.id, name: a.name, email: a.email, status: a.status, demo: a.demo,
+    demoPassword: a.status === 'active' && verifyPassword(DEMO_PASSWORD, password_hash),
+  }));
   const active = agents.filter((a) => a.status === 'active').length;
   const commission = agents.reduce((s, a) => s + Number(a.commission_total ?? 0), 0);
 
   return (
     <div className="space-y-4">
+      <AccountsPanel accounts={accounts} me={user.id} />
+
       <div className="panel px-6 py-6">
         <PageHeader
           title="Agents"

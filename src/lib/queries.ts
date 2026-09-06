@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { DEMO_USER_IDS } from './seed';
 import type { FollowUpOutcome } from './follow-up';
 import { today } from './format';
 
@@ -904,6 +905,9 @@ export type DocumentRow = {
   byte_size: number; page_count: number; uploaded_by: string | null; uploaded_at: string;
   storage_key: string | null; content_type: string | null; sha256: string | null;
   kind: string | null; note: string | null; used_claude: number;
+  /** What the reader found, kept so a reading can be reopened or re-judged. */
+  principal_detected: string | null; field_count: number;
+  warnings: string | null; extracted_json: string | null;
 };
 
 export function getDocument(id: string, orgId: string): DocumentRow | undefined {
@@ -1461,6 +1465,81 @@ export function getUserPasswordHash(userId: string): string | undefined {
   return row?.password_hash;
 }
 
+/* ------------------------------------------------------ sign-in accounts */
+
+export type AppUserRow = {
+  id: string; org_id: string; email: string; name: string; role: string;
+  agent_code: string | null; phone: string | null; status: string;
+  /** Seeded with the repository, password and all. */
+  demo: boolean;
+};
+
+/** Every account in the agency, the seeded ones marked. */
+export function listAppUsers(orgId: string): Array<AppUserRow & { password_hash: string }> {
+  const rows = getDb()
+    .prepare('SELECT * FROM app_user WHERE org_id = ? ORDER BY status = \'active\' DESC, name')
+    .all(orgId) as Array<Omit<AppUserRow, 'demo'> & { password_hash: string }>;
+  return rows.map((r) => ({ ...r, demo: DEMO_USER_IDS.includes(r.id) }));
+}
+
+export function getAppUser(id: string, orgId: string): AppUserRow | undefined {
+  const row = getDb()
+    .prepare('SELECT id, org_id, email, name, role, agent_code, phone, status FROM app_user WHERE id = ? AND org_id = ?')
+    .get(id, orgId) as Omit<AppUserRow, 'demo'> | undefined;
+  return row ? { ...row, demo: DEMO_USER_IDS.includes(row.id) } : undefined;
+}
+
+export function findAppUserByEmail(email: string) {
+  return getDb()
+    .prepare('SELECT id, org_id FROM app_user WHERE lower(email) = lower(?)')
+    .get(email) as { id: string; org_id: string } | undefined;
+}
+
+export function createAppUser(row: {
+  org_id: string; email: string; name: string; role: string; password_hash: string;
+}): string {
+  const id = newId('usr');
+  getDb()
+    .prepare(
+      `INSERT INTO app_user (id, org_id, email, password_hash, name, role, agent_code, phone, status)
+       VALUES (@id, @org_id, @email, @password_hash, @name, @role, NULL, NULL, 'active')`,
+    )
+    .run({ ...row, id });
+  return id;
+}
+
+export function setAppUserStatus(id: string, orgId: string, status: 'active' | 'disabled'): boolean {
+  return getDb()
+    .prepare('UPDATE app_user SET status = ? WHERE id = ? AND org_id = ?')
+    .run(status, id, orgId).changes > 0;
+}
+
+export function setAppUserPassword(id: string, orgId: string, hash: string): boolean {
+  return getDb()
+    .prepare('UPDATE app_user SET password_hash = ? WHERE id = ? AND org_id = ?')
+    .run(hash, id, orgId).changes > 0;
+}
+
+/** How many accounts in the agency can still sign in. */
+export function activeUserCount(orgId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS n FROM app_user WHERE org_id = ? AND status = 'active'")
+    .get(orgId) as { n: number };
+  return row.n;
+}
+
+/** Seeded demo accounts in this agency that can still sign in. */
+export function activeDemoAccounts(orgId: string): Array<{ id: string; name: string; email: string }> {
+  if (!DEMO_USER_IDS.length) return [];
+  const placeholders = DEMO_USER_IDS.map(() => '?').join(',');
+  return getDb()
+    .prepare(
+      `SELECT id, name, email FROM app_user
+        WHERE org_id = ? AND status = 'active' AND id IN (${placeholders}) ORDER BY name`,
+    )
+    .all(orgId, ...DEMO_USER_IDS) as Array<{ id: string; name: string; email: string }>;
+}
+
 /* ------------------------------------------------------- home: production */
 
 /** Cases, premium and the full commission split, by month of creation. */
@@ -1808,7 +1887,13 @@ export function auditFacets(orgId: string) {
  * at it. Anything still unattached after a week goes.
  */
 export function abandonedUploads(days = 7): Array<{ id: string; storage_key: string }> {
-  const cutoff = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  /*
+   * Measured on the application's clock, not the machine's. `uploaded_at` is
+   * written with today(), which IH_TODAY can pin; a cutoff taken from
+   * Date.now() then sat weeks ahead of every upload, and each new reading
+   * swept away the one before it — a batch of five kept only the last.
+   */
+  const cutoff = new Date(Date.parse(today()) - days * 86400_000).toISOString().slice(0, 10);
   return getDb()
     .prepare(
       `SELECT id, storage_key FROM policy_document
@@ -2355,6 +2440,13 @@ export function importClients(orgId: string, rows: ImportedClient[]): number {
 
 export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
   const db = getDb();
+  /*
+   * Imported policies used to arrive with no commission at all — absent from
+   * every commission report and short-paid on every insurer statement. The
+   * rate on file for the insurer and class is the same one a keyed policy
+   * would get, so it is applied here and the two legs of the money follow.
+   */
+  const rateOf = db.prepare('SELECT motor_rate, non_motor_rate FROM principal WHERE id = ?');
   const policy = db.prepare(
     `INSERT INTO policy (id, org_id, client_id, principal_id, policy_no, class, product,
        type_of_cover, status, case_type, effective_date, expiry_date, issue_date, created_date,
@@ -2364,7 +2456,7 @@ export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
      VALUES (@id, @org_id, @client_id, @principal_id, @policy_no, @class, @product,
        @product, 'active', 'new', @effective_date, @expiry_date, @effective_date, @created,
        @sum_insured, @gross_premium, @ncd_pct, 0, 0, @gross_premium,
-       @service_tax, @stamp_duty, @total_premium, 0, 0, 0,
+       @service_tax, @stamp_duty, @total_premium, @commission_rate, @commission_amt, 0,
        0, 0, 0, @created, 'imported', @remarks)`,
   );
   const motor = db.prepare(
@@ -2381,12 +2473,18 @@ export function importPolicies(orgId: string, rows: ImportedPolicy[]): number {
   const tx = db.transaction((batch: ImportedPolicy[]) => {
     for (const r of batch) {
       const id = newId('pol');
-      policy.run({ ...r, id, org_id: orgId, created: today() });
+      const rates = rateOf.get(r.principal_id) as { motor_rate: number; non_motor_rate: number } | undefined;
+      const commission_rate = Number((r.class === 'motor' ? rates?.motor_rate : rates?.non_motor_rate) ?? 0);
+      const commission_amt = Math.round(r.gross_premium * (commission_rate / 100) * 100) / 100;
+      policy.run({ ...r, id, org_id: orgId, created: today(), commission_rate, commission_amt });
       if (r.class === 'motor' && (r.vehicle_no || r.make_model)) {
         motor.run(id, r.vehicle_no, r.make_model);
       }
       payment.run({ id: `${id}-pay-c`, policy_id: id, kind: 'client', amount: r.total_premium, due_date: r.effective_date });
-      payment.run({ id: `${id}-pay-p`, policy_id: id, kind: 'principal', amount: r.total_premium, due_date: r.effective_date });
+      payment.run({
+        id: `${id}-pay-p`, policy_id: id, kind: 'principal',
+        amount: Math.round((r.total_premium - commission_amt) * 100) / 100, due_date: r.effective_date,
+      });
     }
     return batch.length;
   });

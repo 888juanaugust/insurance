@@ -77,7 +77,7 @@ export default async function PolicyDetailPage({
       <div className="panel px-6 py-6">
         <Crumb
           items={[
-            { href: `/insurance/${slug}`, label: slug === 'motor' ? 'General Motor' : 'General Non-Motor' },
+            { href: `/insurance/${slug}`, label: slug === 'general-motor' ? 'General Motor' : 'General Non-Motor' },
             { label: policy.policy_no },
           ]}
         />

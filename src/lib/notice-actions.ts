@@ -18,15 +18,19 @@ export async function generateNoticesAction(): Promise<void> {
   if (!guard.ok) forbid(guard.message);
 
   const result = generateRenewalNotices(guard.user.org_id);
+  const noContact = result.skipped.filter((s) => s.because === 'no_contact').length;
+  const declined = result.skipped.filter((s) => s.because === 'not_renewing').length;
   await audit(guard.user, {
     action: 'notice.generate', entity: 'message',
     summary:
       `Renewal notices built: ${result.queued} queued from ${result.considered} policies due`
-      + (result.skipped.length ? `, ${result.skipped.length} skipped for want of a contact detail.` : '.'),
+      + (noContact ? `, ${noContact} skipped for want of a contact detail` : '')
+      + (declined ? `, ${declined} left out because the client said they are not renewing` : '')
+      + '.',
   });
 
   revalidatePath('/renewals/notices');
-  redirect(`/renewals/notices?generated=${result.queued}&skipped=${result.skipped.length}`);
+  redirect(`/renewals/notices?generated=${result.queued}&skipped=${noContact}&declined=${declined}`);
 }
 
 /** Try to deliver what is queued. */

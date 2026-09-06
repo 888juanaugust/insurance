@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { authorise } from './guard';
 import { audit } from './audit';
 import { addFollowUp } from './queries';
-import { isFollowUpOutcome, OUTCOME_LABEL } from './follow-up';
+import { isFollowUpOutcome, OUTCOME_LABEL, RESUME_OUTCOME } from './follow-up';
 
 export type FollowUpState = {
   ok?: boolean;
@@ -45,7 +45,7 @@ export async function logFollowUpAction(_prev: unknown, fd: FormData): Promise<F
   const values = { outcome, note, next_at: nextAt };
   const refuse = (error: string): FollowUpState => ({ error, values });
 
-  if (!isFollowUpOutcome(outcome)) return refuse('Choose what happened.');
+  if (!isFollowUpOutcome(outcome) || outcome === RESUME_OUTCOME) return refuse('Choose what happened.');
   if (nextAt && !ISO.test(nextAt)) return refuse('The call-back date is not a date.');
   if (outcome === 'callback' && !nextAt) {
     // Without the date it is not a call back, it is a note — and the case
@@ -82,4 +82,45 @@ export async function logFollowUpAction(_prev: unknown, fd: FormData): Promise<F
   revalidatePath('/expiring');
   revalidatePath('/');
   return { ok: true, message: 'Noted.' };
+}
+
+/**
+ * Put a case back on the chase list.
+ *
+ * "Call back later" and "Not renewing" take a case off the list, and until
+ * this there was no way back: mark one by mistake and it stayed gone. The
+ * return is written as a line of its own — "back on the list", by whom — so
+ * the history shows what happened rather than pretending the earlier note
+ * was never made.
+ */
+export async function resumeChaseAction(_prev: unknown, fd: FormData): Promise<FollowUpState> {
+  const guard = await authorise({ action: 'followup.resume', entity: 'follow_up' });
+  if (!guard.ok) return { error: guard.message };
+  const user = guard.user;
+
+  const policyId = String(fd.get('policy_id') ?? '');
+  const clientId = String(fd.get('client_id') ?? '') || null;
+
+  const id = addFollowUp(user.org_id, {
+    policy_id: policyId,
+    client_id: clientId,
+    outcome: RESUME_OUTCOME,
+    note: 'Put back on the chase list.',
+    next_at: null,
+    by_user: user.id,
+    by_name: user.name,
+  });
+  if (!id) return { error: 'That policy is not on your register.' };
+
+  await audit(user, {
+    action: 'followup.resume',
+    entity: 'follow_up',
+    entityId: id,
+    entityLabel: policyId,
+    summary: 'Renewal follow-up: put back on the chase list.',
+  });
+
+  revalidatePath('/expiring');
+  revalidatePath('/');
+  return { ok: true, message: 'Back on the list.' };
 }

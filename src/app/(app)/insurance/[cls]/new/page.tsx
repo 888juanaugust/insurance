@@ -17,12 +17,18 @@ export default async function NewPolicyPage({
   params, searchParams,
 }: {
   params: Promise<{ cls: string }>;
-  searchParams: Promise<{ renewal?: string }>;
+  searchParams: Promise<{ renewal?: string; from?: string }>;
 }) {
   const user = await requireAdmin();
 
   const { cls: slug } = await params;
-  const { renewal } = await searchParams;
+  const { renewal, from } = await searchParams;
+  /*
+   * Reached from the Quotations screen. The form used to open with the status
+   * on Active, so "New motor quote" wrote a live policy unless the person
+   * noticed and changed it — which is the opposite of what the button said.
+   */
+  const quoting = from === 'quote';
   const cls = CLASS_BY_SLUG[slug];
   if (!cls) notFound();
 
@@ -81,18 +87,20 @@ export default async function NewPolicyPage({
         hire_purchase: motor?.hire_purchase ?? '',
         referral_fee: 0,
       }
-    : { status: 'active', case_type: 'new', referral_fee: 0 };
+    : { status: quoting ? 'quotation' : 'active', case_type: 'new', referral_fee: 0 };
 
   return (
     <div className="space-y-4">
       <div className="panel px-6 py-6">
-        <Crumb items={[{ href: `/insurance/${slug}`, label: title }, { label: 'Create Policy' }]} />
+        <Crumb items={[{ href: `/insurance/${slug}`, label: title }, { label: quoting ? 'New quotation' : 'Create Policy' }]} />
         <PageHeader
-          title={p ? `Renew ${p.policy_no}` : 'Create Policy'}
+          title={p ? `Renew ${p.policy_no}` : quoting ? 'New quotation' : 'Create Policy'}
           subtitle={
             p
               ? `Carried over from last year. Check the premium and the no-claim discount — a claim may have reset it.`
-              : 'Key in a policy by hand.'
+              : quoting
+                ? 'Saved with the status Quotation: it sits on the register as a quote, off the expiring list and the money reports, until you change it to Active.'
+                : 'Key in a policy by hand.'
           }
         />
       </div>

@@ -7,6 +7,7 @@ import { PageHeader, StatusBadge, Help } from '@/components/ui';
 import { approveCommissionAction, bulkCommissionAction } from '@/lib/actions';
 import FilterSelect from '@/components/FilterSelect';
 import { commissionByAgent } from '@/lib/queries';
+import ConfirmSubmit from '@/components/Confirm';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,31 +16,46 @@ function StatusButton({
   status,
   label,
   ghost,
+  confirm,
 }: {
   id: string;
   status: string;
   label: string;
   ghost?: boolean;
+  /** Asked before the change when there is no way back from it. */
+  confirm?: React.ReactNode;
 }) {
+  const cls = `btn ${ghost ? 'btn-ghost' : 'btn-primary'} py-1 px-2.5 text-[12px]`;
   return (
     <form action={approveCommissionAction}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
-      <button type="submit" className={`btn ${ghost ? 'btn-ghost' : 'btn-primary'} py-1 px-2.5 text-[12px]`}>
-        {label}
-      </button>
+      {confirm ? (
+        <ConfirmSubmit label={label} className={cls} question={confirm} yes={label} />
+      ) : (
+        <button type="submit" className={cls}>{label}</button>
+      )}
     </form>
   );
 }
 
-/** One form per control — see RenewalButton for why the op is a hidden input. */
-function BulkButton({ op, label, primary }: { op: string; label: string; primary?: boolean }) {
+/**
+ * One form per control — see RenewalButton for why the op is a hidden input.
+ * Both bulk controls move the whole agency's commission in one press, so both
+ * say what they are about to do, in ringgit, before they do it.
+ */
+function BulkButton({
+  op, label, primary, question, yes,
+}: { op: string; label: string; primary?: boolean; question: React.ReactNode; yes: string }) {
   return (
     <form action={bulkCommissionAction}>
       <input type="hidden" name="op" value={op} />
-      <button type="submit" className={`btn ${primary ? 'btn-primary' : 'btn-ghost'}`}>
-        {label}
-      </button>
+      <ConfirmSubmit
+        label={label}
+        className={`btn ${primary ? 'btn-primary' : 'btn-ghost'}`}
+        question={question}
+        yes={yes}
+      />
     </form>
   );
 }
@@ -57,6 +73,8 @@ export default async function AccountingPage({
   const tab = sp.tab === 'einvoice' ? 'einvoice' : 'monthly';
   const rows = listCommissions(user.org_id, status);
   const totals = commissionTotals(user.org_id);
+  const pendingCount = listCommissions(user.org_id, 'pending').length;
+  const approvedCount = listCommissions(user.org_id, 'approved').length;
   const byAgent = commissionByAgent(user.org_id);
   const statements = statementExposure(user.org_id);
 
@@ -148,10 +166,32 @@ export default async function AccountingPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 py-3">
-          <BulkButton op="regenerate" label="Generate / update reports" />
-          <BulkButton op="force" label="Force regenerate…" />
-          <BulkButton op="approve" label="Bulk approve (all pending)" primary />
-          <BulkButton op="reject" label="Bulk reject (all pending)" />
+          <BulkButton
+            op="approve"
+            label="Approve everything pending"
+            primary
+            yes={`Approve ${pendingCount}`}
+            question={
+              pendingCount === 0
+                ? 'Nothing is pending approval.'
+                : <>Approve all <strong>{pendingCount}</strong> pending commission record{pendingCount === 1 ? '' : 's'} —{' '}
+                  <strong>{money(totals.pending)}</strong> — for payout? Each can still be reverted one at a time until it is marked paid.</>
+            }
+          />
+          <BulkButton
+            op="revert"
+            label="Send approved back to pending"
+            yes={`Send ${approvedCount} back`}
+            question={
+              approvedCount === 0
+                ? 'Nothing is approved and awaiting payout.'
+                : <>Send all <strong>{approvedCount}</strong> approved record{approvedCount === 1 ? '' : 's'} —{' '}
+                  <strong>{money(totals.approved)}</strong> — back to pending? Records already paid are not touched.</>
+            }
+          />
+          <span className="text-[12px] text-muted">
+            The tables recalculate on every visit; there is nothing to generate.
+          </span>
         </div>
       </div>
 
@@ -269,7 +309,12 @@ export default async function AccountingPage({
                       )}
                       {r.status === 'approved' && (
                         <>
-                          <StatusButton id={r.id} status="paid" label="Mark paid" />
+                          <StatusButton
+                            id={r.id}
+                            status="paid"
+                            label="Mark paid"
+                            confirm={<>Record <strong>{money(r.net_amount)}</strong> as paid out to {r.agent_name ?? 'the agency'} on {r.policy_no}? Paid is final — there is no way back from it.</>}
+                          />
                           <StatusButton id={r.id} status="pending" label="Revert" ghost />
                         </>
                       )}

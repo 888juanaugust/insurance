@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState } from 'react';
 import { attachDocumentAction, deleteDocumentAction, type DocumentState } from '@/lib/document-actions';
 import { DOCUMENT_KINDS, CLAIM_DOCUMENT_KINDS, KIND_LABEL } from '@/lib/document-kinds';
+import ConfirmSubmit from './Confirm';
 
 export type DocRow = {
   id: string;
@@ -95,7 +96,13 @@ export default function DocumentsPanel({
                 <form action={deleteDocumentAction}>
                   <input type="hidden" name="document_id" value={d.id} />
                   <input type="hidden" name="back" value={back} />
-                  <button type="submit" className="text-danger hover:underline">Remove</button>
+                  <ConfirmSubmit
+                    label="Remove"
+                    className="text-danger hover:underline"
+                    danger
+                    yes="Remove it"
+                    question={<>Remove <strong>{d.filename}</strong> from the file? The document itself is deleted from the server and cannot be recovered.</>}
+                  />
                 </form>
               </div>
             </li>

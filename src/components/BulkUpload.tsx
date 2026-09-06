@@ -129,7 +129,9 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
         <h2 className="text-[15px] font-semibold text-ink">Read a stack of schedules</h2>
         <p className="mt-1 text-[13px] text-ink-soft">
           Choose as many policy PDFs as you like. Each is read on its own and judged; the clean ones
-          can go in together, and anything doubtful waits for you. Nothing is saved until you say so.
+          can go in together, and anything doubtful is sent to the check screen instead. Motor or
+          non-motor is decided from each document, whichever register you started from. Nothing is
+          saved until you say so.
         </p>
 
         <label
@@ -228,6 +230,7 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
                     <th>Policy no</th>
                     <th>Insured</th>
                     <th>Insurer</th>
+                    <th>Class</th>
                     <th>Period</th>
                     <th className="num">Total</th>
                     <th>Verdict</th>
@@ -237,7 +240,10 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
                   {rows.map((r, i) => (
                     <tr key={r.key} className={r.verdict === 'failed' && r.state === 'done' ? 'bg-danger-wash' : undefined}>
                       <td>
-                        {r.state === 'done' && r.documentId && r.verdict !== 'failed' && (
+                        {/* Only a ready reading can be ticked. A row that needs a
+                            look used to be tickable and saved unreviewed; one
+                            already on file could be ticked and always failed. */}
+                        {r.state === 'done' && r.documentId && r.verdict === 'ready' && (
                           <input
                             type="checkbox"
                             aria-label={`Save ${r.filename}`}
@@ -260,6 +266,9 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
                       <td className="max-w-[200px] truncate text-ink-soft">{r.insured ?? '—'}</td>
                       <td className="font-semibold text-brand">{r.principal ?? '—'}</td>
                       <td className="text-ink-soft">
+                        {r.state === 'done' && r.cls ? (r.cls === 'motor' ? 'Motor' : 'Non-motor') : '—'}
+                      </td>
+                      <td className="text-ink-soft">
                         {r.effective_date ? `${longDate(r.effective_date)} — ${longDate(r.expiry_date)}` : '—'}
                       </td>
                       <td className="num">{typeof r.total === 'number' ? money(r.total) : '—'}</td>
@@ -276,10 +285,18 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
                             )}
                             {r.existingPolicyId && (
                               <Link
-                                href={`/insurance/${slug}/${r.existingPolicyId}`}
+                                href={`/insurance/${r.cls ? classSlug(r.cls) : slug}/${r.existingPolicyId}`}
                                 className="mt-0.5 block text-[11.5px] text-accent hover:underline"
                               >
                                 Open the one on file
+                              </Link>
+                            )}
+                            {r.verdict === 'review' && r.documentId && (
+                              <Link
+                                href={`/insurance/${r.cls ? classSlug(r.cls) : slug}/upload?doc=${r.documentId}`}
+                                className="mt-0.5 block text-[11.5px] font-semibold text-accent hover:underline"
+                              >
+                                Open it on the check screen
                               </Link>
                             )}
                           </>
@@ -304,9 +321,8 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
               </button>
               <span className="text-[12.5px] text-muted">
                 Each selected reading becomes a policy, with its document attached and a client
-                created where none is on file. The rest are left alone — open them from
-                {' '}<Link href={`/insurance/${slug}/upload`} className="text-accent hover:underline">the single upload</Link>{' '}
-                to work through one at a time.
+                created where none is on file. Rows that need a look are not saved from here —
+                open each on the check screen, where every field can be seen before it goes in.
               </span>
             </div>
           </form>
