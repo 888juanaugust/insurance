@@ -37,7 +37,7 @@ export default function UploadWorkbench({ cls, clients, principals, agents, clau
 
         <label
           htmlFor="file"
-          className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center transition-colors hover:border-accent hover:bg-[#f8fbff]"
+          className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center transition-colors hover:border-accent hover:bg-brand-wash"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 h-8 w-8 text-muted">
             <path d="M12 16V4" strokeLinecap="round" />
@@ -71,7 +71,7 @@ export default function UploadWorkbench({ cls, clients, principals, agents, clau
         </label>
 
         {(sizeError || state?.error) && (
-          <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-3 text-[13px] text-[#b32b21]">
+          <p role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
             {sizeError || state?.error}
           </p>
         )}
@@ -85,7 +85,7 @@ export default function UploadWorkbench({ cls, clients, principals, agents, clau
           </Link>
         </div>
 
-        <div className="mt-5 rounded border border-line bg-[#f8f9fb] px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
+        <div className="mt-5 rounded border border-line bg-canvas px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
           <p className="font-semibold text-ink">How the document is read</p>
           <p className="mt-1">
             Labelled fields are matched against pattern rules covering the common Malaysian motor
@@ -187,7 +187,7 @@ function Review({
         </div>
 
         {state.duplicateOf && (
-          <p className="mt-4 rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-2.5 text-[13px] text-[#b32b21]">
+          <p className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-2.5 text-[13px] text-danger">
             Policy <strong>{state.duplicateOf.policy_no}</strong> is already on file.{' '}
             <Link href={`/insurance/${classSlug(cls)}/${state.duplicateOf.id}`} className="underline">
               Open the existing record
@@ -197,7 +197,7 @@ function Review({
         )}
 
         {state.sameFileAs && (
-          <p className="mt-4 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2.5 text-[13px] text-[#7a5a10]">
+          <p className="mt-4 rounded border border-warn-line bg-warn-wash px-4 py-2.5 text-[13px] text-warn">
             This exact file is already on record as <strong>{state.sameFileAs.filename}</strong>,
             uploaded {state.sameFileAs.uploaded_at}
             {state.sameFileAs.policy_no && <> against policy <strong>{state.sameFileAs.policy_no}</strong></>}.
@@ -208,7 +208,7 @@ function Review({
         {result.warnings.length > 0 && (
           <ul className="mt-4 space-y-1.5">
             {result.warnings.map((w, i) => (
-              <li key={i} className="rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2 text-[12.5px] text-[#7a5a10]">
+              <li key={i} className="rounded border border-warn-line bg-warn-wash px-4 py-2 text-[12.5px] text-warn">
                 {w}
               </li>
             ))}

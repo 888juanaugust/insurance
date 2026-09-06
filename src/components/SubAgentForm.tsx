@@ -187,7 +187,7 @@ export default function SubAgentForm({
       </Section>
 
       {state?.error && (
-        <p role="alert" className="rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {state.error}
         </p>
       )}

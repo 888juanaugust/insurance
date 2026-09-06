@@ -43,10 +43,22 @@ export function toNumber(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const MONEY = String.raw`\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+\.\d{2}`;
+/*
+ * Two decimal places, always. With them optional this matched a bare digit,
+ * so "4D SEDAN" on the line above a Gross Premium label was read as RM 4.00
+ * and "M.X.1" as a stamp duty of RM 1.00. Both were then caught by the
+ * gross + tax + stamp check and re-derived correctly, which is exactly why it
+ * went unnoticed — on a schedule where the arithmetic cannot rescue it, a
+ * stray digit would have been saved as the premium. Every amount on a
+ * Malaysian schedule is printed to the sen; a figure without them is not one.
+ */
+const MONEY = String.raw`\d[\d,]*\.\d{2}`;
 
 /** A cash-rounded amount for the counter, never the policy total. */
 const OTC = /\bOTC\b|Kaunter|ROUNDED|Dibundarkan/i;
+
+/** Two references are the same when only their punctuation differs. */
+const squashRef = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /* ------------------------------------------------------------------ *
  * Insurer detection
@@ -401,11 +413,24 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
 
   pruneInvalid(fields);
 
-  // Cover notes carry no policy number until the policy issues, and the
-  // register is keyed on the number the insurer actually gave the case.
-  if (fields.policy_no.value === null && fields.cover_note_no.value !== null) {
+  /*
+   * Cover notes carry no policy number until the policy issues, and the
+   * register is keyed on the number the insurer actually gave the case.
+   *
+   * The second half matters as much as the first: on a cover note the same
+   * number often also appears as a certificate number, which the weak
+   * fallback matcher picks up as a policy number. The value is right and the
+   * label is wrong, and the label is what tells an agent this row will need
+   * correcting once the policy issues.
+   */
+  const noteNo = fields.cover_note_no.value;
+  const sameAsNote =
+    typeof noteNo === 'string' && typeof fields.policy_no.value === 'string' &&
+    squashRef(fields.policy_no.value) === squashRef(noteNo);
+
+  if (noteNo !== null && (fields.policy_no.value === null || (sameAsNote && fields.policy_no.confidence < 0.8))) {
     fields.policy_no = {
-      value: fields.cover_note_no.value,
+      value: noteNo,
       confidence: 0.7,
       source: 'derived',
       evidence: 'taken from the cover note number — no policy number issued yet',

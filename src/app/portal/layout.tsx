@@ -39,7 +39,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">{children}</main>
 
-      <footer className="border-t border-line bg-white">
+      <footer className="border-t border-line bg-surface">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-3.5 text-[12.5px] text-muted sm:px-6">
           <span>© {year} Insurhelp</span>
           <span>Questions about your cover? Speak to your agency.</span>

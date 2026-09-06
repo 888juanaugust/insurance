@@ -34,7 +34,7 @@ export default function PortalAccess({
         </p>
 
         {state?.code && (
-          <div className="mt-4 rounded border border-[#bfe0cd] bg-ok-wash px-4 py-3">
+          <div className="mt-4 rounded border border-ok-line bg-ok-wash px-4 py-3">
             <p className="text-[12px] font-semibold text-ok">Read this to the client now</p>
             <p className="mt-1.5 font-mono text-[20px] tracking-widest text-ink">{state.code}</p>
             <p className="mt-1.5 text-[12px] text-ok">
@@ -44,7 +44,7 @@ export default function PortalAccess({
         )}
 
         {state?.error && (
-          <p role="alert" className="mt-3 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-2.5 text-[12.5px] text-danger">
+          <p role="alert" className="mt-3 rounded border border-danger-line bg-danger-wash px-4 py-2.5 text-[12.5px] text-danger">
             {state.error}
           </p>
         )}

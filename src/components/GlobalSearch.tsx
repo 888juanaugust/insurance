@@ -132,9 +132,9 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
           aria-expanded={open}
           aria-controls="search-results"
           role="combobox"
-          className="w-full rounded-xl border border-line bg-canvas py-1.5 pl-8 pr-9 text-[13px] text-ink placeholder:text-muted focus:border-accent focus:bg-white focus:outline-none"
+          className="w-full rounded-xl border border-line bg-canvas py-1.5 pl-8 pr-9 text-[13px] text-ink placeholder:text-muted focus:border-accent focus:bg-surface focus:outline-none"
         />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-line bg-white px-1 py-0.5 text-[10px] font-medium text-muted">
+        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-line bg-surface px-1 py-0.5 text-[10px] font-medium text-muted">
           ⌘K
         </kbd>
       </div>
@@ -143,7 +143,7 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
         <div
           id="search-results"
           role="listbox"
-          className="absolute left-2 right-2 z-40 mt-1 max-h-[60vh] overflow-y-auto rounded border border-line bg-white shadow-lg"
+          className="absolute left-2 right-2 z-40 mt-1 max-h-[60vh] overflow-y-auto rounded border border-line bg-surface shadow-lg"
         >
           {hits.length === 0 ? (
             <p className="px-3 py-3 text-[12.5px] text-muted">
@@ -160,7 +160,7 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(hit)}
                   className={`block w-full border-b border-line px-3 py-2 text-left last:border-0 ${
-                    i === active ? 'bg-[#f2f6fb]' : 'hover:bg-[#fafbfc]'
+                    i === active ? 'bg-brand-wash' : 'hover:bg-canvas'
                   }`}
                 >
                   <div className="flex items-baseline gap-2">
@@ -175,7 +175,7 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
               <button
                 type="button"
                 onClick={() => { setOpen(false); router.push(`/search?q=${encodeURIComponent(term.trim())}`); }}
-                className="block w-full px-3 py-2 text-left text-[12px] font-medium text-accent hover:bg-[#fafbfc]"
+                className="block w-full px-3 py-2 text-left text-[12px] font-medium text-accent hover:bg-canvas"
               >
                 See all results for “{term.trim()}”
               </button>

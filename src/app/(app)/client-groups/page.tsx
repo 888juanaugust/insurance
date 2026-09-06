@@ -61,7 +61,7 @@ export default async function GroupingClientPage() {
           return (
             <div key={g.id} className="panel">
               <div className="panel-head">{g.name}</div>
-              <ul className="divide-y divide-[#eff1f4]">
+              <ul className="divide-y divide-line-soft">
                 {list.map((m) => (
                   <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <Link href={`/clients/${m.id}`} className="link-red text-[13px]">
@@ -80,7 +80,7 @@ export default async function GroupingClientPage() {
 
         <div className="panel">
           <div className="panel-head">Ungrouped clients ({ungrouped.length})</div>
-          <ul className="scroll-y max-h-[320px] divide-y divide-[#eff1f4]">
+          <ul className="scroll-y max-h-[320px] divide-y divide-line-soft">
             {ungrouped.map((m) => (
               <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                 <Link href={`/clients/${m.id}`} className="link-red text-[13px]">

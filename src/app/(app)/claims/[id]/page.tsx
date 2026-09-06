@@ -102,7 +102,7 @@ export default async function ClaimPage({
         </div>
 
         {blocked === 'settled' && (
-          <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+          <p role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
             A settled claim cannot be deleted — the settlement is the record that money was paid.
           </p>
         )}
@@ -148,12 +148,12 @@ export default async function ClaimPage({
               <Field label="Station" value={claim.police_station} />
             </dl>
             {!claim.police_report_no ? (
-              <p className="mt-3 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2.5 text-[12.5px] text-[#7a5a10]">
+              <p className="mt-3 rounded border border-warn-line bg-warn-wash px-4 py-2.5 text-[12.5px] text-warn">
                 No police report recorded. Every Malaysian motor policy requires one within 24 hours of
                 the incident — chase it before the insurer asks.
               </p>
             ) : reportGap !== null && reportGap > 1 ? (
-              <p className="mt-3 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2.5 text-[12.5px] text-[#7a5a10]">
+              <p className="mt-3 rounded border border-warn-line bg-warn-wash px-4 py-2.5 text-[12.5px] text-warn">
                 The report was made {reportGap} days after the incident. Beyond 24 hours the insurer can
                 decline — have the insured's explanation ready.
               </p>

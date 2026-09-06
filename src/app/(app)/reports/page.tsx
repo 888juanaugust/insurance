@@ -45,7 +45,7 @@ export default async function ReportsPage() {
           <Link
             key={r.href}
             href={r.href}
-            className="rounded border border-line px-5 py-4 transition-colors hover:border-accent hover:bg-[#f8fbff]"
+            className="rounded border border-line px-5 py-4 transition-colors hover:border-accent hover:bg-brand-wash"
           >
             <h3 className="text-[15px] font-semibold text-ink">{r.title}</h3>
             <p className="mt-1 text-[13px] text-ink-soft">{r.desc}</p>

@@ -53,7 +53,7 @@ export default async function NoticesPage({
         )}
 
         {!anyProvider && (
-          <p className="mt-4 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-3 text-[12.5px] text-[#7a5a10]">
+          <p className="mt-4 rounded border border-warn-line bg-warn-wash px-4 py-3 text-[12.5px] text-warn">
             No delivery provider is configured, so notices are prepared and left here for you to send.
             Open one, copy the text into WhatsApp, then mark it sent. To have Insurhelp send them,
             set <code>IH_WHATSAPP_URL</code> (or <code>IH_EMAIL_URL</code>, <code>IH_SMS_URL</code>) —

@@ -194,6 +194,9 @@ Also worth knowing before real clients are on it:
   Insurhelp.
 - **PDPA consent and retention are not tracked.** Nothing records what a client
   agreed to, and nothing ages data out.
+- **A batch import reads files one at a time from the browser**, so the 16 MB
+  Server Action body limit in `next.config.mjs` is never the constraint — but
+  each individual PDF still has to fit under it. Leave `bodySizeLimit` alone.
 - **Reading a policy PDF is exact for Liberty, Lonpac and Allianz schedules**
   — measured at 95 of 95 fields on real documents, rules only — and needs
   `ANTHROPIC_API_KEY` to cover every other layout. Without it an unfamiliar

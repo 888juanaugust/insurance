@@ -196,6 +196,11 @@ const allianz: Profile = {
   read(lines) {
     const out: ProfileHit[] = [];
 
+    // "E-Cover Note No. AESN0766516" — this document is a cover note, and the
+    // policy number derives from it until the insurer issues one.
+    const note = scan(lines, /E-Cover Note No\.\s+([A-Z0-9-]{5,})/i);
+    out.push(hit('cover_note_no', note?.m[1], note?.line ?? '')!);
+
     const name = scan(lines, /^INSURED\s+(.+?)\s+Date of Issue/i);
     out.push(hit('insured_name', name?.m[1], name?.line ?? '')!);
 

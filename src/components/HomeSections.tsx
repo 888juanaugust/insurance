@@ -31,7 +31,7 @@ export function Production({ rows }: { rows: Array<Record<string, any>> }) {
   return (
     <section className="panel">
       <div className="panel-head">
-        <IconReports className="h-[17px] w-[17px] text-[#4a6fa5]" />
+        <IconReports className="h-[17px] w-[17px] text-info" />
         Production
         <Help text="Cases written and the commission split, by month of creation." />
       </div>
@@ -80,7 +80,7 @@ export function Production({ rows }: { rows: Array<Record<string, any>> }) {
           </tbody>
           {rows.length > 0 && (
             <tfoot>
-              <tr className="bg-[#fafbfc] font-semibold">
+              <tr className="bg-canvas font-semibold">
                 <td colSpan={2} className="px-3 py-2.5 text-ink">Total</td>
                 <td className="num px-3 py-2.5">{totals.nonMotorCases}</td>
                 <td className="num px-3 py-2.5">{totals.motorCases}</td>
@@ -107,7 +107,7 @@ export function MotorCompliance({ rows }: { rows: Array<Record<string, any>> }) 
   return (
     <section className="panel">
       <div className="panel-head">
-        <IconCar className="h-[17px] w-[17px] text-[#3d7d4f]" />
+        <IconCar className="h-[17px] w-[17px] text-ok" />
         Motor compliance
         <Help text="Road tax and inspection fall due with the policy period, so an expiring policy usually means both are due too." />
       </div>
@@ -202,7 +202,7 @@ export function Calendar({ today: iso, marks }: { today: string; marks: Map<stri
                   isToday
                     ? 'bg-accent font-semibold text-white'
                     : n > 0
-                      ? 'bg-[#fdeceb] font-semibold text-[#b32b21]'
+                      ? 'bg-danger-wash font-semibold text-danger'
                       : 'text-ink-soft'
                 }`}
               >

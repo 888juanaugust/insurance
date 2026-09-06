@@ -33,7 +33,7 @@ export default async function StatementsPage() {
               <span className="sec-label">Open statements</span>
               <p className="mt-2 text-[22px] font-semibold tracking-tight text-ink">{exposure.open}</p>
             </div>
-            <div className={`rounded border px-5 py-4 ${exposure.gap < -0.01 ? 'border-[#f3c9c5] bg-danger-wash' : 'border-line'}`}>
+            <div className={`rounded border px-5 py-4 ${exposure.gap < -0.01 ? 'border-danger-line bg-danger-wash' : 'border-line'}`}>
               <span className="sec-label">Paid against booked</span>
               <p className={`mt-2 text-[22px] font-semibold tracking-tight ${exposure.gap < -0.01 ? 'text-danger' : 'text-ink'}`}>
                 {money(exposure.gap)}
@@ -44,7 +44,7 @@ export default async function StatementsPage() {
                   : 'The open statements are level or ahead.'}
               </p>
             </div>
-            <div className={`rounded border px-5 py-4 ${exposure.unresolved ? 'border-[#f0dcb4] bg-warn-wash' : 'border-line'}`}>
+            <div className={`rounded border px-5 py-4 ${exposure.unresolved ? 'border-warn-line bg-warn-wash' : 'border-line'}`}>
               <span className="sec-label">Lines still to place</span>
               <p className={`mt-2 text-[22px] font-semibold tracking-tight ${exposure.unresolved ? 'text-warn' : 'text-ink'}`}>
                 {exposure.unresolved}

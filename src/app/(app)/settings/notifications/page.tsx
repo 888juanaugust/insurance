@@ -51,7 +51,7 @@ export default async function NotificationsPage() {
           </thead>
           <tbody>
             {rows.map((n) => (
-              <tr key={n.id} className={n.read_flag ? '' : 'bg-[#fbfcfe]'}>
+              <tr key={n.id} className={n.read_flag ? '' : 'bg-canvas'}>
                 <td className="font-semibold text-ink">
                   {!n.read_flag && <span className="mr-1.5 inline-block h-[7px] w-[7px] rounded-full bg-brand align-middle" />}
                   {n.title}

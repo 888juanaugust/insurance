@@ -36,8 +36,8 @@ function Line({
 }) {
   return (
     <div
-      className={`flex items-baseline justify-between gap-4 border-b border-[#eff1f4] px-5 py-2.5 last:border-0 ${
-        strong ? 'bg-[#fafbfc] font-semibold text-ink' : 'text-ink-soft'
+      className={`flex items-baseline justify-between gap-4 border-b border-line-soft px-5 py-2.5 last:border-0 ${
+        strong ? 'bg-canvas font-semibold text-ink' : 'text-ink-soft'
       }`}
     >
       <span className="text-[13px]">
@@ -114,7 +114,7 @@ export default async function PolicyDetailPage({
         </div>
 
         {blockedParam && (
-          <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+          <p role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
             {blockedParam}
           </p>
         )}
@@ -151,7 +151,7 @@ export default async function PolicyDetailPage({
         </dl>
 
         {policy.remarks && (
-          <p className="mt-5 rounded border border-line bg-[#f8f9fb] px-4 py-2.5 text-[12.5px] text-ink-soft">
+          <p className="mt-5 rounded border border-line bg-canvas px-4 py-2.5 text-[12.5px] text-ink-soft">
             {policy.remarks}
           </p>
         )}

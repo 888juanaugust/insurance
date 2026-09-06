@@ -45,7 +45,8 @@ invented.
 | Import | `/import` | Bring an existing book across from a spreadsheet. Every row is checked and shown before anything is written. |
 | Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
 | Home | `/` | The agent's desk: add a policy, find a client, and what is running out — then the agency figures underneath. |
-| Add a policy | `/add` | Two doors with equal standing: upload the schedule, or key it in by hand. |
+| Add a policy | `/add` | Three doors: one schedule, a whole stack of them, or key it in by hand. |
+| Read a batch | `/insurance/[cls]/upload?bulk=1` | Up to forty schedules in one sitting, judged one by one, saved together. |
 | Expiring soon | `/expiring` | The worklist. Every policy running out, worst first, including the ones that already have. |
 | Everything else | `/more` | Claims, money, reports and settings, in one page, off the daily path. |
 | Audit trail | `/audit` | Every change, refusal and sign-in. |
@@ -252,6 +253,39 @@ The period is the months of business the statement answers for, matched on produ
 The same statement cannot be imported twice under one reference — doing so would double every
 figure on it.
 
+## Reading a stack at once
+
+`/insurance/general-motor/upload?bulk=1` takes as many schedules as an agent
+has to hand — a month of business, or a book being brought across.
+
+The files are read **one at a time, each in its own request**. A batch posted
+as one body would be rejected whole for exceeding the Server Action body limit,
+and with it the twenty-nine files that were fine; one at a time also means the
+rows fill in as they land rather than the agent watching a spinner, and a file
+that cannot be read costs only itself.
+
+Each reading is then judged, and only a clean one is offered for an unattended
+save:
+
+| Verdict | What it means |
+| --- | --- |
+| **ready** | Everything a policy needs, read confidently, no duplicate. Ticked by default. |
+| **needs a look** | Something is missing, uncertain, or the premium figures disagree. The reason is shown on the row. |
+| **already on file** | The policy number, or the file itself, is on the register. |
+| **could not read** | The PDF defeated both passes. |
+
+The judging is deliberately strict, because a batch save that quietly writes a
+policy with the wrong premium is worse than one that asks: nobody looks again
+at a row that said "saved". A cover note is always flagged, with the reason
+that the number is the cover note's and the insurer has not issued a policy
+number yet — that row will need correcting when it does.
+
+Saving re-reads the extraction **from the stored document**, not from the
+browser, and builds the policy through the same function the review form uses.
+What lands on the register is therefore exactly what was read and shown, and a
+policy saved in a batch cannot disagree with one saved on its own about the
+arithmetic.
+
 ## What is running out
 
 `/expiring` is the page the application is for. Every policy with cover running down, worst
@@ -278,6 +312,25 @@ have already written.
 Every row carries the client's phone number and two buttons: **Renew**, which opens a new
 policy pre-filled from the old one, and **Call**. The badge on the rail counts the first
 three piles only; counting ninety days of cover as work due today makes the number useless.
+
+### Follow-ups — the worklist remembers
+
+A list of forty names and phone numbers that remembers nothing gets the same client rung
+twice on Tuesday, and forgets entirely the one who said "ring me after payday". One line per
+call fixes both, recorded from the row itself rather than a page of its own — a note that is
+a nuisance to write does not get written.
+
+Five outcomes: spoke to them, no answer, quote sent, call back later, not renewing. Two of
+them move the case off the chase list:
+
+- **Call back later** requires the date they asked for, and the case drops into *Waiting
+  until the client asked* until that day comes round. Without the date it is not a call back,
+  it is a note, and the case would sit there being chased anyway — so the date is required.
+- **Not renewing** requires a reason, and the case moves to a list of its own. A lapse with
+  no reason teaches the agency nothing, and the retention report is the poorer for it.
+
+The rail badge and the header counts follow, so the number an agent sees is what is actually
+left to do. Every note goes to the audit trail with who wrote it.
 
 The seeded book includes one policy that expired twelve days ago and was never renewed. It
 keeps its `active` status, because nobody goes through a register flipping statuses by hand
@@ -594,19 +647,35 @@ src/
     seed.ts         the seed dataset
     queries.ts      all data access
     extract/        the PDF reader: rules.ts (generic), profiles.ts (per insurer), claude.ts
+    bulk-actions.ts reading a stack of schedules and saving the clean ones
+    follow-up.ts    the outcomes a renewal call can have (no database import:
+                    the form that offers them runs in the browser)
     nav.ts          the navigation tree
     actions.ts      server actions (login, record payment, approve commission)
     session.ts      signed-cookie session
     format.ts       currency and date helpers
 ```
 
-The shell (`src/components/AppShell.tsx`) follows the supplied design system: a 56px white
-top bar carrying the agency, the bell and the signed-in user; a white collapsible rail; the
-page's first panel as the control bar under the top bar. Containers are `rounded-3xl`,
-controls `rounded-xl`, the brand is indigo `#4F46E5` on a `#F8FAFC` canvas with `#111827`
-text, and the face is Cairo — loaded by the browser from Google Fonts with a system fallback,
-rather than fetched at build time, so a box with no route out still builds. Every colour is
-a token in `src/app/globals.css`; errors stay red whatever the brand is.
+The shell (`src/components/AppShell.tsx`) follows the supplied design system: a 56px top bar
+carrying the agency and the bell; a collapsible rail; the page's first panel as the control
+bar beneath. Containers are `rounded-3xl`, controls `rounded-xl`, the brand is indigo
+`#4F46E5` on a `#F8FAFC` canvas with `#111827` text, and the face is Cairo — loaded by the
+browser from Google Fonts with a system fallback, rather than fetched at build time, so a
+box with no route out still builds.
+
+**Who is signed in sits at the foot of the rail**, opening upward: Profile, an appearance
+switcher, Sign out. It is neither navigation nor a task — it is the answer to "which account
+am I in", and the bottom-left corner is where that belongs.
+
+**Light, dark, or match the computer.** Every colour in the application is a token in
+`src/app/globals.css`, which is what makes this a change of about sixty lines rather than a
+rewrite; getting there meant replacing some hundred and thirty raw hex values scattered
+through the components, since a literal `#fdeceb` cannot be themed. Dark is defined twice on
+purpose: `:root[data-theme="dark"]` for an explicit choice, and a `prefers-color-scheme`
+block guarded by `:not([data-theme="light"])` for "match the computer" — so choosing Light on
+a machine set to dark actually gives light. A small inline script in the document head
+settles it before the first paint, because otherwise anybody who chose dark gets a white
+flash on every navigation. Errors stay red whatever the brand is.
 
 Navigation is the rail (`src/components/SideNav.tsx`), driven by `src/lib/nav.ts`.
 

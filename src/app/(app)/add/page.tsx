@@ -28,7 +28,7 @@ export default async function AddPolicyPage() {
   }: { href: string; icon: React.ReactNode; title: string; note: string }) => (
     <Link
       href={href}
-      className="flex items-start gap-3 rounded-xl border border-line bg-white px-4 py-3.5 hover:border-brand hover:bg-brand-wash"
+      className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3.5 hover:border-brand hover:bg-brand-wash"
     >
       <span className="mt-0.5 shrink-0 text-ink-soft">{icon}</span>
       <span className="min-w-0">
@@ -73,6 +73,14 @@ export default async function AddPolicyPage() {
               title="Non-motor"
               note="Fire, PA, medical, liability"
             />
+            <div className="sm:col-span-2">
+              <Door
+                href="/insurance/general-motor/upload?bulk=1"
+                icon={<IconUpload className="h-[18px] w-[18px]" />}
+                title="A whole stack at once"
+                note="Read up to forty schedules in one sitting and add the clean ones together"
+              />
+            </div>
           </div>
         </section>
 

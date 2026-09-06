@@ -43,7 +43,7 @@ export default async function MorePage() {
                 <Link
                   key={l.href}
                   href={l.href}
-                  className="flex items-start gap-3 bg-white px-5 py-4 hover:bg-[#f8fbff]"
+                  className="flex items-start gap-3 bg-surface px-5 py-4 hover:bg-brand-wash"
                 >
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-semibold text-ink">{l.label}</p>

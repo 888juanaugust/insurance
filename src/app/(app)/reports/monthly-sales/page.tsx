@@ -77,7 +77,7 @@ export default async function MonthlySalesReport({
                 <td className="num font-semibold">{money(m.premium)}</td>
                 <td className="num text-ink-soft">{money(m.commission)}</td>
                 <td>
-                  <div className="h-[8px] w-[190px] overflow-hidden rounded-full bg-[#eef0f4]">
+                  <div className="h-[8px] w-[190px] overflow-hidden rounded-full bg-line-soft">
                     <div
                       className="h-full rounded-full bg-accent"
                       style={{ width: `${Math.round((m.premium / peak) * 100)}%` }}
@@ -88,7 +88,7 @@ export default async function MonthlySalesReport({
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-[#fafbfc] font-semibold">
+            <tr className="bg-canvas font-semibold">
               <td className="px-3 py-2.5 text-ink">Total</td>
               <td className="num px-3 py-2.5">{total.motorCases}</td>
               <td className="num px-3 py-2.5" />

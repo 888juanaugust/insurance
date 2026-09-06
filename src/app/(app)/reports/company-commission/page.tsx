@@ -83,7 +83,7 @@ export default async function CompanyCommissionReport({
             )}
           </tbody>
           <tfoot>
-            <tr className="bg-[#fafbfc] font-semibold">
+            <tr className="bg-canvas font-semibold">
               <td className="px-3 py-2.5 text-ink">Total</td>
               <td className="num px-3 py-2.5">{rows.reduce((s, r) => s + r.motor_cases, 0)}</td>
               <td className="num px-3 py-2.5">{rows.reduce((s, r) => s + r.non_motor_cases, 0)}</td>

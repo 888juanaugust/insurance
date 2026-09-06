@@ -53,7 +53,7 @@ export default function LoginPage() {
             </div>
 
             {state?.error && (
-              <p role="alert" className="rounded border border-[#f3c9c5] bg-[#fdeceb] px-3 py-2 text-[13px] text-[#b32b21]">
+              <p role="alert" className="rounded border border-danger-line bg-danger-wash px-3 py-2 text-[13px] text-danger">
                 {state.error}
               </p>
             )}
@@ -63,7 +63,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 rounded border border-line bg-[#f8f9fb] px-3 py-2.5 text-[12px] leading-relaxed text-muted">
+          <div className="mt-6 rounded border border-line bg-canvas px-3 py-2.5 text-[12px] leading-relaxed text-muted">
             <span className="font-semibold text-ink-soft">Demo login</span>
             <br />
             exemaster3@gmail.com &nbsp;/&nbsp; 12345Abcdefg

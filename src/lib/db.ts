@@ -422,6 +422,28 @@ CREATE INDEX IF NOT EXISTS idx_statement_org  ON commission_statement(org_id, pe
 CREATE INDEX IF NOT EXISTS idx_stmt_line      ON statement_line(statement_id, row_no);
 CREATE INDEX IF NOT EXISTS idx_stmt_line_pol  ON statement_line(policy_id);
 
+CREATE TABLE IF NOT EXISTS follow_up (
+  id         TEXT PRIMARY KEY,
+  org_id     TEXT NOT NULL REFERENCES organisation(id),
+  policy_id  TEXT NOT NULL REFERENCES policy(id) ON DELETE CASCADE,
+  client_id  TEXT REFERENCES client(id) ON DELETE SET NULL,
+  at         TEXT NOT NULL,          -- the day the conversation happened
+  outcome    TEXT NOT NULL,          -- reached | no_answer | quoted | callback | not_renewing
+  note       TEXT,
+  /* When to raise it again. A client who says "ring me after payday" should
+     drop off today's list and come back on its own, not be chased tomorrow
+     and annoyed. */
+  next_at    TEXT,
+  by_user    TEXT,
+  /* Denormalised for the same reason the audit trail does it: "(deleted
+     user) spoke to the client" has lost the point of writing it down. */
+  by_name    TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_followup_policy ON follow_up(policy_id, at DESC);
+CREATE INDEX IF NOT EXISTS idx_followup_org    ON follow_up(org_id, next_at);
+
 CREATE TABLE IF NOT EXISTS commission_rate (
   id           TEXT PRIMARY KEY,
   org_id       TEXT NOT NULL REFERENCES organisation(id),

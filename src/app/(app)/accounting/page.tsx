@@ -85,9 +85,9 @@ export default async function AccountingPage({
 
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            ['Pending approval', money(totals.pending), '#e0a33a'],
-            ['Approved — awaiting payout', money(totals.approved), '#2b7fd4'],
-            ['Paid out', money(totals.paid), '#3d8f5b'],
+            ['Pending approval', money(totals.pending), 'var(--color-warn)'],
+            ['Approved — awaiting payout', money(totals.approved), 'var(--color-info)'],
+            ['Paid out', money(totals.paid), 'var(--color-ok)'],
           ].map(([label, value, dot]) => (
             <div key={label} className="rounded border border-line px-5 py-4">
               <div className="flex items-center gap-2">

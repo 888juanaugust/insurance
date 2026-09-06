@@ -4,7 +4,7 @@ export function Help({ text }: { text: string }) {
   return (
     <span
       title={text}
-      className="inline-flex h-[15px] w-[15px] shrink-0 cursor-help items-center justify-center rounded-full border border-[#c8cedb] text-[10px] font-bold leading-none text-[#8a93a2]"
+      className="inline-flex h-[15px] w-[15px] shrink-0 cursor-help items-center justify-center rounded-full border border-line text-[10px] font-bold leading-none text-muted"
     >
       ?
     </span>
@@ -42,11 +42,11 @@ export function EmptyState({ label, hint }: { label: string; hint?: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
       <svg viewBox="0 0 64 48" className="mb-3 h-[52px] w-[68px]" aria-hidden="true">
-        <path d="M6 18h13l4 7h18l4-7h13v22a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4Z" fill="#eef0f4" stroke="#d3d9e2" strokeWidth="1.5" />
-        <path d="M13 18V7a3 3 0 0 1 3-3h32a3 3 0 0 1 3 3v11" fill="none" stroke="#d3d9e2" strokeWidth="1.5" />
+        <path d="M6 18h13l4 7h18l4-7h13v22a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4Z" fill="var(--color-line-soft)" stroke="var(--color-line)" strokeWidth="1.5" />
+        <path d="M13 18V7a3 3 0 0 1 3-3h32a3 3 0 0 1 3 3v11" fill="none" stroke="var(--color-line)" strokeWidth="1.5" />
       </svg>
       <p className="text-[13px] text-muted">{label}</p>
-      {hint && <p className="mt-1 text-[12px] text-[#9aa3b1]">{hint}</p>}
+      {hint && <p className="mt-1 text-[12px] text-faint">{hint}</p>}
     </div>
   );
 }
@@ -78,7 +78,7 @@ export function Crumb({ items }: { items: { href?: string; label: string }[] }) 
     <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted">
       {items.map((it, i) => (
         <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-[#c8cedb]">/</span>}
+          {i > 0 && <span className="text-line">/</span>}
           {it.href ? (
             <Link href={it.href} className="text-link hover:underline">
               {it.label}

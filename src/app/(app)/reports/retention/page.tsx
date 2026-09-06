@@ -53,11 +53,11 @@ export default async function RetentionPage({
             <p className="text-[24px] font-semibold tabular-nums text-ink">{r.rate}%</p>
             <p className="mt-0.5 text-[12px] text-muted">renewed</p>
           </div>
-          <div className="rounded border border-[#bfe0cd] bg-ok-wash px-4 py-3">
+          <div className="rounded border border-ok-line bg-ok-wash px-4 py-3">
             <p className="text-[24px] font-semibold tabular-nums text-ok">{r.renewed.length}</p>
             <p className="mt-0.5 text-[12px] text-ok">kept · {money(r.premiumKept)}</p>
           </div>
-          <div className="rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3">
+          <div className="rounded border border-danger-line bg-danger-wash px-4 py-3">
             <p className="text-[24px] font-semibold tabular-nums text-danger">{r.lapsed.length}</p>
             <p className="mt-0.5 text-[12px] text-danger">lapsed · {money(r.premiumLost)}</p>
           </div>

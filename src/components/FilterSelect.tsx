@@ -34,7 +34,7 @@ export default function FilterSelect({
       value={value}
       disabled={pending}
       onChange={(e) => change(e.target.value)}
-      className={`inp cursor-pointer bg-white ${className}`}
+      className={`inp cursor-pointer bg-surface ${className}`}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

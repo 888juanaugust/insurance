@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-[#eff1f4] px-5 py-2.5 last:border-0">
+    <div className="flex items-baseline justify-between gap-4 border-b border-line-soft px-5 py-2.5 last:border-0">
       <span className="text-[13px] text-ink-soft">{label}</span>
       <span className="text-[13.5px] text-ink">{value || '—'}</span>
     </div>

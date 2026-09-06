@@ -70,7 +70,7 @@ export default async function UserGuidePage() {
             <Link
               key={m.href}
               href={m.href}
-              className="rounded border border-line px-5 py-4 transition-colors hover:border-accent hover:bg-[#f8fbff]"
+              className="rounded border border-line px-5 py-4 transition-colors hover:border-accent hover:bg-brand-wash"
             >
               <h3 className="text-[14.5px] font-semibold text-ink">{m.title}</h3>
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{m.body}</p>

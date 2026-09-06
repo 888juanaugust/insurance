@@ -122,15 +122,15 @@ export default async function DocumentPage({
         <section className="mt-6">
           <table className="w-full text-[13px]">
             <tbody>
-              <tr className="border-b border-[#eff1f4]">
+              <tr className="border-b border-line-soft">
                 <td className="py-2 text-ink-soft">Gross premium</td>
                 <td className="py-2 text-right tabular-nums text-ink">{money(policy.gross_premium)}</td>
               </tr>
-              <tr className="border-b border-[#eff1f4]">
+              <tr className="border-b border-line-soft">
                 <td className="py-2 text-ink-soft">Service tax (8%)</td>
                 <td className="py-2 text-right tabular-nums text-ink">{money(policy.service_tax)}</td>
               </tr>
-              <tr className="border-b border-[#eff1f4]">
+              <tr className="border-b border-line-soft">
                 <td className="py-2 text-ink-soft">Stamp duty</td>
                 <td className="py-2 text-right tabular-nums text-ink">{money(policy.stamp_duty)}</td>
               </tr>

@@ -50,7 +50,7 @@ export default function RegisterFilters({
           type="button"
           onClick={() => pickPrincipal('')}
           className={`rounded px-3.5 py-1.5 text-[12.5px] font-semibold ${
-            active === '' ? 'bg-accent text-white' : 'border border-line bg-white text-ink-soft hover:border-accent hover:text-accent'
+            active === '' ? 'bg-accent text-white' : 'border border-line bg-surface text-ink-soft hover:border-accent hover:text-accent'
           }`}
         >
           All
@@ -64,8 +64,8 @@ export default function RegisterFilters({
             className={`rounded px-3.5 py-1.5 text-[12.5px] font-semibold ${
               active === c.short_name
                 ? 'bg-accent text-white'
-                : `border border-line bg-white hover:border-accent hover:text-accent ${
-                    c.n === 0 ? 'text-[#aab2be]' : 'text-ink-soft'
+                : `border border-line bg-surface hover:border-accent hover:text-accent ${
+                    c.n === 0 ? 'text-faint' : 'text-ink-soft'
                   }`
             }`}
           >

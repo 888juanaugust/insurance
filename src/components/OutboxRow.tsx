@@ -76,7 +76,7 @@ export default function OutboxRow({ m }: { m: OutboxMessage }) {
       </div>
 
       {open && (
-        <pre className="mt-2 whitespace-pre-wrap rounded border border-line bg-[#fafbfc] px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
+        <pre className="mt-2 whitespace-pre-wrap rounded border border-line bg-canvas px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
           {m.body}
         </pre>
       )}

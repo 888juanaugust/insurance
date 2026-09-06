@@ -79,7 +79,7 @@ export default async function SearchPage({
           <ul className="divide-y divide-line">
             {group.hits.map((hit) => (
               <li key={`${hit.kind}-${hit.id}`}>
-                <Link href={hit.href} className="block px-5 py-3 hover:bg-[#fafbfc]">
+                <Link href={hit.href} className="block px-5 py-3 hover:bg-canvas">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-[14px] font-semibold text-brand">{hit.title}</span>
                     <span className={`badge ${TONE[hit.kind] ?? 'badge-grey'}`}>

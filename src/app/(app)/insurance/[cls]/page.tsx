@@ -154,7 +154,7 @@ function ClassTabs({
             className={`-mb-px border-b-2 py-2 text-[13px] ${
               active === c
                 ? 'border-accent font-semibold text-accent'
-                : `border-transparent hover:text-ink ${n === 0 ? 'text-[#aab2be]' : 'text-ink-soft'}`
+                : `border-transparent hover:text-ink ${n === 0 ? 'text-faint' : 'text-ink-soft'}`
             }`}
           >
             {c} ({n})

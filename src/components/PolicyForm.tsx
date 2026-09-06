@@ -298,14 +298,14 @@ export default function PolicyForm({
       </PSection>
 
       {isDuplicate && (
-        <label className="flex items-center gap-2 rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-3 text-[13px] text-[#b32b21]">
+        <label className="flex items-center gap-2 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           <input type="checkbox" checked={allowDuplicate} onChange={(e) => setAllowDuplicate(e.target.checked)} />
           A policy with this number already exists — save it anyway.
         </label>
       )}
 
       {state?.error && (
-        <p role="alert" className="rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-3 text-[13px] text-[#b32b21]">
+        <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {state.error}
         </p>
       )}

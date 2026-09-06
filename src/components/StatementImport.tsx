@@ -48,9 +48,9 @@ function Tile({ label, value, tone = 'plain', note }: {
 }) {
   const tones = {
     plain: 'border-line text-ink',
-    good: 'border-[#bfe0cd] bg-ok-wash text-ok',
-    bad: 'border-[#f3c9c5] bg-danger-wash text-danger',
-    warn: 'border-[#f0dcb4] bg-warn-wash text-warn',
+    good: 'border-ok-line bg-ok-wash text-ok',
+    bad: 'border-danger-line bg-danger-wash text-danger',
+    warn: 'border-warn-line bg-warn-wash text-warn',
   };
   return (
     <div className={`rounded border px-4 py-3 ${tones[tone]}`}>
@@ -132,7 +132,7 @@ export default function StatementImport({ principals }: { principals: Principal[
           </div>
 
           {result.unmatched.length > 0 && (
-            <p className="mt-4 rounded border border-[#f0dcb4] bg-warn-wash px-4 py-2.5 text-[12.5px] text-warn">
+            <p className="mt-4 rounded border border-warn-line bg-warn-wash px-4 py-2.5 text-[12.5px] text-warn">
               {result.unmatched.length} line{result.unmatched.length === 1 ? '' : 's'} worth{' '}
               <strong>{money(result.totals.unmatchedValue)}</strong> could not be matched to anything on
               the register. {result.unmatched.length === 1 ? 'It' : 'They'} will be imported and can be
@@ -321,7 +321,7 @@ export default function StatementImport({ principals }: { principals: Principal[
 
       <label
         htmlFor="file"
-        className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center hover:border-accent hover:bg-[#f8fbff]"
+        className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center hover:border-accent hover:bg-brand-wash"
       >
         <span className="text-[13.5px] font-semibold text-ink">{fileName || 'Choose a CSV file'}</span>
         <span className="mt-1 text-[12px] text-muted">Up to {MAX_MB} MB · 5,000 lines</span>
@@ -343,7 +343,7 @@ export default function StatementImport({ principals }: { principals: Principal[
         />
       </label>
 
-      <div className="mt-4 rounded border border-line bg-[#fafbfc] px-4 py-3">
+      <div className="mt-4 rounded border border-line bg-canvas px-4 py-3">
         <p className="sec-label mb-1.5">Columns it looks for</p>
         <p className="text-[12.5px] text-ink-soft">
           {STATEMENT_COLUMNS.map((c) => c.label).join(' · ')}
@@ -356,7 +356,7 @@ export default function StatementImport({ principals }: { principals: Principal[
       </div>
 
       {(state?.error || sizeError) && (
-        <div role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <div role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           <p>{sizeError || state?.error}</p>
           {state?.error && !sizeError && (
             <p className="mt-1 text-[12.5px] opacity-80">

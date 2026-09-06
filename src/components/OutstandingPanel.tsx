@@ -38,7 +38,7 @@ export default function OutstandingPanel({
   return (
     <section className="panel flex min-h-[430px] flex-col">
       <div className="panel-head">
-        <IconCash className="h-[17px] w-[17px] text-[#3d7d4f]" />
+        <IconCash className="h-[17px] w-[17px] text-ok" />
         Money outstanding
         <Help text="Premium not yet collected from clients, and premium not yet remitted to principals." />
       </div>

@@ -79,7 +79,7 @@ export default async function OutstandingPremiumReport() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-[#fafbfc] font-semibold">
+              <tr className="bg-canvas font-semibold">
                 <td colSpan={8} className="px-3 py-2.5 text-ink">Total outstanding</td>
                 <td className="num px-3 py-2.5">{money(total)}</td>
               </tr>

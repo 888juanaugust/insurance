@@ -15,9 +15,9 @@ function Tile({ label, value, tone = 'plain', note }: {
 }) {
   const tones = {
     plain: 'border-line',
-    good: 'border-[#bfe0cd] bg-ok-wash',
-    bad: 'border-[#f3c9c5] bg-danger-wash',
-    warn: 'border-[#f0dcb4] bg-warn-wash',
+    good: 'border-ok-line bg-ok-wash',
+    bad: 'border-danger-line bg-danger-wash',
+    warn: 'border-warn-line bg-warn-wash',
   };
   const text = { plain: 'text-ink', good: 'text-ok', bad: 'text-danger', warn: 'text-warn' };
   return (

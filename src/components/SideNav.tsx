@@ -9,6 +9,8 @@ import {
   IconReports, IconUsers, IconSetting, IconChevron, IconUpload,
 } from './icons';
 import GlobalSearch from './GlobalSearch';
+import UserMenu from './UserMenu';
+import type { SessionUser } from '@/lib/session';
 
 const ICONS: Record<IconKey, (p: { className?: string }) => React.ReactElement> = {
   overview: IconHome,
@@ -48,10 +50,16 @@ function activeChild(pathname: string, children: { href: string }[]): string | n
  */
 export default function SideNav({
   counts,
+  user,
+  orgName,
+  logout,
   drawer = false,
   onCloseDrawer,
 }: {
   counts: NavCounts;
+  user: SessionUser;
+  orgName: string;
+  logout: () => Promise<void>;
   drawer?: boolean;
   onCloseDrawer?: () => void;
 }) {
@@ -216,19 +224,20 @@ export default function SideNav({
         })}
       </nav>
 
-      {!drawer && (
-        <div className="shrink-0 border-t border-line px-2 py-2">
+      <div className="shrink-0 border-t border-line px-2 py-2">
+        <UserMenu user={user} orgName={orgName} logout={logout} collapsed={narrow} />
+        {!drawer && (
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={narrow ? 'Expand navigation' : 'Collapse navigation'}
-            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-sunken hover:text-ink"
+            className="mt-1 flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-sunken hover:text-ink"
           >
             <IconChevron className={`h-[13px] w-[13px] shrink-0 ${narrow ? '' : 'rotate-180'}`} />
             {!narrow && <span>Collapse</span>}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 

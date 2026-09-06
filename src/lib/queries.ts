@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import type { FollowUpOutcome } from './follow-up';
 import { today } from './format';
 
 /* ---------------------------------------------------------------- types */
@@ -466,21 +467,47 @@ export function expiringBucket(daysLeft: number): ExpiringBucketKey {
   return 'later';
 }
 
-/** The same work, already sorted into piles, for a page or a count. */
+/**
+ * The same work, sorted into piles and carrying what was last said about it.
+ *
+ * Two things move a case out of the chase. A client who has said they are not
+ * renewing should not be rung again — that is a complaint, not a sale. And one
+ * who asked to be called back on a date should drop off until that date comes
+ * round, which is the whole reason for writing it down.
+ */
 export function expiringBuckets(orgId: string) {
-  const rows = expiringWork(orgId);
-  const piles: Record<ExpiringBucketKey, ExpiringRow[]> = {
+  const notes = latestFollowUps(orgId);
+  const t = today();
+
+  const all = expiringWork(orgId).map((r) => ({ ...r, follow_up: notes.get(r.id) ?? null }));
+
+  const settled = all.filter((r) => r.follow_up?.outcome === 'not_renewing');
+  const waiting = all.filter(
+    (r) => r.follow_up?.outcome !== 'not_renewing'
+      && r.follow_up?.next_at != null && r.follow_up.next_at > t,
+  );
+  const rows = all.filter((r) => !settled.includes(r) && !waiting.includes(r));
+
+  const piles: Record<ExpiringBucketKey, ExpiringWithNote[]> = {
     lapsed: [], week: [], month: [], later: [],
   };
   for (const r of rows) piles[expiringBucket(r.days_left)].push(r);
+
   return {
+    all,
     rows,
     piles,
+    /** Waiting on a date the client asked for. */
+    waiting,
+    /** Told us they are not renewing. Kept visible, off the chase list. */
+    settled,
     /* What the rail badge and the home tile count. Anything past 30 days is
        not work yet, and counting it makes the badge cry wolf. */
     urgent: piles.lapsed.length + piles.week.length + piles.month.length,
   };
 }
+
+export type ExpiringWithNote = ExpiringRow & { follow_up: FollowUpRow | null };
 
 /* ------------------------------------------------------------ accounting */
 
@@ -2981,4 +3008,59 @@ export function statementExposure(orgId: string) {
     gap: Math.round((open.paid - open.expected) * 100) / 100,
     unresolved: unresolved.n,
   };
+}
+
+/* ------------------------------------------------------------ follow-ups */
+
+export type FollowUpRow = {
+  id: string; org_id: string; policy_id: string; client_id: string | null;
+  at: string; outcome: FollowUpOutcome; note: string | null; next_at: string | null;
+  by_user: string | null; by_name: string; created_at: string;
+};
+
+export function addFollowUp(
+  orgId: string,
+  input: {
+    policy_id: string; client_id: string | null; outcome: FollowUpOutcome;
+    note: string | null; next_at: string | null; by_user: string | null; by_name: string;
+  },
+): string | null {
+  // The policy has to be this agency's; the id came off a form.
+  const owned = getDb()
+    .prepare('SELECT id FROM policy WHERE id = ? AND org_id = ?')
+    .get(input.policy_id, orgId) as { id: string } | undefined;
+  if (!owned) return null;
+
+  const id = newId('fu');
+  getDb()
+    .prepare(
+      `INSERT INTO follow_up (id, org_id, policy_id, client_id, at, outcome, note, next_at, by_user, by_name, created_at)
+       VALUES (@id, @org_id, @policy_id, @client_id, @at, @outcome, @note, @next_at, @by_user, @by_name, @created_at)`,
+    )
+    .run({ ...input, id, org_id: orgId, at: today(), created_at: new Date().toISOString() });
+  return id;
+}
+
+/** The most recent follow-up against each policy, keyed by policy. */
+export function latestFollowUps(orgId: string): Map<string, FollowUpRow> {
+  const rows = getDb()
+    .prepare(
+      `SELECT f.* FROM follow_up f
+        WHERE f.org_id = ?
+          AND f.at = (SELECT MAX(g.at) FROM follow_up g WHERE g.policy_id = f.policy_id)
+        ORDER BY f.created_at DESC`,
+    )
+    .all(orgId) as FollowUpRow[];
+
+  // Two on the same day: the later write wins, and the ORDER BY put it first.
+  const byPolicy = new Map<string, FollowUpRow>();
+  for (const r of rows) if (!byPolicy.has(r.policy_id)) byPolicy.set(r.policy_id, r);
+  return byPolicy;
+}
+
+/** Everything said about one policy, newest first. */
+export function followUpsFor(policyId: string, orgId: string): FollowUpRow[] {
+  return getDb()
+    .prepare('SELECT * FROM follow_up WHERE policy_id = ? AND org_id = ? ORDER BY at DESC, created_at DESC')
+    .all(policyId, orgId) as FollowUpRow[];
 }

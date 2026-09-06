@@ -245,7 +245,7 @@ export default function EndorsementForm({
 
         <div className={cancelling ? 'sm:col-span-2 xl:col-span-4' : 'sm:col-span-2 xl:col-span-3'}>
           {working ? (
-            <div className="rounded border border-line bg-[#fafbfc] px-4 py-3">
+            <div className="rounded border border-line bg-canvas px-4 py-3">
               <p className="sec-label mb-2">
                 {working.basis === 'short_period'
                   ? 'Short-period refund'
@@ -293,7 +293,7 @@ export default function EndorsementForm({
       </Section>
 
       {state?.error && !state.field && (
-        <p role="alert" className="rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {state.error}
         </p>
       )}

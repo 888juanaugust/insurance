@@ -86,7 +86,7 @@ export default async function AgentCommissionReport({
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-[#fafbfc] font-semibold">
+            <tr className="bg-canvas font-semibold">
               <td colSpan={3} className="px-3 py-2.5 text-ink">Total</td>
               <td className="num px-3 py-2.5">{t.cases}</td>
               <td className="num px-3 py-2.5">{money(t.gross)}</td>

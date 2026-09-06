@@ -19,6 +19,7 @@
   --color-faint:    #9CA3AF;
   --color-line:     #E5E7EB;
   --color-canvas:   #F8FAFC;
+  --color-surface:  #FFFFFF;
   --color-sunken:   #F1F5F9;
 
   /* Semantic. Errors stay red whatever the brand is — an indigo brand is
@@ -32,6 +33,14 @@
   --color-info:      #1D4ED8;
   --color-info-wash: #EFF6FF;
 
+  /* Borders for the semantic washes. Components used raw hex for these, which
+     is exactly what stops a theme from being switchable. */
+  --color-ok-line:     #A7F3D0;
+  --color-warn-line:   #FDE68A;
+  --color-danger-line: #FECACA;
+  --color-info-line:   #BFDBFE;
+  --color-line-soft:   #F1F5F9;
+
   --color-accent: #4F46E5;
   --color-link:   #4F46E5;
 
@@ -41,6 +50,99 @@
 html,
 body {
   height: 100%;
+}
+
+/*
+ * Dark, defined once as token overrides.
+ *
+ * Two selectors, deliberately. The [data-theme] one is an explicit choice and
+ * has to win in BOTH directions, so picking Light on a machine set to dark
+ * actually gives light. The media query is the "System" setting, and is
+ * guarded so it never overrides an explicit Light.
+ *
+ * The brand lifts to a lighter indigo: #4F46E5 on a near-black ground fails
+ * contrast for text, and the same hue two steps up reads as the same brand.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-brand:      #818CF8;
+    --color-brand-dark: #A5B4FC;
+    --color-brand-tint: #6366F1;
+    --color-brand-wash: #1E1B4B;
+
+    --color-nav:      #0F172A;
+    --color-nav-soft: #1E1B4B;
+    --color-nav-text: #94A3B8;
+
+    --color-ink:      #F1F5F9;
+    --color-ink-soft: #CBD5E1;
+    --color-muted:    #94A3B8;
+    --color-faint:    #64748B;
+    --color-line:     #1E293B;
+    --color-canvas:   #020617;
+    --color-surface:  #0B1220;
+    --color-sunken:   #0F172A;
+
+    --color-ok:      #4ADE80;
+    --color-ok-wash: #052E16;
+    --color-warn:      #FBBF24;
+    --color-warn-wash: #292109;
+    --color-danger:      #F87171;
+    --color-danger-wash: #2A0F0F;
+    --color-info:      #60A5FA;
+    --color-info-wash: #0C1E3A;
+
+    --color-ok-line:     #14532D;
+    --color-warn-line:   #78350F;
+    --color-danger-line: #7F1D1D;
+    --color-info-line:   #1E3A8A;
+    --color-line-soft:   #131C2E;
+
+    --color-accent: #818CF8;
+    --color-link:   #818CF8;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-brand:      #818CF8;
+  --color-brand-dark: #A5B4FC;
+  --color-brand-tint: #6366F1;
+  --color-brand-wash: #1E1B4B;
+
+  --color-nav:      #0F172A;
+  --color-nav-soft: #1E1B4B;
+  --color-nav-text: #94A3B8;
+
+  --color-ink:      #F1F5F9;
+  --color-ink-soft: #CBD5E1;
+  --color-muted:    #94A3B8;
+  --color-faint:    #64748B;
+  --color-line:     #1E293B;
+  --color-canvas:   #020617;
+  --color-surface:  #0B1220;
+  --color-sunken:   #0F172A;
+
+  --color-ok:      #4ADE80;
+  --color-ok-wash: #052E16;
+  --color-warn:      #FBBF24;
+  --color-warn-wash: #292109;
+  --color-danger:      #F87171;
+  --color-danger-wash: #2A0F0F;
+  --color-info:      #60A5FA;
+  --color-info-wash: #0C1E3A;
+
+  --color-ok-line:     #14532D;
+  --color-warn-line:   #78350F;
+  --color-danger-line: #7F1D1D;
+  --color-info-line:   #1E3A8A;
+  --color-line-soft:   #131C2E;
+
+  --color-accent: #818CF8;
+  --color-link:   #818CF8;
+
+  color-scheme: dark;
 }
 
 body {
@@ -63,7 +165,7 @@ body {
   }
 
   .panel {
-    background: #fff;
+    background: var(--color-surface);
     border: 1px solid var(--color-line);
     border-radius: 24px;
     overflow: hidden;
@@ -88,7 +190,7 @@ body {
   }
 
   .tbl thead th {
-    background: #F8FAFC;
+    background: var(--color-sunken);
     color: #6B7280;
     font-size: 11px;
     font-weight: 600;
@@ -102,7 +204,7 @@ body {
 
   .tbl tbody td {
     padding: 11px 12px;
-    border-bottom: 1px solid #eff1f4;
+    border-bottom: 1px solid var(--color-line-soft);
     vertical-align: middle;
     white-space: nowrap;
   }
@@ -113,7 +215,7 @@ body {
   }
 
   .tbl tbody tr:hover {
-    background: #F8FAFC;
+    background: var(--color-sunken);
   }
 
   .tbl .num {
@@ -129,7 +231,7 @@ body {
     border-radius: 12px;
     padding: 7px 10px;
     font-size: 13px;
-    background: #fff;
+    background: var(--color-surface);
     color: var(--color-ink);
   }
 
@@ -161,7 +263,7 @@ body {
   }
 
   .btn-ghost {
-    background: #fff;
+    background: var(--color-surface);
     border-color: var(--color-line);
     color: var(--color-ink-soft);
   }
@@ -173,7 +275,7 @@ body {
   /* The bar across the top of every screen: 56px, white, one line. */
   .topbar {
     height: 56px;
-    background: #fff;
+    background: var(--color-surface);
     border-bottom: 1px solid var(--color-line);
   }
 

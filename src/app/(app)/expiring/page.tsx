@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
-import { expiringBuckets, EXPIRING_BUCKETS, type ExpiringRow } from '@/lib/queries';
+import { expiringBuckets, EXPIRING_BUCKETS, type ExpiringWithNote } from '@/lib/queries';
 import { longDate, money, policyHref, classSlug } from '@/lib/format';
 import { PageHeader, EmptyState } from '@/components/ui';
+import FollowUp from '@/components/FollowUp';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +16,8 @@ export const dynamic = 'force-dynamic';
  */
 
 const TONE: Record<string, { border: string; wash: string; text: string; badge: string }> = {
-  lapsed: { border: 'border-[#f3c9c5]', wash: 'bg-danger-wash', text: 'text-danger', badge: 'badge-red' },
-  week:   { border: 'border-[#f0dcb4]', wash: 'bg-warn-wash',   text: 'text-warn',   badge: 'badge-amber' },
+  lapsed: { border: 'border-danger-line', wash: 'bg-danger-wash', text: 'text-danger', badge: 'badge-red' },
+  week:   { border: 'border-warn-line', wash: 'bg-warn-wash',   text: 'text-warn',   badge: 'badge-amber' },
   month:  { border: 'border-line',      wash: '',               text: 'text-ink',    badge: 'badge-blue' },
   later:  { border: 'border-line',      wash: '',               text: 'text-ink',    badge: 'badge-grey' },
 };
@@ -27,7 +28,7 @@ function daysLabel(days: number): string {
   return `in ${days} day${days === 1 ? '' : 's'}`;
 }
 
-function Row({ r, tone }: { r: ExpiringRow; tone: string }) {
+function Row({ r, tone }: { r: ExpiringWithNote; tone: string }) {
   const t = TONE[tone];
   return (
     <tr>
@@ -50,6 +51,16 @@ function Row({ r, tone }: { r: ExpiringRow; tone: string }) {
         <span className={`badge ${t.badge}`}>{daysLabel(r.days_left)}</span>
       </td>
       <td className="num">{money(r.total_premium)}</td>
+      <td className="wrap">
+        <FollowUp
+          policyId={r.id}
+          clientId={r.client_id}
+          last={r.follow_up ? {
+            at: r.follow_up.at, outcome: r.follow_up.outcome, note: r.follow_up.note,
+            next_at: r.follow_up.next_at, by_name: r.follow_up.by_name,
+          } : null}
+        />
+      </td>
       <td>
         <div className="flex flex-wrap gap-1.5">
           {/* Straight into a pre-filled new policy: the renewal loop the
@@ -75,7 +86,7 @@ export default async function ExpiringPage() {
   const user = await currentUser();
   if (!user) redirect('/login');
 
-  const { rows, piles, urgent } = expiringBuckets(user.org_id);
+  const { rows, piles, urgent, waiting, settled } = expiringBuckets(user.org_id);
 
   return (
     <div className="space-y-4">
@@ -84,8 +95,10 @@ export default async function ExpiringPage() {
           title="Expiring soon"
           subtitle="Every policy running out, worst first — including the ones that already have."
           meta={
-            rows.length
-              ? `${urgent} need${urgent === 1 ? 's' : ''} attention now · ${rows.length} within the next 90 days`
+            rows.length || waiting.length || settled.length
+              ? `${urgent} need${urgent === 1 ? 's' : ''} attention now · ${rows.length} to chase`
+                + (waiting.length ? ` · ${waiting.length} waiting on a date the client asked for` : '')
+                + (settled.length ? ` · ${settled.length} not renewing` : '')
               : 'Nothing is running out in the next 90 days.'
           }
           actions={
@@ -136,6 +149,7 @@ export default async function ExpiringPage() {
                     <th>Expires</th>
                     <th>When</th>
                     <th className="num">Premium</th>
+                    <th>Last contact</th>
                     <th>Do</th>
                   </tr>
                 </thead>
@@ -146,6 +160,64 @@ export default async function ExpiringPage() {
             </div>
           </section>
         ),
+      )}
+
+      {waiting.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            Waiting until the client asked
+            <span className="ml-auto text-[12px] font-normal text-muted">
+              off the chase list until the day comes round
+            </span>
+          </div>
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Call back</th><th>What they said</th></tr>
+              </thead>
+              <tbody>
+                {waiting.map((r) => (
+                  <tr key={r.id}>
+                    <td><Link href={policyHref(r.class, r.id)} className="link-red">{r.policy_no}</Link></td>
+                    <td className="text-ink">{r.insured}</td>
+                    <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
+                    <td><span className="badge badge-amber">{longDate(r.follow_up?.next_at)}</span></td>
+                    <td className="wrap text-ink-soft">{r.follow_up?.note ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {settled.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            Not renewing
+            <span className="ml-auto text-[12px] font-normal text-muted">
+              said so themselves — kept here so the reason is not lost
+            </span>
+          </div>
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead>
+                <tr><th>Policy no</th><th>Client</th><th>Expires</th><th>Told us</th><th>Why</th></tr>
+              </thead>
+              <tbody>
+                {settled.map((r) => (
+                  <tr key={r.id}>
+                    <td><Link href={policyHref(r.class, r.id)} className="link-red">{r.policy_no}</Link></td>
+                    <td className="text-ink">{r.insured}</td>
+                    <td className="text-ink-soft">{longDate(r.expiry_date)}</td>
+                    <td className="text-ink-soft">{longDate(r.follow_up?.at)}</td>
+                    <td className="wrap text-ink-soft">{r.follow_up?.note ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );

@@ -39,7 +39,7 @@ export default function AuditChanges({ json }: { json: string | null }) {
         {open ? 'Hide' : `${keys.length} ${keys.length === 1 ? 'field' : 'fields'} changed`}
       </button>
       {open && (
-        <dl className="mt-1.5 grid gap-x-3 gap-y-1 rounded border border-line bg-[#fafbfc] px-3 py-2 text-[12px] sm:grid-cols-[auto_1fr]">
+        <dl className="mt-1.5 grid gap-x-3 gap-y-1 rounded border border-line bg-canvas px-3 py-2 text-[12px] sm:grid-cols-[auto_1fr]">
           {keys.map((k) => (
             <div key={k} className="contents">
               <dt className="font-medium text-ink-soft">{k.replace(/_/g, ' ')}</dt>

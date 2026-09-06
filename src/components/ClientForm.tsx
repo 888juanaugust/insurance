@@ -158,13 +158,13 @@ export default function ClientForm({ mode, groups, initial, policyCount = 0 }: C
                 className={`flex items-center gap-2 rounded border px-3.5 py-2 text-[13px] ${
                   type === value
                     ? 'border-brand bg-brand-wash font-semibold text-brand'
-                    : 'border-line bg-white text-ink-soft hover:border-brand-tint'
+                    : 'border-line bg-surface text-ink-soft hover:border-brand-tint'
                 }`}
               >
                 <span
                   aria-hidden="true"
                   className={`flex h-[14px] w-[14px] items-center justify-center rounded-full border ${
-                    type === value ? 'border-brand' : 'border-[#c3cad6]'
+                    type === value ? 'border-brand' : 'border-line'
                   }`}
                 >
                   {type === value && <span className="h-[7px] w-[7px] rounded-full bg-brand" />}
@@ -271,13 +271,13 @@ export default function ClientForm({ mode, groups, initial, policyCount = 0 }: C
       </Section>
 
       {state?.error && !state.field && (
-        <p role="alert" className="rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {state.error}
         </p>
       )}
 
       {state?.field && (
-        <p role="alert" className="rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {state.error}
         </p>
       )}

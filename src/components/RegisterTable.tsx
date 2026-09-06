@@ -155,7 +155,7 @@ export default function RegisterTable({
                       className="inline-flex items-center gap-1 uppercase tracking-[0.055em] hover:text-ink"
                     >
                       {c.label}
-                      <span className={sort === c.key ? 'text-accent' : 'text-[#c3cad6]'}>
+                      <span className={sort === c.key ? 'text-accent' : 'text-line'}>
                         {sort === c.key ? (dir === 'asc' ? '▲' : '▼') : '⇅'}
                       </span>
                     </button>
@@ -184,16 +184,16 @@ export default function RegisterTable({
                 </td>
                 <td>
                   <span className="flex items-center gap-2.5">
-                    <Link href={`/insurance/${slug}/${r.id}/edit`} title="Update" className="text-[#3f7fc4] hover:text-accent">
+                    <Link href={`/insurance/${slug}/${r.id}/edit`} title="Update" className="text-info hover:text-accent">
                       <PencilIcon />
                     </Link>
-                    <Link href={`/insurance/${slug}/${r.id}`} title="View" className="text-[#3f7fc4] hover:text-accent">
+                    <Link href={`/insurance/${slug}/${r.id}`} title="View" className="text-info hover:text-accent">
                       <EyeIcon />
                     </Link>
-                    <Link href={`/documents/loc/${r.id}`} title="Letter of collection" target="_blank" className="text-[#3f7fc4] hover:text-accent">
+                    <Link href={`/documents/loc/${r.id}`} title="Letter of collection" target="_blank" className="text-info hover:text-accent">
                       <DocIcon />
                     </Link>
-                    <Link href={`/documents/receipt/${r.id}`} title="Receipt" target="_blank" className="text-[#3f7fc4] hover:text-accent">
+                    <Link href={`/documents/receipt/${r.id}`} title="Receipt" target="_blank" className="text-info hover:text-accent">
                       <ReceiptIcon />
                     </Link>
                   </span>
@@ -215,7 +215,7 @@ export default function RegisterTable({
           </tbody>
           {rows.length > 0 && (
             <tfoot>
-              <tr className="bg-[#fafbfc] font-semibold">
+              <tr className="bg-canvas font-semibold">
                 <td colSpan={2} className="px-3 py-2.5 text-ink">Total</td>
                 {columns.map((c) => (
                   <td key={c.key} className={c.num ? 'num px-3 py-2.5' : 'px-3 py-2.5'}>

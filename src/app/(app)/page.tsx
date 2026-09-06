@@ -117,9 +117,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <Link
             href="/expiring"
             className={`flex items-start gap-3.5 rounded border px-5 py-4 hover:brightness-[0.98] ${
-              urgentTone === 'bad' ? 'border-[#f3c9c5] bg-danger-wash'
-                : urgentTone === 'warn' ? 'border-[#f0dcb4] bg-warn-wash'
-                : 'border-[#bfe0cd] bg-ok-wash'
+              urgentTone === 'bad' ? 'border-danger-line bg-danger-wash'
+                : urgentTone === 'warn' ? 'border-warn-line bg-warn-wash'
+                : 'border-ok-line bg-ok-wash'
             }`}
           >
             <IconClipboard className={`mt-0.5 h-[20px] w-[20px] shrink-0 ${
@@ -147,7 +147,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="panel-head">
             Running out
             <Link href="/expiring" className="ml-auto text-[12px] font-normal text-accent hover:underline">
-              All {expiring.rows.length} within 90 days
+              All {expiring.all.length} within 90 days
             </Link>
           </div>
           <div className="scroll-x">
@@ -284,7 +284,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <SectionLabel>This year at a glance</SectionLabel>
       <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {KPIS.map((k) => (
-          <div key={k.key} className="rounded border border-line bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div key={k.key} className="rounded border border-line bg-surface px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
             <div className="flex items-start gap-1.5">
               <span className="sec-label">
                 {k.label}
@@ -303,7 +303,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1.3fr)]">
         <section className="panel flex min-h-[430px] flex-col">
           <div className="panel-head">
-            <IconGift className="h-[17px] w-[17px] text-[#b06fb0]" />
+            <IconGift className="h-[17px] w-[17px] text-brand-tint" />
             Birthday reminders
           </div>
           {birthdays.length === 0 ? (
@@ -311,7 +311,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <EmptyState label="No upcoming birthdays" hint="Client birthdays in the next 30 days appear here." />
             </div>
           ) : (
-            <ul className="divide-y divide-[#eff1f4]">
+            <ul className="divide-y divide-line-soft">
               {birthdays.map((b) => (
                 <li key={b.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
@@ -335,7 +335,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         <section className="panel flex min-h-[430px] flex-col">
           <div className="panel-head">
-            <IconClipboard className="h-[17px] w-[17px] text-[#4a6fa5]" />
+            <IconClipboard className="h-[17px] w-[17px] text-info" />
             Recent sales (top 10)
           </div>
           <p className="border-b border-line px-4 py-2.5 text-[12.5px] text-muted">

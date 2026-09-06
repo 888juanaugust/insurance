@@ -175,6 +175,16 @@ function numOf(fd: FormData, key: string): number {
 }
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Shared with the batch importer, so a policy saved one at a time and one
+ * saved in a stack of thirty cannot disagree about the arithmetic.
+ */
+export async function buildInputFrom(
+  fd: FormData, orgId: string, clientId: string, principalId: string,
+): Promise<PolicyInput> {
+  return buildInput(fd, orgId, clientId, principalId);
+}
+
 function buildInput(fd: FormData, orgId: string, clientId: string, principalId: string): PolicyInput {
   const cls = str(fd, 'class') === 'non_motor' ? 'non_motor' : 'motor';
   const gross = numOf(fd, 'gross_premium');

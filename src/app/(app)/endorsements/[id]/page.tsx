@@ -20,8 +20,8 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex items-baseline justify-between gap-4 border-b border-[#eff1f4] px-5 py-2.5 last:border-0 ${
-      strong ? 'bg-[#fafbfc] font-semibold text-ink' : 'text-ink-soft'
+    <div className={`flex items-baseline justify-between gap-4 border-b border-line-soft px-5 py-2.5 last:border-0 ${
+      strong ? 'bg-canvas font-semibold text-ink' : 'text-ink-soft'
     }`}>
       <span className="text-[13px]">{label}</span>
       <span className="text-[13.5px] tabular-nums">{value}</span>
@@ -97,7 +97,7 @@ export default async function EndorsementPage({
         </div>
 
         {blocked === 'issued' && (
-          <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+          <p role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
             An issued endorsement cannot be deleted — the cover has already changed. Raise a cancelling
             endorsement instead, so both sides of the record agree.
           </p>

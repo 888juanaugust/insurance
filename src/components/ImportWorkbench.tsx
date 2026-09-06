@@ -19,9 +19,9 @@ function Counts({ c }: { c: { total: number; ok: number; errors: number; duplica
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {tile('rows in the file', c.total, 'border-line text-ink')}
-      {tile('ready to import', c.ok, 'border-[#bfe0cd] bg-ok-wash text-ok')}
-      {tile('with problems', c.errors, c.errors ? 'border-[#f3c9c5] bg-danger-wash text-danger' : 'border-line text-muted')}
-      {tile('already on file', c.duplicates, c.duplicates ? 'border-[#f0dcb4] bg-warn-wash text-warn' : 'border-line text-muted')}
+      {tile('ready to import', c.ok, 'border-ok-line bg-ok-wash text-ok')}
+      {tile('with problems', c.errors, c.errors ? 'border-danger-line bg-danger-wash text-danger' : 'border-line text-muted')}
+      {tile('already on file', c.duplicates, c.duplicates ? 'border-warn-line bg-warn-wash text-warn' : 'border-line text-muted')}
     </div>
   );
 }
@@ -120,7 +120,7 @@ export default function ImportWorkbench() {
           <div className="mt-5"><Counts c={analysis.counts} /></div>
 
           {analysis.unmatched.length > 0 && (
-            <p className="mt-4 rounded border border-[#f0dcb4] bg-[#fdf8ec] px-4 py-2.5 text-[12.5px] text-[#7a5a10]">
+            <p className="mt-4 rounded border border-warn-line bg-warn-wash px-4 py-2.5 text-[12.5px] text-warn">
               {analysis.unmatched.length} column{analysis.unmatched.length === 1 ? '' : 's'} in the file
               {analysis.unmatched.length === 1 ? ' is' : ' are'} not being imported:{' '}
               <strong>{analysis.unmatched.join(', ')}</strong>. Rename{' '}
@@ -278,7 +278,7 @@ export default function ImportWorkbench() {
 
       <label
         htmlFor="file"
-        className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center hover:border-accent hover:bg-[#f8fbff]"
+        className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-line px-6 py-10 text-center hover:border-accent hover:bg-brand-wash"
       >
         <span className="text-[13.5px] font-semibold text-ink">{fileName || 'Choose a CSV file'}</span>
         <span className="mt-1 text-[12px] text-muted">Up to {MAX_MB} MB · 5,000 rows</span>
@@ -301,7 +301,7 @@ export default function ImportWorkbench() {
         />
       </label>
 
-      <div className="mt-4 rounded border border-line bg-[#fafbfc] px-4 py-3">
+      <div className="mt-4 rounded border border-line bg-canvas px-4 py-3">
         <p className="sec-label mb-1.5">Columns it looks for</p>
         <p className="text-[12.5px] text-ink-soft">
           {fieldsFor(kind).map((f) => f.label).join(' · ')}
@@ -314,7 +314,7 @@ export default function ImportWorkbench() {
       </div>
 
       {(state?.error || sizeError) && (
-        <p role="alert" className="mt-4 rounded border border-[#f3c9c5] bg-danger-wash px-4 py-3 text-[13px] text-danger">
+        <p role="alert" className="mt-4 rounded border border-danger-line bg-danger-wash px-4 py-3 text-[13px] text-danger">
           {sizeError || state?.error}
         </p>
       )}

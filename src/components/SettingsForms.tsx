@@ -7,14 +7,14 @@ function Notice({ state, done }: { state: ProfileState | null; done: string }) {
   if (!state) return null;
   if (state.error) {
     return (
-      <p role="alert" className="rounded border border-[#f3c9c5] bg-[#fdeceb] px-4 py-2.5 text-[13px] text-[#b32b21]">
+      <p role="alert" className="rounded border border-danger-line bg-danger-wash px-4 py-2.5 text-[13px] text-danger">
         {state.error}
       </p>
     );
   }
   if (state.ok) {
     return (
-      <p role="status" className="rounded border border-[#bfe0cc] bg-[#e9f6ed] px-4 py-2.5 text-[13px] text-[#226e3c]">
+      <p role="status" className="rounded border border-ok-line bg-ok-wash px-4 py-2.5 text-[13px] text-ok">
         {done}
       </p>
     );
