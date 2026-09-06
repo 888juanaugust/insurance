@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getDb } from './db';
 import { verifyPassword, hashPassword, needsRehash } from './auth';
 import { clientIp, safeBack } from './request';
+import { requestAgency, NO_AGENCY } from './tenant';
 import { createSession, destroySession, currentUser } from './session';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
 import {
@@ -19,6 +20,10 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   const password = String(formData.get('password') ?? '');
 
   if (!email || !password) return { error: 'Please enter your email address and password.' };
+
+  // Which agency's book this is. Nothing can be looked up until it is known.
+  const tenant = await requestAgency();
+  if (!tenant.ok && tenant.reason !== 'single-tenant') return { error: NO_AGENCY };
 
   // Throttle per address and per email, so neither one account nor one source
   // can be worked through at network speed. The address is the one the proxy

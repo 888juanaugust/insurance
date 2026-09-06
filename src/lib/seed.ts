@@ -6,9 +6,9 @@ import { hashPasswordSync } from './auth';
 import { inferClassOfBusiness } from './classes';
 import { today } from './format';
 
-type Row = Record<string, string | number | null>;
+export type Row = Record<string, string | number | null>;
 
-function insertAll(db: Database, table: string, rows: Row[]) {
+export function insertAll(db: Database, table: string, rows: Row[]) {
   if (rows.length === 0) return;
   const cols = Object.keys(rows[0]);
   const stmt = db.prepare(
@@ -109,7 +109,7 @@ const ORGS: Row[] = [
  * Principals (insurance companies)
  * ------------------------------------------------------------------ */
 
-const PRINCIPALS: Row[] = [
+export const PRINCIPALS: Row[] = [
   { id: 'pr-aia',      name: 'AIA Bhd',                                            short_name: 'AIA',                    code: 'AIA-770213',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Distribution', phone: '1300 88 1899', status: 'active' },
   { id: 'pr-aig',      name: 'AIG Malaysia Insurance Berhad',                       short_name: 'AIG',                    code: 'AIG-455012',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Services',     phone: '1800 88 8811', status: 'active' },
   { id: 'pr-allianz',  name: 'Allianz General Insurance Company (Malaysia) Berhad', short_name: 'ALLIANZ',                code: 'SN50301-01',  motor_rate: 10, non_motor_rate: 25, contact_person: 'Agency Operations',   phone: '03-2264 0700', status: 'active' },

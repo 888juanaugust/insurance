@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { currentTenant } from './tenant';
 
 /*
  * Where uploaded documents live.
@@ -12,7 +13,17 @@ import crypto from 'node:crypto';
  * deploy/backup.sh.
  */
 const DB_PATH = process.env.IH_DB ?? path.join(process.cwd(), 'data', 'insurhelp.db');
-const FILES_DIR = process.env.IH_FILES ?? path.join(path.dirname(DB_PATH), 'documents');
+const SINGLE_FILES_DIR = process.env.IH_FILES ?? path.join(path.dirname(DB_PATH), 'documents');
+
+/**
+ * Where this request's documents live: the agency's own directory when
+ * agencies have their own databases, otherwise the one shared directory.
+ * A schedule belongs to the agency whose database has the row pointing at it,
+ * so the two must live or be deleted together.
+ */
+function filesDir(): string {
+  return currentTenant()?.filesDir ?? SINGLE_FILES_DIR;
+}
 
 export const ACCEPTED = {
   'application/pdf': '.pdf',
@@ -47,7 +58,7 @@ export function contentTypeFor(file: { type: string; name: string }): AcceptedTy
  */
 function storagePath(key: string): string {
   const safe = path.basename(key);
-  return path.join(FILES_DIR, safe);
+  return path.join(filesDir(), safe);
 }
 
 export function storageKeyFor(orgId: string, docId: string, type: AcceptedType): string {
@@ -57,7 +68,7 @@ export function storageKeyFor(orgId: string, docId: string, type: AcceptedType):
 }
 
 export function writeDocument(key: string, bytes: Uint8Array): void {
-  fs.mkdirSync(FILES_DIR, { recursive: true });
+  fs.mkdirSync(filesDir(), { recursive: true });
   fs.writeFileSync(storagePath(key), bytes);
 }
 
@@ -89,14 +100,15 @@ export function sha256(bytes: Uint8Array): string {
 
 /** For the deployment notes and the storage figure on Organisation. */
 export function storageDir(): string {
-  return FILES_DIR;
+  return filesDir();
 }
 
 export function storageUsedBytes(): number {
   try {
+    const dir = filesDir();
     return fs
-      .readdirSync(FILES_DIR)
-      .reduce((sum, name) => sum + fs.statSync(path.join(FILES_DIR, name)).size, 0);
+      .readdirSync(dir)
+      .reduce((sum, name) => sum + fs.statSync(path.join(dir, name)).size, 0);
   } catch {
     return 0;
   }

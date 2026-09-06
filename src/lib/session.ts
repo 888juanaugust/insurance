@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { getDb } from './db';
 import { issueSession, resolveSession, revokeSession, revokeSessionsFor } from './session-store';
+import { requestAgency } from './tenant';
 
 /**
  * The agency's session cookie.
@@ -62,6 +63,14 @@ export function revokeAllSessions(userId: string) {
 }
 
 export async function currentUser(): Promise<SessionUser | null> {
+  /*
+   * The agency comes first: which database this session is even in depends on
+   * it. An address that names no agency, or an agency that does not exist, is
+   * nobody signed in — the sign-in page then says which of the two it is.
+   */
+  const resolved = await requestAgency();
+  if (!resolved.ok && resolved.reason !== 'single-tenant') return null;
+
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;

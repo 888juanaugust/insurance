@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { clientIp } from './request';
+import { requestAgency, NO_AGENCY } from './tenant';
 import { hashPassword, verifyPassword } from './auth';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
 import { createPortalSession, destroyPortalSession, currentPortalClient, revokePortalSessions } from './portal-session';
@@ -25,6 +26,9 @@ export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<
   const identification = String(fd.get('identification') ?? '').trim();
   const code = String(fd.get('code') ?? '').trim();
   if (!identification || !code) return { error: 'Enter your NRIC or company registration number and your access code.' };
+
+  const tenant = await requestAgency();
+  if (!tenant.ok && tenant.reason !== 'single-tenant') return { error: NO_AGENCY };
 
   const ip = (await clientIp()) ?? 'unknown';
   const keys = [`portal-ip:${ip}`, `portal-id:${identification.replace(/[^A-Za-z0-9]/g, '')}`];

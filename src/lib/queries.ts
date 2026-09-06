@@ -1573,6 +1573,14 @@ export function getUserPasswordHash(userId: string): string | undefined {
   return row?.password_hash;
 }
 
+/** The agency's own name, for the sign-in page. */
+export function getOrgName(): string {
+  const row = getDb().prepare('SELECT name FROM organisation ORDER BY rowid LIMIT 1').get() as
+    | { name: string }
+    | undefined;
+  return row?.name ?? '';
+}
+
 /* ------------------------------------------------------ sign-in accounts */
 
 export type AppUserRow = {

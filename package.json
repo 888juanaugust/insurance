@@ -12,7 +12,8 @@
     "db:reset": "rm -f data/insurhelp.db data/insurhelp.db-wal data/insurhelp.db-shm",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
-    "harness": "tsx tests/profiles.harness.ts"
+    "harness": "tsx tests/profiles.harness.ts",
+    "tenant": "tsx scripts/tenant.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

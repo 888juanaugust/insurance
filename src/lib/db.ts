@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { seed } from './seed';
+import { currentTenant, multiTenant } from './tenant';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = process.env.IH_DB ?? path.join(DATA_DIR, 'insurhelp.db');
@@ -714,43 +715,90 @@ function migrate(db: Database.Database) {
   }
 }
 
-let _db: Database.Database | null = null;
+/*
+ * One connection per database, kept open.
+ *
+ * With per-agency databases (IH_TENANTS_DIR) that is one entry per agency,
+ * opened the first time a request for that agency needs it. Without it there
+ * is a single entry, exactly as before.
+ */
+const pool = new Map<string, Database.Database>();
 
-export function getDb(): Database.Database {
-  if (_db) return _db;
-
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
+function open(dbPath: string, onCreate: (db: Database.Database) => void): Database.Database {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
   db.exec(SCHEMA);
-
   migrate(db);
 
   const seeded = db.prepare('SELECT COUNT(*) AS n FROM organisation').get() as { n: number };
-  if (seeded.n === 0) {
+  if (seeded.n === 0) onCreate(db);
+  return db;
+}
+
+/** What goes into a brand-new single-database install. */
+function seedFirstInstall(db: Database.Database): void {
+  /*
+   * The seed's sign-in accounts have a password that is in this repository.
+   * In production they are only created on request (IH_SEED_DEMO=1);
+   * otherwise the first administrator comes from IH_ADMIN_EMAIL and
+   * IH_ADMIN_PASSWORD, and without either the process refuses to create a
+   * database at all — the same stance as a missing IH_SECRET.
+   */
+  const production = process.env.NODE_ENV === 'production';
+  const adminEmail = (process.env.IH_ADMIN_EMAIL ?? '').trim().toLowerCase();
+  const adminPassword = process.env.IH_ADMIN_PASSWORD ?? '';
+  const demoWanted = process.env.IH_SEED_DEMO === '1';
+  if (production && !demoWanted && !(adminEmail && adminPassword)) {
+    throw new Error(
+      'Insurhelp will not create its first database in production without an administrator. ' +
+        'Set IH_ADMIN_EMAIL and IH_ADMIN_PASSWORD (10+ characters, a letter and a number) for the ' +
+        'first start, or IH_SEED_DEMO=1 to seed the demo accounts whose password is public. See DEPLOY.md.',
+    );
+  }
+  seed(db, {
+    demoUsers: !production || demoWanted,
+    admin: adminEmail && adminPassword ? { email: adminEmail, password: adminPassword } : null,
+  });
+}
+
+export function getDb(): Database.Database {
+  if (multiTenant()) {
+    const tenant = currentTenant();
     /*
-     * The seed's sign-in accounts have a password that is in this repository.
-     * In production they are only created on request (IH_SEED_DEMO=1);
-     * otherwise the first administrator comes from IH_ADMIN_EMAIL and
-     * IH_ADMIN_PASSWORD, and without either the process refuses to create a
-     * database at all — the same stance as a missing IH_SECRET.
+     * No agency bound means the request never resolved one — a page that
+     * queried before reading the session, or a background job started outside
+     * runInTenant. Falling back to some default database here is how one
+     * agency ends up reading another's book, so this refuses instead. Every
+     * such path is a bug, and this is how it announces itself.
      */
-    const production = process.env.NODE_ENV === 'production';
-    const adminEmail = (process.env.IH_ADMIN_EMAIL ?? '').trim().toLowerCase();
-    const adminPassword = process.env.IH_ADMIN_PASSWORD ?? '';
-    const demoWanted = process.env.IH_SEED_DEMO === '1';
-    if (production && !demoWanted && !(adminEmail && adminPassword)) {
+    if (!tenant) {
       throw new Error(
-        'Insurhelp will not create its first database in production without an administrator. ' +
-          'Set IH_ADMIN_EMAIL and IH_ADMIN_PASSWORD (10+ characters, a letter and a number) for the ' +
-          'first start, or IH_SEED_DEMO=1 to seed the demo accounts whose password is public. See DEPLOY.md.',
+        'No agency is bound to this request, so there is no database to open. ' +
+          'Resolve the agency (enterRequestTenant) before querying, or run the work inside runInTenant.',
       );
     }
-    seed(db, {
-      demoUsers: !production || demoWanted,
-      admin: adminEmail && adminPassword ? { email: adminEmail, password: adminPassword } : null,
-    });
+    const held = pool.get(tenant.slug);
+    if (held) return held;
+    /*
+     * An agency's database is created by `npm run tenant:create`, never by a
+     * request: an unknown subdomain must be a 404, not a new empty agency.
+     */
+    if (!fs.existsSync(tenant.dbPath)) {
+      throw new Error(`No database for the agency "${tenant.slug}". Create it with: npm run tenant:create`);
+    }
+    const db = open(tenant.dbPath, () => {});
+    pool.set(tenant.slug, db);
+    return db;
   }
 
-  _db = db;
+  const held = pool.get('');
+  if (held) return held;
+  const db = open(DB_PATH, seedFirstInstall);
+  pool.set('', db);
   return db;
+}
+
+/** Open (creating if need be) one agency's database, for the command line. */
+export function openTenantDb(dbPath: string, onCreate: (db: Database.Database) => void): Database.Database {
+  return open(dbPath, onCreate);
 }

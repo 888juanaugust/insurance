@@ -209,6 +209,55 @@ while the app is running — copying the file directly can capture a half-writte
 transaction. It keeps 30 days and gzips each one. Copy them off the server too;
 a backup on the same disk is not a backup.
 
+## Several agencies on one server
+
+Set `IH_TENANTS_DIR=/var/lib/insurhelp/tenants` in `.env.production` and each
+agency gets its own database, its own documents, its own port and its own
+process. Skip this section for a single agency.
+
+```bash
+mkdir -p /var/lib/insurhelp/tenants
+chown -R insurhelp:insurhelp /var/lib/insurhelp
+
+su - insurhelp -s /bin/bash
+cd /var/www/insurhelp
+npm run tenant -- create --slug bs --name "BS Agency Sdn Bhd" \
+                  --admin "Boon Seng" --email owner@bs.my --password 'a real one'
+exit
+```
+
+That prints the agency's port and its address. Then, as root:
+
+```bash
+pm2 start ecosystem.config.cjs && pm2 save        # one process per agency
+npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp
+nginx -t && systemctl reload nginx
+```
+
+`ecosystem.config.cjs` reads the tenants directory, so adding an agency and
+running `pm2 start` again picks it up without moving the others. The generated
+nginx set has one server block per agency and answers anything else with 444 —
+an unknown subdomain must not land on somebody's book.
+
+**DNS and the certificate.** A wildcard `A` record (`*.insurhelp.my`) covers
+every agency at once. A wildcard certificate needs a DNS-01 challenge:
+
+```bash
+certbot certonly --manual --preferred-challenges dns \
+        -d 'insurhelp.my' -d '*.insurhelp.my'
+```
+
+Per-agency certificates work too (`certbot --nginx -d bs.insurhelp.my`) and
+need no DNS API, at the cost of one run per agency.
+
+**Backups** are per agency: `deploy/backup.sh` writes `<agency>-<stamp>.db.gz`
+and `<agency>-documents-<stamp>.tar.gz` for each, so restoring one agency
+never touches another.
+
+**Sizing.** Each agency is a Node process at roughly 100–150 MB. KVM 1 (4 GB)
+comfortably holds a handful; count on about 8 agencies per free gigabyte and
+move to a larger plan before that is tight.
+
 ## Before you let anyone else in
 
 **A production database is never created with the demo accounts.** On the
@@ -267,9 +316,9 @@ Also worth knowing before real clients are on it:
 
 - **Sign-in is throttled** to 8 attempts per 15 minutes, per address and per
   email, and document readings to 100 per 15 minutes per user. Both counts are
-  held in memory and bounded, so they reset on restart and do not work across
-  multiple instances. Run one instance, or move the counters to the database
-  before running two.
+  held in memory and bounded, so they reset on restart. One process per agency
+  is exactly right for this: each agency's throttle is its own. Do not run two
+  processes for the same agency without moving the counters to the database.
 - **Unique keys are enforced by the database** — claim numbers, endorsement
   numbers, agent codes, statement references per insurer, and policy numbers
   per period — once the indexes are created on the first start after this

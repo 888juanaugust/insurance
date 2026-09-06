@@ -194,6 +194,56 @@ permissions policy. The middleware decides nothing about who is signed in;
 every page and action checks that itself, so bypassing it gains nothing.
 The inline theme script in the root layout takes its nonce from the request.
 
+### One agency, one database
+
+Setting `IH_TENANTS_DIR` gives every agency its own directory —
+
+```
+/var/lib/insurhelp/tenants/<agency>/insurhelp.db
+/var/lib/insurhelp/tenants/<agency>/documents/
+/var/lib/insurhelp/tenants/<agency>/port
+```
+
+— and its own Node process, pinned by `IH_TENANT`. A query that forgets its
+organisation can then only reach rows the agency already owns; a backup is one
+directory; a customer who leaves is one directory removed. The `org_id`
+columns and every check on them stay exactly as they were: two defences that
+fail differently is the point of having both.
+
+**Why a process each rather than choosing the database per request.** Choosing
+per request needs the agency bound before React begins rendering, and Next
+gives no place to do that — an `AsyncLocalStorage` entered inside a page does
+not reach the code the page then calls, which was measured, not assumed. A
+pinned process reads its agency from the environment, synchronously, with
+nothing to propagate and nothing to leak between requests. The isolation also
+goes further than the file: separate memory, separate sign-in throttle,
+separate crash. The cost is memory per agency, which is what a VPS plan is
+sized by.
+
+`IH_BASE_DOMAIN` turns the address into a check: a request for
+`exe.insurhelp.my` that reaches the `bs` process is refused rather than
+answered out of the wrong book, so a misconfigured proxy cannot silently cross
+two agencies.
+
+```bash
+npm run tenant -- create --slug bs --name "BS Agency Sdn Bhd" \
+                  --admin "Boon Seng" --email owner@bs.my --password '...'
+npm run tenant -- list      # agencies, their ports, their sizes
+npm run tenant -- nginx     # the whole nginx server set, one block per agency
+```
+
+Creating an agency is a shell command, never a web request: an unknown
+subdomain must be a 404, not an invitation to make a new agency. A new agency
+starts with the insurer list, a rate card at each insurer's default, the four
+renewal reminders and one administrator — and an empty register.
+`ecosystem.config.cjs` reads the tenants directory and defines one PM2 process
+per agency, so `pm2 start` after creating one picks it up and nothing about
+the others moves.
+
+Without `IH_TENANTS_DIR` the application is exactly what it was: one database
+at `IH_DB`. That is what development, the tests and a single-agency install
+use.
+
 ### Tenant isolation
 
 Every lookup that returns one record takes the organisation as part of the

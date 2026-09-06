@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { getDb } from './db';
 import { issueSession, resolveSession, revokeSession, revokeSessionsFor } from './session-store';
+import { requestAgency } from './tenant';
 
 /**
  * The client portal's own session, deliberately separate from the agency's.
@@ -53,6 +54,9 @@ export function revokePortalSessions(clientId: string) {
 }
 
 export async function currentPortalClient(): Promise<PortalClient | null> {
+  const resolved = await requestAgency();
+  if (!resolved.ok && resolved.reason !== 'single-tenant') return null;
+
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
