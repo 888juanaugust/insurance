@@ -167,8 +167,9 @@ production without an administrator"*, `IH_ADMIN_EMAIL` and
 
 ```bash
 cp deploy/nginx.conf /etc/nginx/sites-available/insurhelp
-# edit server_name to your domain
-ln -s /etc/nginx/sites-available/insurhelp /etc/nginx/sites-enabled/
+sed -i 's/insurhelp\.example\.com/YOUR.DOMAIN/' /etc/nginx/sites-available/insurhelp
+ln -sf /etc/nginx/sites-available/insurhelp /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 ```
 
@@ -179,6 +180,13 @@ resolve, then:
 apt install -y certbot python3-certbot-nginx
 certbot --nginx -d insurhelp.example.com
 ```
+
+**The supplied config has no TLS block, on purpose.** `listen 443 ssl` without
+a certificate is a fatal error rather than a warning, so a file that ships the
+HTTPS half fails `nginx -t` before certbot can run — and `certbot --nginx`
+cannot run against a config that will not parse. Certbot writes that half
+itself: it rewrites the port 80 block to listen on 443 with the certificate,
+adds a redirect block on 80, and keeps both at renewal.
 
 The `client_max_body_size 20m` in the supplied config is deliberate — Nginx
 defaults to 1 MB, which rejects a typical policy PDF before the app sees it.
