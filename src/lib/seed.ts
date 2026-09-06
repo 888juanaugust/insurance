@@ -566,7 +566,7 @@ const POLICIES: PolicySeed[] = [
 
   /* --- BS Agency: the four scanned policy documents -------------------- */
   { id: 'pol-wqk100', sourceFile: 'WQK100POLICY.pdf', org: 'org-bs', client: 'cl-bolton', principal: 'pr-liberty', agent: 'sa-bs-01',
-    policyNo: 'Y0029038', coverNote: 'JME1063847 01-C2', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
+    policyNo: 'JME1063847', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
     status: 'active', caseType: 'renewal', created: '2025-06-20', effective: '2025-06-20', expiry: '2026-06-19', issue: '2025-06-20',
     sumInsured: 47000, basic: 1533.31, ncd: 55, ncdAmt: 843.32, extra: 1072.45, gross: 1762.44, tax: 141.00, stamp: 10.00, total: 1913.44, excess: 0,
     motor: { vehicleNo: 'WQK100', makeModel: 'TOYOTA ALPHARD', bodyType: '4D VAN', engineNo: '1MZ1229608', chassisNo: 'MNH10-0105515', cc: '2994', year: '2005', seating: 7, hp: '-', windscreen: 4000, drivers: 'ALL DRIVERS', extensions: '2, 100, 25, 57, 72, 89, 87 (Agreed Value), MPCCO002', rtd: '08' },
@@ -580,7 +580,7 @@ const POLICIES: PolicySeed[] = [
     ],
     clientDue: '2025-06-20', clientPaid: '2025-06-20', clientMethod: 'Online transfer', clientRef: 'SST-06-25-17137016',
     principalDue: '2025-07-05', principalPaid: '2025-07-03',
-    remarks: 'Liberty auto365 Comprehensive Plus. Agent account A02100-00.' },
+    remarks: 'Liberty auto365 Comprehensive Plus. Renewal of policy Y0029038. Agent account A02100-00.' },
 
   { id: 'pol-dds7898', sourceFile: 'DDS7898POLICY.pdf', org: 'org-bs', client: 'cl-surendran', principal: 'pr-lonpac', agent: 'sa-bs-01',
     policyNo: 'A6179198-0', coverNote: 'A6179198-0', cls: 'motor', product: 'Private Car Secure & E-Assist', cover: 'Comprehensive — Smart Driver (Plan 1)',
@@ -606,7 +606,7 @@ const POLICIES: PolicySeed[] = [
     remarks: 'Amount payable rounded to RM2,304.75. Agent code SN50301-01.' },
 
   { id: 'pol-ncf9240', sourceFile: 'NCF9240POLICY.pdf', org: 'org-bs', client: 'cl-limhong', principal: 'pr-liberty', agent: 'sa-bs-01',
-    policyNo: 'JME1499237', coverNote: 'JME1499237 01-C2', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
+    policyNo: 'JME1499237', cls: 'motor', product: 'Private Car Ex Goods', cover: 'Comprehensive Plus (Agreed Value)',
     status: 'active', caseType: 'renewal', created: '2025-09-19', effective: '2025-09-28', expiry: '2026-09-27', issue: '2025-09-19',
     sumInsured: 10000, basic: 759.16, ncd: 55, ncdAmt: 417.54, extra: 83.00, gross: 424.62, tax: 33.97, stamp: 10.00, total: 468.59, excess: 0,
     motor: { vehicleNo: 'NCF9240', makeModel: 'PROTON SAGA BASE LINE', bodyType: '4D SEDAN', engineNo: 'S4PEPW8986', chassisNo: 'PL1BT3SNRAB110914', cc: '1332', year: '2009', seating: 5, hp: '-', windscreen: 0, drivers: 'ANY AUTHORISED DRIVER', extensions: '2, 87 (Agreed Value), MPCCO001', rtd: '08' },

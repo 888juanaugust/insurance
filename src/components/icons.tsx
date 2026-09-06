@@ -96,7 +96,7 @@ export const IconFire = (p: P) => (
 // principal. Brand red and its tint, so it holds on light and dark alike.
 export const Logo = ({ className }: P) => (
   <svg viewBox="0 0 48 48" className={className ?? 'h-7 w-7'} aria-hidden="true">
-    <path d="M23.1 4.2 6 9.4V24c0 9.5 7.1 16.5 17.1 20Z" fill="#d0342c" />
-    <path d="M24.9 4.2 42 9.4V24c0 9.5-7.1 16.5-17.1 20Z" fill="#f0837b" />
+    <path d="M23.1 4.2 6 9.4V24c0 9.5 7.1 16.5 17.1 20Z" fill="#4F46E5" />
+    <path d="M24.9 4.2 42 9.4V24c0 9.5-7.1 16.5-17.1 20Z" fill="#A5B4FC" />
   </svg>
 );

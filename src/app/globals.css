@@ -1,43 +1,41 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Brand — taken from the shield: the deep half and its tint. */
-  --color-brand:      #d0342c;
-  --color-brand-dark: #a8271f;
-  --color-brand-tint: #f0837b;
-  --color-brand-wash: #fdeeed;
+  /* Brand — indigo, from the supplied design system. */
+  --color-brand:      #4F46E5;
+  --color-brand-dark: #4338CA;
+  --color-brand-tint: #818CF8;
+  --color-brand-wash: #EEF2FF;
 
-  /* Navigation sits on a deep neutral so the red reads as an accent
-     rather than a wall of colour. */
-  --color-nav:      #1b1f26;
-  --color-nav-soft: #2a2f38;
-  --color-nav-text: #b9c0cb;
+  /* Navigation is white like every other surface; the active entry is picked
+     out in the brand wash rather than the rail being a wall of colour. */
+  --color-nav:      #FFFFFF;
+  --color-nav-soft: #EEF2FF;
+  --color-nav-text: #4B5563;
 
-  /* Cool neutrals against the warm brand — a deliberate pairing rather
-     than the obvious warm-on-warm. */
-  --color-ink:      #171a1f;
-  --color-ink-soft: #414852;
-  --color-muted:    #6b7480;
-  --color-faint:    #98a1ac;
-  --color-line:     #e3e6eb;
-  --color-canvas:   #f5f6f8;
-  --color-sunken:   #eef0f3;
+  --color-ink:      #111827;
+  --color-ink-soft: #374151;
+  --color-muted:    #6B7280;
+  --color-faint:    #9CA3AF;
+  --color-line:     #E5E7EB;
+  --color-canvas:   #F8FAFC;
+  --color-sunken:   #F1F5F9;
 
-  /* Semantic. Destructive is a deeper oxblood so it never reads as the
-     brand, which is the same family. */
-  --color-ok:      #17724f;
-  --color-ok-wash: #e6f2ec;
-  --color-warn:      #8a5a0b;
-  --color-warn-wash: #fbf1de;
-  --color-danger:      #8f1d16;
-  --color-danger-wash: #fbe9e7;
-  --color-info:      #1d5fae;
-  --color-info-wash: #e9f1fb;
+  /* Semantic. Errors stay red whatever the brand is — an indigo brand is
+     the reason they can. */
+  --color-ok:      #15803D;
+  --color-ok-wash: #ECFDF5;
+  --color-warn:      #92400E;
+  --color-warn-wash: #FFFBEB;
+  --color-danger:      #B91C1C;
+  --color-danger-wash: #FEF2F2;
+  --color-info:      #1D4ED8;
+  --color-info-wash: #EFF6FF;
 
-  --color-accent: #d0342c;
-  --color-link:   #1d5fae;
+  --color-accent: #4F46E5;
+  --color-link:   #4F46E5;
 
-  --font-sans: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-sans: 'Cairo', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif;
 }
 
 html,
@@ -61,13 +59,14 @@ body {
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #8a93a2;
+    color: #6B7280;
   }
 
   .panel {
     background: #fff;
     border: 1px solid var(--color-line);
-    border-radius: 6px;
+    border-radius: 24px;
+    overflow: hidden;
   }
 
   .panel-head {
@@ -76,7 +75,7 @@ body {
     gap: 8px;
     padding: 14px 16px;
     border-bottom: 1px solid var(--color-line);
-    font-weight: 600;
+    font-weight: 700;
     font-size: 14px;
   }
 
@@ -89,8 +88,8 @@ body {
   }
 
   .tbl thead th {
-    background: #f7f8fa;
-    color: #6d7686;
+    background: #F8FAFC;
+    color: #6B7280;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.055em;
@@ -114,7 +113,7 @@ body {
   }
 
   .tbl tbody tr:hover {
-    background: #fafbfc;
+    background: #F8FAFC;
   }
 
   .tbl .num {
@@ -127,7 +126,7 @@ body {
   .inp {
     width: 100%;
     border: 1px solid var(--color-line);
-    border-radius: 4px;
+    border-radius: 12px;
     padding: 7px 10px;
     font-size: 13px;
     background: #fff;
@@ -137,14 +136,14 @@ body {
   .inp:focus {
     outline: none;
     border-color: var(--color-brand);
-    box-shadow: 0 0 0 3px rgb(208 52 44 / 0.13);
+    box-shadow: 0 0 0 3px rgb(79 70 229 / 0.15);
   }
 
   .btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border-radius: 4px;
+    border-radius: 12px;
     padding: 7px 14px;
     font-size: 13px;
     font-weight: 600;
@@ -168,7 +167,14 @@ body {
   }
 
   .btn-ghost:hover {
-    background: #f6f7f9;
+    background: #F1F5F9;
+  }
+
+  /* The bar across the top of every screen: 56px, white, one line. */
+  .topbar {
+    height: 56px;
+    background: #fff;
+    border-bottom: 1px solid var(--color-line);
   }
 
   /* ---------------------------------------------------------------- badges */
@@ -176,8 +182,8 @@ body {
   .badge {
     display: inline-flex;
     align-items: center;
-    border-radius: 3px;
-    padding: 2px 7px;
+    border-radius: 8px;
+    padding: 2px 8px;
     font-size: 11px;
     font-weight: 600;
     line-height: 1.5;
@@ -203,7 +209,7 @@ body {
   [tabindex]:focus-visible {
     outline: 2px solid var(--color-brand-tint);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 6px;
   }
 
   .link-red:hover {

@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NAV, sectionFor, type CountKey, type IconKey, type NavSection } from '@/lib/nav';
 import {
   Logo, IconHome, IconClients, IconShield, IconClipboard, IconAccounting,
-  IconReports, IconUsers, IconSetting, IconChevron, IconBell, IconLogout, IconUpload,
+  IconReports, IconUsers, IconSetting, IconChevron, IconUpload,
 } from './icons';
-import type { SessionUser } from '@/lib/session';
 import GlobalSearch from './GlobalSearch';
 
 const ICONS: Record<IconKey, (p: { className?: string }) => React.ReactElement> = {
@@ -38,25 +37,29 @@ function activeChild(pathname: string, children: { href: string }[]): string | n
   return best;
 }
 
+/**
+ * The rail. White, like every other surface, and collapsible to icons. It
+ * carries the sections and the search and nothing else: who is signed in
+ * and their notifications live in the top bar, where the design puts them,
+ * so the rail is only ever a list of places to go.
+ *
+ * On small screens the shell renders this same component inside a drawer;
+ * `drawer` and `onCloseDrawer` are how the shell drives that.
+ */
 export default function SideNav({
-  user,
-  orgName,
   counts,
-  logout,
+  drawer = false,
+  onCloseDrawer,
 }: {
-  user: SessionUser;
-  orgName: string;
   counts: NavCounts;
-  logout: () => Promise<void>;
+  drawer?: boolean;
+  onCloseDrawer?: () => void;
 }) {
   const pathname = usePathname();
   const active = sectionFor(pathname);
 
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [drawer, setDrawer] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // Remembering the rail width is a per-browser convenience, and a blocked
   // or empty store just means it starts expanded.
@@ -81,41 +84,34 @@ export default function SideNav({
   }
 
   useEffect(() => {
-    setDrawer(false);
-    setMenuOpen(false);
+    onCloseDrawer?.();
+    // The shell owns the drawer; this only asks it to shut on navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen]);
 
   /** Expanded when explicitly opened, or when it holds the current page. */
   const isOpen = (s: NavSection) => open[s.key] ?? active?.key === s.key;
 
-  const initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  // In the drawer the rail is always at full width; collapsing is a desktop
+  // convenience that would leave a phone with a column of unlabelled icons.
+  const narrow = collapsed && !drawer;
 
   const rail = (
-    <div className={`flex h-full flex-col bg-nav ${collapsed ? 'w-[64px]' : 'w-[244px]'} transition-[width] duration-150`}>
-      <div className="flex h-[58px] shrink-0 items-center gap-2.5 px-4">
+    <div
+      className={`flex h-full flex-col border-r border-line bg-nav ${
+        narrow ? 'w-[64px]' : 'w-[244px]'
+      } transition-[width] duration-150`}
+    >
+      <div className="flex h-[56px] shrink-0 items-center gap-2.5 border-b border-line px-4">
         <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
           <Logo className="h-[26px] w-[26px] shrink-0" />
-          {!collapsed && (
-            <span className="truncate text-[17px] font-semibold tracking-tight text-white">Insurhelp</span>
+          {!narrow && (
+            <span className="truncate text-[17px] font-bold tracking-tight text-ink">Insurhelp</span>
           )}
         </Link>
       </div>
 
-      <GlobalSearch collapsed={collapsed} />
+      <GlobalSearch collapsed={narrow} />
 
       <nav aria-label="Sections" className="flex-1 overflow-y-auto px-2 pb-3">
         {NAV.map((s) => {
@@ -123,7 +119,7 @@ export default function SideNav({
           const on = active?.key === s.key;
           const sectionCount = s.count ? counts[s.count] : 0;
           const expandable = Boolean(s.children);
-          const expanded = expandable && isOpen(s) && !collapsed;
+          const expanded = expandable && isOpen(s) && !narrow;
 
           /*
            * The one entry that starts work rather than listing it. A rail
@@ -136,14 +132,14 @@ export default function SideNav({
               <Link
                 key={s.key}
                 href={s.href}
-                title={collapsed ? s.label : undefined}
+                title={narrow ? s.label : undefined}
                 aria-current={on ? 'page' : undefined}
-                className={`mb-2 mt-0.5 flex items-center gap-3 rounded bg-brand px-2.5 py-2 text-[13.5px] font-semibold text-white hover:brightness-110 ${
-                  collapsed ? 'justify-center' : ''
+                className={`mb-2 mt-0.5 flex items-center gap-3 rounded-xl bg-brand px-2.5 py-2 text-[13.5px] font-semibold text-white hover:bg-brand-dark ${
+                  narrow ? 'justify-center' : ''
                 }`}
               >
                 <Icon className="h-[17px] w-[17px] shrink-0" />
-                {!collapsed && <span className="truncate">{s.label}</span>}
+                {!narrow && <span className="truncate">{s.label}</span>}
               </Link>
             );
           }
@@ -153,33 +149,33 @@ export default function SideNav({
               <div className="group relative flex items-center">
                 <Link
                   href={s.href}
-                  title={collapsed ? s.label : undefined}
+                  title={narrow ? s.label : undefined}
                   aria-current={on ? 'page' : undefined}
-                  className={`flex min-w-0 flex-1 items-center gap-3 rounded px-2.5 py-2 text-[13.5px] ${
-                    on ? 'bg-nav-soft font-semibold text-white' : 'text-nav-text hover:bg-nav-soft hover:text-white'
+                  className={`flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2 text-[13.5px] ${
+                    on ? 'bg-nav-soft font-semibold text-brand' : 'text-nav-text hover:bg-sunken hover:text-ink'
                   }`}
                 >
                   <span className="relative shrink-0">
                     <Icon className="h-[17px] w-[17px]" />
-                    {collapsed && sectionCount > 0 && (
+                    {narrow && sectionCount > 0 && (
                       <span className="absolute -right-1.5 -top-1.5 h-[7px] w-[7px] rounded-full bg-brand" />
                     )}
                   </span>
-                  {!collapsed && <span className="truncate">{s.label}</span>}
-                  {!collapsed && sectionCount > 0 && !expanded && (
-                    <span className="ml-auto rounded bg-brand px-1.5 py-0.5 text-[10.5px] font-bold text-white">
+                  {!narrow && <span className="truncate">{s.label}</span>}
+                  {!narrow && sectionCount > 0 && !expanded && (
+                    <span className="ml-auto rounded-md bg-brand px-1.5 py-0.5 text-[10.5px] font-bold text-white">
                       {sectionCount}
                     </span>
                   )}
                 </Link>
 
-                {expandable && !collapsed && (
+                {expandable && !narrow && (
                   <button
                     type="button"
                     onClick={() => setOpen((o) => ({ ...o, [s.key]: !isOpen(s) }))}
                     aria-expanded={expanded}
                     aria-label={`${expanded ? 'Collapse' : 'Expand'} ${s.label}`}
-                    className="ml-0.5 rounded p-1.5 text-nav-text hover:bg-nav-soft hover:text-white"
+                    className="ml-0.5 rounded-lg p-1.5 text-muted hover:bg-sunken hover:text-ink"
                   >
                     <IconChevron className={`h-[12px] w-[12px] transition-transform ${expanded ? 'rotate-90' : ''}`} />
                   </button>
@@ -187,7 +183,7 @@ export default function SideNav({
               </div>
 
               {expanded && s.children && (
-                <div className="mb-1 ml-[19px] border-l border-[#39404b] pl-2">
+                <div className="mb-1 ml-[19px] border-l border-line pl-2">
                   {s.children.map((c) => {
                     /* Longest match, not any match: /accounting/statements sits
                        under /accounting, and a plain prefix test lights up both
@@ -200,13 +196,13 @@ export default function SideNav({
                         href={c.href}
                         title={c.hint}
                         aria-current={childOn ? 'page' : undefined}
-                        className={`flex items-center gap-2 rounded px-2.5 py-[7px] text-[12.5px] ${
-                          childOn ? 'font-semibold text-white' : 'text-nav-text hover:text-white'
+                        className={`flex items-center gap-2 rounded-lg px-2.5 py-[7px] text-[12.5px] ${
+                          childOn ? 'font-semibold text-brand' : 'text-nav-text hover:text-ink'
                         }`}
                       >
                         <span className="truncate">{c.label}</span>
                         {childCount > 0 && (
-                          <span className="ml-auto rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+                          <span className="ml-auto rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
                             {childCount}
                           </span>
                         )}
@@ -220,132 +216,23 @@ export default function SideNav({
         })}
       </nav>
 
-      <div className="shrink-0 border-t border-[#2f353f] px-2 py-2">
-        <Link
-          href="/settings/notifications"
-          title={collapsed ? 'Notifications' : undefined}
-          className="flex items-center gap-3 rounded px-2.5 py-2 text-[13px] text-nav-text hover:bg-nav-soft hover:text-white"
-        >
-          <span className="relative shrink-0">
-            <IconBell className="h-[17px] w-[17px]" />
-            {collapsed && counts.notifications > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 h-[7px] w-[7px] rounded-full bg-brand" />
-            )}
-          </span>
-          {!collapsed && (
-            <>
-              <span>Notifications</span>
-              {counts.notifications > 0 && (
-                <span className="ml-auto rounded bg-brand px-1.5 py-0.5 text-[10.5px] font-bold text-white">
-                  {counts.notifications}
-                </span>
-              )}
-            </>
-          )}
-        </Link>
-
-        <div className="relative" ref={menuRef}>
+      {!drawer && (
+        <div className="shrink-0 border-t border-line px-2 py-2">
           <button
             type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            title={collapsed ? user.name : undefined}
-            className="flex w-full items-center gap-2.5 rounded px-2 py-2 text-left text-nav-text hover:bg-nav-soft"
+            onClick={toggleCollapsed}
+            aria-label={narrow ? 'Expand navigation' : 'Collapse navigation'}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-sunken hover:text-ink"
           >
-            <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-brand text-[11.5px] font-semibold text-white">
-              {initials}
-            </span>
-            {!collapsed && (
-              <>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-medium text-white">{user.name}</span>
-                  <span className="block truncate text-[11px]">{orgName}</span>
-                </span>
-                <IconChevron className={`h-[12px] w-[12px] shrink-0 ${menuOpen ? 'rotate-90' : '-rotate-90'}`} />
-              </>
-            )}
+            <IconChevron className={`h-[13px] w-[13px] shrink-0 ${narrow ? '' : 'rotate-180'}`} />
+            {!narrow && <span>Collapse</span>}
           </button>
-
-          {menuOpen && (
-            <div
-              role="menu"
-              className="absolute bottom-[calc(100%+6px)] left-0 z-50 w-[218px] overflow-hidden rounded-md border border-line bg-white shadow-lg"
-            >
-              <div className="border-b border-line px-4 py-2.5">
-                <p className="truncate text-[13px] font-semibold text-ink">{user.name}</p>
-                <p className="truncate text-[11.5px] text-muted">{user.email}</p>
-              </div>
-              {[
-                ['/settings', 'Your profile'],
-                ['/organisation', 'Organisation'],
-                ['/user-guide', 'User guide'],
-                ['/contact-us', 'Support'],
-              ].map(([href, label]) => (
-                <Link key={href} href={href} role="menuitem" className="block px-4 py-2 text-[13px] text-ink-soft hover:bg-canvas">
-                  {label}
-                </Link>
-              ))}
-              <form action={logout} className="border-t border-line">
-                <button
-                  type="submit"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[13px] font-medium text-brand hover:bg-brand-wash"
-                >
-                  <IconLogout className="h-[15px] w-[15px]" />
-                  Sign out
-                </button>
-              </form>
-            </div>
-          )}
         </div>
-
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="mt-1 flex w-full items-center gap-3 rounded px-2.5 py-1.5 text-[12px] text-nav-text hover:bg-nav-soft hover:text-white"
-        >
-          <IconChevron className={`h-[13px] w-[13px] shrink-0 ${collapsed ? '' : 'rotate-180'}`} />
-          {!collapsed && <span>Collapse</span>}
-        </button>
-      </div>
+      )}
     </div>
   );
 
-  return (
-    <>
-      <aside className="sticky top-0 hidden h-screen shrink-0 lg:block">{rail}</aside>
+  if (drawer) return rail;
 
-      {/* small screens: a bar that opens the same rail as a drawer */}
-      <div className="sticky top-0 z-40 flex h-[54px] items-center gap-3 bg-nav px-4 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setDrawer(true)}
-          aria-label="Open navigation"
-          className="rounded p-1.5 text-nav-text hover:bg-nav-soft hover:text-white"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
-          </svg>
-        </button>
-        <Link href="/" className="flex items-center gap-2">
-          <Logo className="h-[22px] w-[22px]" />
-          <span className="text-[16px] font-semibold text-white">Insurhelp</span>
-        </Link>
-      </div>
-
-      {drawer && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="h-full">{rail}</div>
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setDrawer(false)}
-            className="flex-1 bg-black/40"
-          />
-        </div>
-      )}
-    </>
-  );
+  return <aside className="sticky top-0 hidden h-screen shrink-0 lg:block">{rail}</aside>;
 }

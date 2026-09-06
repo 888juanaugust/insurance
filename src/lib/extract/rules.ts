@@ -1,6 +1,7 @@
 import type { PdfDoc } from './pdf';
 import { emptyFields, type ExtractionResult, type FieldKey, type FieldResult } from './types';
 import { isValid, pruneInvalid, checkPremiumConsistency } from './validate';
+import { profileFor } from './profiles';
 
 /* ------------------------------------------------------------------ *
  * Value normalisers
@@ -43,6 +44,9 @@ export function toNumber(raw: string): number | null {
 }
 
 const MONEY = String.raw`\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+\.\d{2}`;
+
+/** A cash-rounded amount for the counter, never the policy total. */
+const OTC = /\bOTC\b|Kaunter|ROUNDED|Dibundarkan/i;
 
 /* ------------------------------------------------------------------ *
  * Insurer detection
@@ -201,7 +205,9 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
     { label: bilingual(String.raw`No\.?\s*Kenderaan`), value: /[A-Z]{1,3}\s?\d{1,4}\s?[A-Z]{0,3}/i, confidence: 0.7 },
   ],
   make_model: [
-    { label: /Make (?:&|and) (?:Type of Body|Model)(?:\s*\/\s*Buatan(?:\s*(?:&|dan)\s*Jenis Badan)?)?/i, confidence: 0.85 },
+    // Stop at the next label on the line — "TOYOTA ALPHARD Chassis No. : …"
+    // is a make followed by somebody else's field.
+    { label: /Make (?:&|and) (?:Type of Body|Model)(?:\s*\/\s*Buatan(?:\s*(?:&|dan)\s*Jenis Badan)?)?/i, value: /^.+?(?=\s+(?:Chassis|Engine|Registration|Reg\.|Year|Vehicle)\b|$)/i, confidence: 0.85 },
     { label: /Buatan (?:&|dan) Jenis Badan/i, confidence: 0.75 },
     { label: bilingual(String.raw`Make\s*(?:&|and)\s*Model`), confidence: 0.7 },
     { label: bilingual(String.raw`Model\s*Kenderaan`), confidence: 0.65 },
@@ -245,6 +251,10 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
   windscreen_si: [
     { scan: /Windscreen[^\d]{0,80}?(?:RM\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i, confidence: 0.7 },
   ],
+  basic_premium: [
+    { label: /\bPremium\s*\/\s*Premium\b/i, value: new RegExp(MONEY), sameLine: true, confidence: 0.8 },
+    { label: /Basic Premium(?:\s*\/\s*Premium Asas)?|Premium Asas/i, value: new RegExp(MONEY), sameLine: true, confidence: 0.8 },
+  ],
   gross_premium: [
     { label: /Gross Premium(?:\s*\/\s*Premium Kasar)?|Premium Kasar|GROSS PREM/i, value: new RegExp(MONEY), confidence: 0.9 },
   ],
@@ -254,12 +264,21 @@ const MATCHERS: Partial<Record<FieldKey, Matcher[]>> = {
   stamp_duty: [
     { label: /Stamp Duty(?:\s*\/\s*Duti Setem)?|Duti Setem/i, value: new RegExp(MONEY), confidence: 0.9 },
   ],
+  /*
+   * Never the over-the-counter figure. Liberty prints "Total Due RM 1,913.44"
+   * and beneath it "Total Due (OTC) / Jumlah Berbayar Di Kaunter RM 1,913.45"
+   * — the same amount rounded to five sen for a cash till; Allianz prints
+   * "AMOUNT PAYABLE 2,304.75 (ROUNDED)" under "TOTAL DUE 2,304.77". The
+   * rounded one is not the premium, and taking it does worse than being a
+   * sen out: the premium check then sees gross + tax + stamp ≠ total and
+   * "corrects" a figure that was right.
+   */
   total_payable: [
-    { label: /Total Payable(?:\s*\/\s*Jumlah Berbayar)?(?:\s*\(OTC\))?/i, value: new RegExp(MONEY), confidence: 0.9 },
-    { label: /Total\s*Due(?:\s*\/\s*Jumlah Berbayar)?/i, value: new RegExp(MONEY), confidence: 0.85 },
-    { label: /Premium Payable|AMOUNT PAYABLE|Jumlah Berbayar/i, value: new RegExp(MONEY), confidence: 0.8 },
-    { label: bilingual(String.raw`Total\s*(?:Amount\s*)?Payable`), value: new RegExp(MONEY), confidence: 0.75 },
-    { label: bilingual(String.raw`Jumlah\s*(?:Perlu\s*)?Dibayar`), value: new RegExp(MONEY), confidence: 0.75 },
+    { label: /Total\s*Due(?:\s*\/\s*Jumlah Berbayar)?/i, value: new RegExp(MONEY), exclude: OTC, confidence: 0.9 },
+    { label: /Total Payable(?:\s*\/\s*Jumlah Berbayar)?/i, value: new RegExp(MONEY), exclude: OTC, confidence: 0.9 },
+    { label: /Premium Payable|AMOUNT PAYABLE|Jumlah Berbayar/i, value: new RegExp(MONEY), exclude: OTC, confidence: 0.8 },
+    { label: bilingual(String.raw`Total\s*(?:Amount\s*)?Payable`), value: new RegExp(MONEY), exclude: OTC, confidence: 0.75 },
+    { label: bilingual(String.raw`Jumlah\s*(?:Perlu\s*)?Dibayar`), value: new RegExp(MONEY), exclude: OTC, confidence: 0.75 },
   ],
   type_of_cover: [
     { label: /Type of Cover(?:\s*\/\s*Jenis Perlindungan)?|Jenis Perlindungan/i, value: /(?:COMPREHENSIVE(?: PLUS)?|THIRD PARTY(?:,? FIRE (?:AND|&) THEFT)?|ACT ONLY)/i, confidence: 0.85 },
@@ -329,6 +348,11 @@ function coerce(key: FieldKey, raw: string): string | number | null {
     return toNumber(raw);
   }
   const cleaned = raw.replace(/\s+/g, ' ').trim();
+  // Allianz and Liberty print the NRIC as twelve bare digits; the register,
+  // the search and the client record all write it 850101-05-1234.
+  if (key === 'nric' && /^\d{12}$/.test(cleaned)) {
+    return `${cleaned.slice(0, 6)}-${cleaned.slice(6, 8)}-${cleaned.slice(8)}`;
+  }
   return cleaned.length ? cleaned : null;
 }
 
@@ -341,7 +365,22 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
   const lines = doc.pages.slice(0, 4).flat();
   const head = lines.join('\n');
 
+  // The insurer decides the layout, and a layout that has been read against a
+  // real document gets its own reader first. Generic matching fills whatever
+  // the profile did not — and everything, for an insurer without one.
+  const insurer = detectInsurer(head);
+  const profile = profileFor(insurer?.short);
+  if (profile) {
+    for (const h of profile.read(lines)) {
+      if (fields[h.key].value !== null) continue;
+      const value = coerce(h.key, h.value);
+      if (value === null || value === '' || !isValid(h.key, value)) continue;
+      fields[h.key] = { value, confidence: h.confidence, source: 'rule', evidence: h.evidence };
+    }
+  }
+
   for (const [key, matchers] of Object.entries(MATCHERS) as [FieldKey, Matcher[]][]) {
+    if (fields[key].value !== null) continue;
     for (const m of matchers) {
       const hit = m.scan ? anywhere(lines, m.scan) : m.label ? labelled(lines, m.label, m.value, m.sameLine, m.exclude) : null;
       if (!hit) continue;
@@ -376,7 +415,7 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
   // A genuine registration number is repeated across the schedule and the
   // certificate of insurance; a one-off match is neighbouring text.
   const plate = fields.vehicle_no.value;
-  if (typeof plate === 'string') {
+  if (typeof plate === 'string' && fields.vehicle_no.confidence < 0.85 && doc.pageCount > 3) {
     const bare = plate.replace(/\s+/g, '');
     const occurrences = doc.text.replace(/\s+/g, '').split(bare).length - 1;
     if (occurrences < 2) {
@@ -387,7 +426,6 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
   if (clash) warnings.push(clash);
   reconcilePremium(fields, warnings);
 
-  const insurer = detectInsurer(head);
   const cls = /motor|vehicle|kenderaan|private car|motorcycle/i.test(head) ? 'motor' : 'non_motor';
 
   return {

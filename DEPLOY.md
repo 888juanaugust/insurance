@@ -194,11 +194,12 @@ Also worth knowing before real clients are on it:
   Insurhelp.
 - **PDPA consent and retention are not tracked.** Nothing records what a client
   agreed to, and nothing ages data out.
-- **Reading a policy PDF needs `ANTHROPIC_API_KEY` to cover every layout.**
-  Without it the upload falls back to pattern rules alone, which are tuned to
-  the common Malaysian schedules; an unfamiliar layout comes through with blanks
-  to fill, and a scanned or photographed PDF comes through empty. See "Reading
-  policy documents" in the README for what each pass can and cannot do.
+- **Reading a policy PDF is exact for Liberty, Lonpac and Allianz schedules**
+  — measured at 95 of 95 fields on real documents, rules only — and needs
+  `ANTHROPIC_API_KEY` to cover every other layout. Without it an unfamiliar
+  layout comes through with blanks to fill, and a scanned or photographed PDF
+  comes through empty and says so. Keying a policy in by hand is always there.
+  See "Reading policy documents" in the README.
 - **Restore has not been rehearsed.** `deploy/backup.sh` is written and takes
   both the database and the documents directory, but nobody has yet restored
   from one onto a clean box. Do that once, deliberately, before you rely on it.

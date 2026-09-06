@@ -45,6 +45,7 @@ invented.
 | Import | `/import` | Bring an existing book across from a spreadsheet. Every row is checked and shown before anything is written. |
 | Search | `/search`, and a box in the rail | One box over policies, clients, claims, endorsements, sub agents and documents. Ctrl/⌘+K from anywhere. |
 | Home | `/` | The agent's desk: add a policy, find a client, and what is running out — then the agency figures underneath. |
+| Add a policy | `/add` | Two doors with equal standing: upload the schedule, or key it in by hand. |
 | Expiring soon | `/expiring` | The worklist. Every policy running out, worst first, including the ones that already have. |
 | Everything else | `/more` | Claims, money, reports and settings, in one page, off the daily path. |
 | Audit trail | `/audit` | Every change, refusal and sign-in. |
@@ -73,31 +74,59 @@ invented.
 
 ## Reading policy documents
 
-`Upload PDF` on either register takes the PDF the insurer issued — schedule, cover note or
-certificate — reads it, fills in the form, and lets you confirm before anything is saved.
+`Add a policy` offers two doors with equal standing: upload the schedule the insurer issued,
+or key the policy in by hand. Both land on the same form, and nothing is saved until you have
+seen it. The manual door is not a fallback — a cover note read over the phone, an insurer the
+reader has never seen, or a scanned page with no model configured all end the same way, with
+somebody typing, and that should not have to start with a file they do not have.
 
-It runs in two passes:
+The upload runs in two passes:
 
 1. **Pattern rules** (always, offline, free). The PDF is re-laid-out by text position so each
-   visual row becomes one line, then bilingual English/Bahasa Malaysia label patterns pull out
-   the fields. Every value is validated — a plate has to look like a plate, a premium has to be
-   a plausible amount, `gross + tax + stamp` has to equal the total — and anything that fails is
-   discarded rather than shown. A wrong value that survives review is worse than a blank one.
-2. **The model** (when `ANTHROPIC_API_KEY` is set). Insurers that print labels and values in
-   separate columns, and scanned documents with no text layer at all, defeat pattern matching.
-   The same document goes to Claude — as text when there is a text layer, as a PDF `document`
-   block when there is not — and the two readings are merged: agreement raises confidence,
-   only-one-has-it fills the gap, and **disagreement is surfaced for you rather than settled
-   silently**.
+   visual row becomes one line. Then the insurer is identified from its signature, and if a
+   **profile** exists for that insurer it reads the schedule by *shape* — Liberty prints the
+   plate on a line of its own three rows below a label it shares with two others; Allianz
+   prints `L15ZF9307373 1498.00 CC` with no label at all; Lonpac puts two labelled values on
+   one line. Generic bilingual English/Bahasa Malaysia label matching fills whatever the
+   profile did not, and everything for an insurer that has no profile yet. Every value is
+   validated — a plate has to look like a plate, a premium has to be a plausible amount,
+   `gross + tax + stamp` has to equal the total — and anything that fails is discarded
+   rather than shown. A wrong value that survives review is worse than a blank one.
+2. **The model** (when `ANTHROPIC_API_KEY` is set). Layouts no profile covers, and scanned
+   documents with no text layer at all, defeat pattern matching. The same document goes to
+   Claude — as text when there is a text layer, as a PDF `document` block when there is not —
+   and the two readings are merged: agreement raises confidence, only-one-has-it fills the
+   gap, and **disagreement is surfaced for you rather than settled silently**.
+
+### What it has been measured against
+
+The four real policy documents in the seed — Liberty `WQK100` and `NCF9240`, Lonpac
+`DDS7898`, Allianz `MDW9185` — are scored field by field against their hand transcription,
+rules only, no API key. Before this pass the reader managed **58%** of the fields. Two bugs
+accounted for a lot of it: the validators for engine capacity and year of manufacture only
+accepted numbers while the values arrive as text, so both were thrown away on every
+document; and a rule requiring the plate to appear twice killed every plate on a two-page
+cover note. The rest was layout, and became the three profiles.
+
+It now reads **95 of 95** — every stated field on all four documents, exact to the sen,
+and every field a document does *not* state left blank. Three of those were only caught
+once the harness stopped tolerating a one-sen difference: the reader had been taking
+`Total Due (OTC) RM 1,913.45`, the figure rounded to five sen for a cash till, instead of
+the `Total Due RM 1,913.44` above it — and the premium check, seeing gross + tax + stamp
+≠ total, then "corrected" a gross that had been right. Counter-rounded lines are refused
+now. That is the honest shape of the claim: those four layouts, field for field. An
+insurer not in that list gets the generic pass, blanks where it fails, and the model pass
+if configured. Send more documents and they can be added to the profiles and measured the
+same way.
 
 The review screen labels every field with where its value came from — `confirmed` (both passes
 agree), `read`, `read by model`, `calculated` (derived from the other premium figures),
-`check this` (low confidence or a disagreement), `not found`. Duplicate policy numbers are
-flagged, and an insured who is already on file is matched to the existing client rather than
-duplicated.
+`check this` (low confidence or a disagreement), `not found` — and shows the line of the
+document it was read from. Duplicate policy numbers are flagged, and an insured who is already
+on file is matched to the existing client rather than duplicated.
 
 Without credentials the upload still works; layouts the rules do not cover simply arrive with
-more blanks to fill in. Configure the model pass with:
+more blanks to fill in, and a scan says plainly that it is a scan. Configure the model pass with:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
@@ -557,20 +586,29 @@ Everything else is fabricated demo data.
 ```
 src/
   app/
-    (app)/          authenticated pages, wrapped in the left-rail shell
+    (app)/          authenticated pages, wrapped in AppShell (top bar + rail)
     login/          sign-in page
-  components/       SideNav, forms, icons, filters, shared UI
+  components/       AppShell, SideNav, forms, icons, filters, shared UI
   lib/
     db.ts           schema and connection; seeds on first use
     seed.ts         the seed dataset
     queries.ts      all data access
+    extract/        the PDF reader: rules.ts (generic), profiles.ts (per insurer), claude.ts
     nav.ts          the navigation tree
     actions.ts      server actions (login, record payment, approve commission)
     session.ts      signed-cookie session
     format.ts       currency and date helpers
 ```
 
-Navigation is a left rail (`src/components/SideNav.tsx`), driven by `src/lib/nav.ts`.
+The shell (`src/components/AppShell.tsx`) follows the supplied design system: a 56px white
+top bar carrying the agency, the bell and the signed-in user; a white collapsible rail; the
+page's first panel as the control bar under the top bar. Containers are `rounded-3xl`,
+controls `rounded-xl`, the brand is indigo `#4F46E5` on a `#F8FAFC` canvas with `#111827`
+text, and the face is Cairo — loaded by the browser from Google Fonts with a system fallback,
+rather than fetched at build time, so a box with no route out still builds. Every colour is
+a token in `src/app/globals.css`; errors stay red whatever the brand is.
+
+Navigation is the rail (`src/components/SideNav.tsx`), driven by `src/lib/nav.ts`.
 
 It carries six entries, and that is the point. Nineteen flat destinations became eight
 sections of roughly equal weight, which reads as an ERP — a menu that gives commission

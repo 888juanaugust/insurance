@@ -146,8 +146,15 @@ export default function PolicyForm({
   };
 
 
+  /*
+   * The form calls the total `total_premium`, the column it is stored in; the
+   * reader calls it `total_payable`, the words on the schedule. Looked up by
+   * form name alone, the total's badge could only ever say "not found".
+   */
+  const READ_AS: Record<string, FieldKey> = { total_premium: 'total_payable' };
+
   const fieldProps = (name: string) => {
-    const meta = extraction?.fields[name as FieldKey];
+    const meta = extraction?.fields[READ_AS[name] ?? (name as FieldKey)];
     return {
       defaultValue: v(name),
       chip: extraction ? chipFor(meta) : null,

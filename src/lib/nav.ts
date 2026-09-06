@@ -36,7 +36,7 @@ export const NAV: NavSection[] = [
   { key: 'overview', href: '/', label: 'Home', icon: 'overview' },
   {
     key: 'upload',
-    href: '/insurance/general-motor/upload',
+    href: '/add',
     label: 'Add a policy',
     icon: 'upload',
     primary: true,

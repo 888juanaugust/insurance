@@ -107,7 +107,7 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
         onClick={() => router.push('/search')}
         title="Search (Ctrl+K)"
         aria-label="Search"
-        className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded text-nav-text hover:bg-nav-soft hover:text-white"
+        className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink"
       >
         <SearchGlyph />
       </button>
@@ -117,7 +117,7 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
   return (
     <div ref={boxRef} className="relative mb-3 px-2">
       <div className="relative">
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-nav-text">
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted">
           <SearchGlyph />
         </span>
         <input
@@ -132,9 +132,9 @@ export default function GlobalSearch({ collapsed = false }: { collapsed?: boolea
           aria-expanded={open}
           aria-controls="search-results"
           role="combobox"
-          className="w-full rounded border border-[#39404b] bg-nav-soft py-1.5 pl-8 pr-9 text-[13px] text-white placeholder:text-nav-text focus:border-accent focus:outline-none"
+          className="w-full rounded-xl border border-line bg-canvas py-1.5 pl-8 pr-9 text-[13px] text-ink placeholder:text-muted focus:border-accent focus:bg-white focus:outline-none"
         />
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[#4a515c] px-1 py-0.5 text-[10px] font-medium text-nav-text">
+        <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-line bg-white px-1 py-0.5 text-[10px] font-medium text-muted">
           ⌘K
         </kbd>
       </div>

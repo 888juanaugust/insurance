@@ -48,8 +48,10 @@ const VALIDATORS: Partial<Record<FieldKey, (v: string | number) => boolean>> = {
   engine_no: (v) => typeof v === 'string' && /^[A-Z0-9-]{5,25}$/i.test(v) && /\d/.test(v),
   chassis_no: (v) => typeof v === 'string' && /^[A-Z0-9-]{8,30}$/i.test(v) && /\d/.test(v),
 
-  engine_cc: (v) => typeof v === 'number' && v >= 50 && v <= 30000,
-  year_make: (v) => typeof v === 'number' && v >= 1950 && v <= new Date().getFullYear() + 1,
+  // Both are TEXT columns and arrive as the digits the schedule printed; a
+  // validator that only accepted numbers threw every one of them away.
+  engine_cc: (v) => inRange(v, 50, 30000),
+  year_make: (v) => inRange(v, 1950, new Date().getFullYear() + 1),
   seating: (v) => typeof v === 'number' && v >= 1 && v <= 80,
 
   sum_insured: (v) => typeof v === 'number' && v >= 100 && v <= 100_000_000,
@@ -70,10 +72,21 @@ const VALIDATORS: Partial<Record<FieldKey, (v: string | number) => boolean>> = {
   effective_date: isDate,
   expiry_date: isDate,
 
-  hire_purchase: (v) => typeof v === 'string' && v.length <= 60 && !LABEL_NOISE.test(v),
+  // Liberty prints "Hire Purchase Owner / Pemilik Sewa Beli Optional Cover" —
+  // the next column's heading, not a finance company. A hire purchase owner
+  // is a bank or a dash; a phrase about cover is never one.
+  hire_purchase: (v) =>
+    typeof v === 'string' && v.length <= 60 && !LABEL_NOISE.test(v) &&
+    !/\b(Optional|Cover|Extra|Benefit|Extension|Endorsement)\b/i.test(v),
   named_drivers: (v) => typeof v === 'string' && v.length <= 80,
   occupation: (v) => typeof v === 'string' && v.length <= 40 && !LABEL_NOISE.test(v) && /^[A-Za-z][A-Za-z ,.'-]*$/.test(v),
 };
+
+function inRange(v: string | number, lo: number, hi: number): boolean {
+  if (typeof v === 'string' && !/^\d+(?:\.\d+)?$/.test(v.trim())) return false;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= lo && n <= hi;
+}
 
 function isDate(v: string | number): boolean {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;

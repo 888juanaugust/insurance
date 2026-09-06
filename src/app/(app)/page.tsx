@@ -85,7 +85,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           <Link
-            href="/insurance/general-motor/upload"
+            href="/add"
             className="flex items-start gap-3.5 rounded border border-brand bg-brand-wash px-5 py-4 hover:brightness-[0.98]"
           >
             <IconUpload className="mt-0.5 h-[20px] w-[20px] shrink-0 text-brand" />
