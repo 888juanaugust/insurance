@@ -60,8 +60,15 @@ if no prebuilt binary matches your Node version.
 cd /var/www
 git clone <your-repo-url> insurhelp
 cd insurhelp
+git checkout <the branch you deploy>      # if it is not the default branch
 chown -R insurhelp:insurhelp /var/www/insurhelp
 ```
+
+A private repository needs credentials the server can use: either a **deploy
+key** (`ssh-keygen -t ed25519`, add the public half to the repository's Deploy
+keys, clone over `git@github.com:...`) or a personal access token in the HTTPS
+URL. A deploy key is the better of the two — it is read-only and scoped to the
+one repository.
 
 ### 3. Configure
 
@@ -73,8 +80,18 @@ chmod 600 .env.production
 chown insurhelp:insurhelp .env.production
 ```
 
-`IH_SECRET` is not optional — the app throws on start-up in production without
-it rather than fall back to the development value, which is in this repository.
+Three of these decide whether the first start works at all:
+
+| Variable | Why it cannot be skipped |
+| --- | --- |
+| `IH_SECRET` | The app throws on start-up in production without it, rather than fall back to the development value, which is in this repository. |
+| `IH_ADMIN_EMAIL` | Your login ID. |
+| `IH_ADMIN_PASSWORD` | Your password — 10+ characters with a letter and a number. |
+
+The last two create the one administrator when the database is created, and
+are read only then. **Without them the app refuses to create a database**, so
+the first page load fails rather than seeding the demo accounts whose password
+is in this repository. Delete both lines once you have signed in.
 
 Create the data directories:
 
@@ -124,7 +141,11 @@ exit
 pm2 startup systemd -u insurhelp --hp /var/www/insurhelp   # as root
 ```
 
-The database is created and seeded on the first request.
+The database is created on the first request, with your administrator in it.
+If `pm2 logs insurhelp` shows *"will not create its first database in
+production without an administrator"*, `IH_ADMIN_EMAIL` and
+`IH_ADMIN_PASSWORD` did not reach the process: check them in
+`.env.production`, then `pm2 reload ecosystem.config.cjs --update-env`.
 
 ### 5. Put Nginx in front
 
@@ -145,6 +166,14 @@ certbot --nginx -d insurhelp.example.com
 
 The `client_max_body_size 20m` in the supplied config is deliberate — Nginx
 defaults to 1 MB, which rejects a typical policy PDF before the app sees it.
+
+**You cannot sign in until the certificate is in place.** In production the
+session cookie is `Secure` with the `__Host-` prefix, and a browser will not
+store such a cookie from a plain `http://` origin — so signing in over
+`http://<the VPS address>` appears to do nothing: the credentials are accepted
+and the next page bounces you back to the sign-in screen. That is the cookie
+being refused, not the password. Get the domain resolving and certbot run
+first, then sign in over `https://`.
 
 ### 6. Lock the box down
 
