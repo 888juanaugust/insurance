@@ -11,8 +11,21 @@
 | Cloud hosting | **No** | Same runtime as shared, with more resources. |
 | **VPS (KVM 1 and up)** | **Yes** | Full root, your own Node, your own process manager. |
 
-KVM 1 (1 vCPU, 4 GB) is comfortable for a single agency. Pick Ubuntu 22.04 or
-24.04 when you create it.
+KVM 1 (1 vCPU, 4 GB) is comfortable for a single agency.
+
+### What to install on it
+
+Hostinger asks this while the VPS is being created ("Choose what to install").
+Stay on the **Plain OS** tab and choose **Ubuntu**, then **24.04 LTS**.
+
+- Everything below is `apt`, NodeSource and nginx, so **Debian 12** works
+  unchanged too. AlmaLinux, Rocky and CentOS need every `apt` line rewritten
+  as `dnf`.
+- **Do not pick a control panel** (CyberPanel, cPanel, Plesk). They take over
+  nginx and ports 80/443, which fights `deploy/nginx.conf`, and they add a
+  second administrator login to keep secured.
+- **Do not pick the Node.js application template** either. It pins its own
+  Node version and process manager; step 1 below installs Node 22 and PM2.
 
 If you would rather not run a server, this also deploys unchanged to Railway,
 Render or Fly.io — all three build on the host, which is what the native module
