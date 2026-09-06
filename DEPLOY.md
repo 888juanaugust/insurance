@@ -93,6 +93,13 @@ are read only then. **Without them the app refuses to create a database**, so
 the first page load fails rather than seeding the demo accounts whose password
 is in this repository. Delete both lines once you have signed in.
 
+Leave `IH_TENANTS_DIR` commented out. It is the switch for one database per
+agency, and setting it means this process serves no agency at all until
+`IH_TENANT` names one — every request then fails. A single agency uses `IH_DB`
+and `IH_FILES`, which are already filled in. "Several agencies on one server"
+below is what to read when a second agency turns up; nothing here has to
+change first.
+
 Create the data directories:
 
 ```bash
