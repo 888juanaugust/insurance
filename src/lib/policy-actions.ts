@@ -20,6 +20,8 @@ import { classSlug, today, money } from './format';
 import { checkUploadRate } from './rate-limit';
 import { safeBack } from './request';
 import { policyFigures } from './premium';
+import { listLearnedLabels } from './learned-labels';
+import { learnFromSave } from './learn';
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
@@ -78,7 +80,7 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
 
   let result: ExtractionResult;
   try {
-    result = await extractPolicy(bytes);
+    result = await extractPolicy(bytes, { learnedFor: (insurer) => listLearnedLabels(user.org_id, insurer) });
   } catch (error) {
     return {
       ok: false,
@@ -375,6 +377,7 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
     const previous = getPolicy(editingId, user.org_id)?.policy as Record<string, unknown> | undefined;
     const ok = updatePolicy(editingId, user.org_id, input);
     if (!ok) return { error: 'That policy could not be found.' , values: submitted(fd) };
+    if (documentId) await learnFromSave(user.org_id, documentId, (name) => str(fd, name));
     await audit(user, {
       action: 'policy.update', entity: 'policy', entityId: editingId, entityLabel: policyNo,
       summary: `Policy ${policyNo} edited.`,
@@ -404,6 +407,8 @@ export async function savePolicyAction(_prev: unknown, fd: FormData): Promise<Sa
   const { id, attached } = createPolicyWithLinks(input, {
     uploadedAt: today(), documentId: documentId || null, renewedFrom: renewedFrom || null,
   });
+  // What the person kept is what the reader learns from — corrections included.
+  if (attached) await learnFromSave(user.org_id, documentId, (name) => str(fd, name));
 
   await audit(user, {
     action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,

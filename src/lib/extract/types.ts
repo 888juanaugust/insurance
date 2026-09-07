@@ -35,7 +35,11 @@ export type ExtractionResult = {
   pageCount: number;
   usedClaude: boolean;
   claudeError?: string;
+  /** Why the model did not read this document, when it did not. */
+  modelSkipped?: 'not needed' | 'unavailable' | 'off';
   warnings: string[];
+  /** What happened when nothing is wrong: learned labels used, the model not needed. */
+  notes: string[];
 };
 
 export function emptyFields(): Record<FieldKey, FieldResult> {

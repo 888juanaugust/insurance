@@ -178,8 +178,15 @@ function Review({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`badge ${result.usedClaude ? 'badge-blue' : 'badge-grey'}`}>
-              {result.usedClaude ? 'rules + model' : 'rules only'}
+            <span
+              className={`badge ${result.usedClaude ? 'badge-blue' : 'badge-grey'}`}
+              title={result.notes.join(' ') || undefined}
+            >
+              {result.usedClaude
+                ? 'rules + model'
+                : result.modelSkipped === 'not needed'
+                  ? 'rules only · model not needed'
+                  : 'rules only'}
             </span>
             {needsAttention > 0 && (
               <span className="badge badge-amber">{needsAttention} to confirm</span>
@@ -215,6 +222,14 @@ function Review({
               <li key={i} className="rounded border border-warn-line bg-warn-wash px-4 py-2 text-[12.5px] text-warn">
                 {w}
               </li>
+            ))}
+          </ul>
+        )}
+
+        {result.notes.length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {result.notes.map((n, i) => (
+              <li key={i} className="text-[12.5px] text-muted">{n}</li>
             ))}
           </ul>
         )}

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { PdfDoc } from './pdf';
 import { FIELD_KEYS, type FieldKey } from './types';
 
@@ -78,6 +78,23 @@ export function claudeAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 }
 
+/**
+ * How hard the model thinks about a schedule. Extraction is bounded work —
+ * the fields are named, the document is short — and `medium` reads it well
+ * at a fraction of what `high` spends on thinking tokens. IH_EXTRACT_EFFORT
+ * raises or lowers it.
+ */
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+type Effort = (typeof EFFORTS)[number];
+
+export function extractEffort(): Effort {
+  const v = (process.env.IH_EXTRACT_EFFORT ?? '').trim().toLowerCase() as Effort;
+  return EFFORTS.includes(v) ? v : 'medium';
+}
+
+/** The models that accept a server-side refusal fallback. */
+const FALLBACK_MODELS = /^claude-(opus-5|fable-5)/;
+
 export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Promise<ClaudeOutcome> {
   if (!claudeAvailable()) {
     return { ok: false, error: 'No Anthropic credentials configured (set ANTHROPIC_API_KEY).' };
@@ -100,7 +117,7 @@ export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Prom
     };
   }
 
-  const content: Anthropic.ContentBlockParam[] = useDocument
+  const content: Anthropic.Beta.BetaContentBlockParam[] = useDocument
     ? [
         {
           type: 'document',
@@ -123,12 +140,22 @@ export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Prom
       ];
 
   try {
-    const response = await client.messages.parse({
+    /*
+     * A schedule is full of names and identity numbers, and a safety
+     * classifier can decline such a request on sight. With `fallbacks` the
+     * API re-runs a declined request on another model inside the same call,
+     * so a decline becomes a read rather than a blank form. Only the models
+     * that accept the parameter get it; an override to an older model does
+     * not have the request rejected for it.
+     */
+    const fallbackable = FALLBACK_MODELS.test(model);
+    const response = await client.beta.messages.parse({
       model,
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: SYSTEM,
       messages: [{ role: 'user', content }],
-      output_config: { format: zodOutputFormat(PolicySchema) },
+      output_config: { format: betaZodOutputFormat(PolicySchema), effort: extractEffort() },
+      ...(fallbackable ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
     });
 
     if (response.stop_reason === 'refusal') {
@@ -137,7 +164,7 @@ export async function extractWithClaude(doc: PdfDoc, pdfBytes: Uint8Array): Prom
     if (!response.parsed_output) {
       return { ok: false, error: 'The model did not return a parseable result.' };
     }
-    return { ok: true, data: response.parsed_output, model, mode: useDocument ? 'document' : 'text' };
+    return { ok: true, data: response.parsed_output, model: response.model, mode: useDocument ? 'document' : 'text' };
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
       return { ok: false, error: 'Anthropic credentials were rejected.' };

@@ -38,6 +38,8 @@ export function resultFromDocument(doc: DocumentRow): ExtractionResult {
     pageCount: doc.page_count,
     usedClaude: doc.used_claude === 1,
     warnings,
+    // Notes are for the moment of reading; a reading brought back later has none.
+    notes: [],
   };
 }
 

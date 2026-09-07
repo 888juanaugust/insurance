@@ -100,11 +100,29 @@ The upload runs in two passes:
    validated — a plate has to look like a plate, a premium has to be a plausible amount,
    `gross + tax + stamp` has to equal the total — and anything that fails is discarded
    rather than shown. A wrong value that survives review is worse than a blank one.
-2. **The model** (when `ANTHROPIC_API_KEY` is set). Layouts no profile covers, and scanned
-   documents with no text layer at all, defeat pattern matching. The same document goes to
-   Claude — as text when there is a text layer, as a PDF `document` block when there is not —
-   and the two readings are merged: agreement raises confidence, only-one-has-it fills the
-   gap, and **disagreement is surfaced for you rather than settled silently**.
+2. **The model** (when `ANTHROPIC_API_KEY` is set, and only when needed). Layouts no
+   profile covers, and scanned documents with no text layer at all, defeat pattern matching.
+   For those the same document goes to Claude — as text when there is a text layer, as a
+   PDF `document` block when there is not — and the two readings are merged: agreement
+   raises confidence, only-one-has-it fills the gap, and **disagreement is surfaced for you
+   rather than settled silently**. The model is *not* sent a document the rules read well:
+   `lib/extract/gate.ts` decides, and it says no when the insurer was recognised, the fields
+   the register cannot do without were read from labelled matches, and most of the fields a
+   schedule usually carries came through. The three profiled insurers pass that every time,
+   so they cost nothing. `IH_MODEL_PASS=always` sends everything anyway.
+
+### The reader learns
+
+Whatever the model reads once, the rules should read next time. When a policy is saved with
+its schedule attached — from the review form or from a batch — the saved value of every
+field is looked for on the page, and the text that sat beside it, or on the line above, is
+kept as a **learned label** for that insurer (`lib/extract/learned.ts`, stored per agency in
+`learned_label`). It is learned from what the person *saved*, so a correction typed on the
+review form teaches the corrected value, not the model's. A learned label is provisional
+until a second saved document confirms it: it reads at a confidence below the gate's bar, so
+the model still checks the next document of that insurer, and only when the two agree does
+the label become trusted and the model stop being called. The review screen says when
+learned labels were used and when the model was not needed.
 
 ### What it has been measured against
 
@@ -138,7 +156,9 @@ more blanks to fill in, and a scan says plainly that it is a scan. Configure the
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...        # enables the second pass
-export IH_EXTRACT_MODEL=claude-opus-5  # optional, this is the default
+export IH_MODEL_PASS=when-needed           # optional: when-needed (default) | always | never
+export IH_EXTRACT_EFFORT=medium            # optional: low | medium (default) | high | xhigh | max
+export IH_EXTRACT_MODEL=claude-opus-5      # optional, this is the default
 export IH_FILES=/path/to/documents         # optional, defaults beside the database
 ```
 

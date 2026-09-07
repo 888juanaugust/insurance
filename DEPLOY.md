@@ -406,10 +406,14 @@ Also worth knowing before real clients are on it:
   each individual PDF still has to fit under it. Leave `bodySizeLimit` alone.
 - **Reading a policy PDF is exact for Liberty, Lonpac and Allianz schedules**
   — measured at 95 of 95 fields on real documents, rules only — and needs
-  `ANTHROPIC_API_KEY` to cover every other layout. Without it an unfamiliar
-  layout comes through with blanks to fill, and a scanned or photographed PDF
-  comes through empty and says so. Keying a policy in by hand is always there.
-  See "Reading policy documents" in the README.
+  `ANTHROPIC_API_KEY` to cover every other layout. With the key set, the
+  model is paid for only when the rules fell short (`IH_MODEL_PASS`,
+  default `when-needed`), and every policy saved from a document teaches the
+  reader that insurer's labels: after two saved documents the rules read that
+  layout on their own. Without the key an unfamiliar layout comes through
+  with blanks to fill, and a scanned or photographed PDF comes through empty
+  and says so. Keying a policy in by hand is always there. See "Reading
+  policy documents" in the README.
 - **Restore has not been rehearsed.** `deploy/backup.sh` is written and takes
   both the database and the documents directory, but nobody has yet restored
   from one onto a clean box. Do that once, deliberately, before you rely on it.

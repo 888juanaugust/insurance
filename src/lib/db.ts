@@ -581,6 +581,23 @@ CREATE TABLE IF NOT EXISTS session (
 );
 CREATE INDEX IF NOT EXISTS idx_session_subject ON session(kind, subject_id);
 CREATE INDEX IF NOT EXISTS idx_session_expiry  ON session(expires_at);
+
+-- What this agency's saved schedules have taught the document reader: for an
+-- insurer and a field, the label the value sat beside. Learned again on a
+-- second document, the row is not duplicated but counted, and the count is
+-- what makes a label trusted (see lib/extract/learned.ts).
+CREATE TABLE IF NOT EXISTS learned_label (
+  id          TEXT PRIMARY KEY,
+  org_id      TEXT NOT NULL REFERENCES organisation(id),
+  insurer     TEXT NOT NULL,        -- as detectInsurer names it, or UNKNOWN
+  field_key   TEXT NOT NULL,
+  label       TEXT NOT NULL,
+  placement   TEXT NOT NULL,        -- same | below
+  seen        INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL,
+  last_seen   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_learned_label ON learned_label(org_id, insurer, field_key, label, placement);
 `;
 
 /**

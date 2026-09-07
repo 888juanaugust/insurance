@@ -2,6 +2,7 @@ import type { PdfDoc } from './pdf';
 import { emptyFields, type ExtractionResult, type FieldKey, type FieldResult } from './types';
 import { isValid, pruneInvalid, checkPremiumConsistency } from './validate';
 import { profileFor } from './profiles';
+import { learnedConfidence, learnedPattern, valueShapeFor, type LearnedLabel } from './learned';
 
 /* ------------------------------------------------------------------ *
  * Value normalisers
@@ -368,9 +369,17 @@ function coerce(key: FieldKey, raw: string): string | number | null {
   return cleaned.length ? cleaned : null;
 }
 
-export function extractWithRules(doc: PdfDoc): ExtractionResult {
+/**
+ * @param learnedFor  The labels learned from this agency's saved documents,
+ *                    looked up by insurer once the document says which it is.
+ */
+export function extractWithRules(
+  doc: PdfDoc,
+  learnedFor?: (insurer: string | null) => LearnedLabel[],
+): ExtractionResult {
   const fields = emptyFields();
   const warnings: string[] = [];
+  const notes: string[] = [];
 
   // Only the first few pages carry the schedule; the rest is policy wording
   // that produces false matches.
@@ -389,6 +398,33 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
       if (value === null || value === '' || !isValid(h.key, value)) continue;
       fields[h.key] = { value, confidence: h.confidence, source: 'rule', evidence: h.evidence };
     }
+  }
+
+  /*
+   * What earlier documents from this insurer taught (see learned.ts): a label
+   * a person's saved policy sat beside. Before the generic matchers, because
+   * a learned label was read off THIS insurer's page and a generic one was
+   * not; after the profile, which was scored against a real document.
+   */
+  const learned = learnedFor ? learnedFor(insurer?.short ?? null) : [];
+  let learnedUsed = 0;
+  for (const l of learned) {
+    if (fields[l.key].value !== null) continue;
+    const hit = labelled(lines, learnedPattern(l), valueShapeFor(l.key), l.placement === 'same');
+    if (!hit) continue;
+    const value = coerce(l.key, hit.value);
+    if (value === null || value === '' || !isValid(l.key, value)) continue;
+    fields[l.key] = {
+      value, confidence: learnedConfidence(l), source: 'rule',
+      evidence: `${hit.evidence} — label learned from an earlier ${l.insurer} document`,
+    };
+    learnedUsed++;
+  }
+  if (learnedUsed) {
+    notes.push(
+      `${learnedUsed} field${learnedUsed === 1 ? '' : 's'} read with labels learned from your earlier ` +
+        `${insurer?.short ?? ''} documents.`.replace('  ', ' '),
+    );
   }
 
   for (const [key, matchers] of Object.entries(MATCHERS) as [FieldKey, Matcher[]][]) {
@@ -461,6 +497,7 @@ export function extractWithRules(doc: PdfDoc): ExtractionResult {
     pageCount: doc.pageCount,
     usedClaude: false,
     warnings,
+    notes,
   };
 }
 

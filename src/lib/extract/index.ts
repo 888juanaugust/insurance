@@ -2,14 +2,17 @@ import { readPdf } from './pdf';
 import { extractWithRules, reconcilePremium, detectInsurer } from './rules';
 import { extractWithClaude, claudeAvailable } from './claude';
 import { pruneInvalid, checkPremiumConsistency, isValid } from './validate';
+import { rulesFellShort } from './gate';
+import type { LearnedLabel } from './learned';
 import { FIELD_KEYS, emptyFields, type ExtractionResult, type FieldKey, type FieldResult } from './types';
 
 export { claudeAvailable } from './claude';
+export { rulesFellShort } from './gate';
 export type { ExtractionResult, FieldKey, FieldResult } from './types';
 export { FIELD_KEYS, NUMERIC_FIELDS, DATE_FIELDS } from './types';
 
 /** Loose equality — "TOYOTA  ALPHARD" and "Toyota Alphard" are the same answer. */
-function sameValue(a: string | number | null, b: string | number | null): boolean {
+export function sameValue(a: string | number | null, b: string | number | null): boolean {
   if (a === null || b === null) return false;
   if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.011;
   const norm = (v: string | number) =>
@@ -43,21 +46,38 @@ function withBudget<T>(work: Promise<T>, what: string): Promise<T> {
 export type ExtractOptions = {
   /** Set false to skip the model pass even when credentials exist. */
   useClaude?: boolean;
+  /** Labels learned from this agency's saved documents, by insurer. */
+  learnedFor?: (insurer: string | null) => LearnedLabel[];
 };
 
 /**
- * Read a policy document. Rules run first — deterministic, free, and offline.
- * When credentials are configured the model reads the same document, and the
- * two are merged: agreement raises confidence, disagreement is surfaced rather
- * than silently resolved, and anything either pass produced that fails
- * validation is dropped so a person fills it in instead.
+ * When the model reads a document. `when-needed` (the default) sends only
+ * documents the rules fell short on — see gate.ts for what that means;
+ * `always` sends every document for a second opinion; `never` keeps the
+ * reader offline whatever credentials exist.
+ */
+export type ModelPass = 'when-needed' | 'always' | 'never';
+
+export function modelPass(): ModelPass {
+  const v = (process.env.IH_MODEL_PASS ?? '').trim().toLowerCase();
+  return v === 'always' || v === 'never' ? v : 'when-needed';
+}
+
+/**
+ * Read a policy document. Rules run first — deterministic, free, and offline,
+ * and now carrying whatever labels this agency's saved documents have taught.
+ * The model reads the same document only when the rules fell short (or when
+ * IH_MODEL_PASS says always), and the two are merged: agreement raises
+ * confidence, disagreement is surfaced rather than silently resolved, and
+ * anything either pass produced that fails validation is dropped so a person
+ * fills it in instead.
  */
 export async function extractPolicy(
   pdfBytes: Uint8Array,
   options: ExtractOptions = {},
 ): Promise<ExtractionResult> {
   const doc = await withBudget(readPdf(pdfBytes), 'Reading the PDF');
-  const ruleResult = extractWithRules(doc);
+  const ruleResult = extractWithRules(doc, options.learnedFor);
 
   /*
    * A PDF that is a photograph or a scan carries no text layer, and the rules
@@ -68,14 +88,42 @@ export async function extractPolicy(
    */
   const scanned = doc.text.trim().length < SCANNED_BELOW_CHARS;
 
-  const wantClaude = options.useClaude !== false && claudeAvailable();
+  /*
+   * Whether to pay for the model on this document. The rules already read
+   * the three profiled insurers exactly; sending those anyway bought a second
+   * opinion on every upload and that was most of the bill. The gate says
+   * whether this one needs it; the switch says whether to ask at all.
+   */
+  const pass: ModelPass = options.useClaude === false ? 'never' : modelPass();
+  const shortfall = rulesFellShort(ruleResult, scanned);
+  const wantClaude = pass === 'always' || (pass === 'when-needed' && shortfall !== null);
+
   if (!wantClaude) {
+    if (pass === 'never') {
+      ruleResult.modelSkipped = 'off';
+      ruleResult.notes.push('Read by the pattern rules; the model pass is switched off.');
+      if (scanned) {
+        ruleResult.warnings.push(
+          'This document has no text in it — it is a scan or a photograph, so the pattern rules ' +
+            'have nothing to read and every field has come through blank. Key the policy in by hand.',
+        );
+      }
+    } else {
+      ruleResult.modelSkipped = 'not needed';
+      ruleResult.notes.push('Read by the pattern rules alone — the model was not needed for this document.');
+    }
+    return ruleResult;
+  }
+
+  if (!claudeAvailable()) {
+    ruleResult.modelSkipped = 'unavailable';
     ruleResult.warnings.push(
       scanned
         ? 'This document has no text in it — it is a scan or a photograph, so the pattern rules ' +
           'have nothing to read and every field has come through blank. Reading a scan needs the ' +
           'model pass: set ANTHROPIC_API_KEY. Otherwise key the policy in by hand.'
-        : 'Read using pattern rules only. Set ANTHROPIC_API_KEY to also read documents whose layout the rules do not cover.',
+        : `The pattern rules fell short here (${shortfall}). Set ANTHROPIC_API_KEY to have the model ` +
+          'read documents whose layout the rules do not cover; until then, fill the blanks by hand.',
     );
     return ruleResult;
   }
@@ -94,6 +142,13 @@ export async function extractPolicy(
 
   const merged = emptyFields();
   const warnings = [...ruleResult.warnings];
+  const notes = [...ruleResult.notes];
+  notes.push(
+    shortfall
+      ? `The model read this document as well, because ${shortfall}. Save the policy and the reader ` +
+        'learns this layout for next time.'
+      : 'The model read this document as well (every document is sent to it).',
+  );
   const disagreements: string[] = [];
 
   for (const key of FIELD_KEYS) {
@@ -152,6 +207,7 @@ export async function extractPolicy(
     pageCount: doc.pageCount,
     usedClaude: true,
     warnings,
+    notes,
   };
 }
 

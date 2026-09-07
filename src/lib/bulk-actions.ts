@@ -12,6 +12,7 @@ import {
 import { deleteDocument } from './files';
 import { today, money } from './format';
 import { resultFromDocument } from './reading';
+import { learnFromSave } from './learn';
 import type { ExtractionResult, FieldKey } from './extract';
 
 /**
@@ -278,6 +279,8 @@ export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<Bat
       // schedule is on disk but unreachable.
       const { id } = createPolicyWithLinks(input, { uploadedAt: today(), documentId });
       saved++;
+      // A row the person ticked as ready is a document they accepted; it teaches too.
+      await learnFromSave(user.org_id, documentId, (name) => String(form.get(name) ?? ''));
 
       await audit(user, {
         action: 'policy.create', entity: 'policy', entityId: id, entityLabel: policyNo,
