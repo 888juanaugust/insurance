@@ -33,6 +33,8 @@ export type UploadState = {
   documentId?: string;
   /** The same file already on record — usually means the policy is too. */
   sameFileAs?: { filename: string; uploaded_at: string; policy_no: string | null } | null;
+  /** The file's content hash, so a batch can see the same file chosen twice. */
+  sha256?: string;
   result?: ExtractionResult;
   duplicateOf?: { id: string; policy_no: string };
   matchedClient?: { id: string; name: string } | null;
@@ -104,7 +106,9 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
   );
 
   // Matching on the content hash catches the same schedule sent twice even
-  // when it has been renamed — which is how one policy becomes two rows.
+  // when it has been renamed — which is how one policy becomes two rows. An
+  // earlier reading of this same file that was never saved is not that, and
+  // does not count (findDocumentByHash).
   const sameFile = findDocumentByHash(user.org_id, hash);
 
   const found = Object.values(result.fields).filter((f) => f.value !== null).length;
@@ -151,6 +155,7 @@ export async function uploadPolicyAction(_prev: unknown, formData: FormData): Pr
     filename: file.name,
     documentId,
     result,
+    sha256: hash,
     duplicateOf,
     sameFileAs: sameFile
       ? { filename: sameFile.filename, uploaded_at: sameFile.uploaded_at, policy_no: sameFile.policy_no }

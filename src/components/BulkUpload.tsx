@@ -64,9 +64,25 @@ export default function BulkUpload({ cls }: { cls: 'motor' | 'non_motor' }) {
       } catch {
         item = { filename: usable[i].name, verdict: 'failed', reasons: ['the upload did not complete'] };
       }
-      setRows((rs) => rs.map((r, j) => (
-        j === i ? { ...r, ...item, state: 'done', chosen: item.verdict === 'ready' } : r
-      )));
+      setRows((rs) => {
+        /*
+         * The same file chosen twice in one sitting — easily done with a
+         * folder of schedules — is caught here rather than on the server,
+         * which cannot tell this batch's earlier reading from one somebody
+         * read last week and never saved. Neither is on a policy yet, so
+         * neither is a duplicate of any RECORD; this one is a duplicate of
+         * the row above it, and saying so beats saving the same schedule
+         * twice.
+         */
+        const twice = item.verdict !== 'failed' && item.sha256
+          && rs.some((r, j) => j < i && r.state === 'done' && r.sha256 === item.sha256);
+        const settled: BatchItem = twice
+          ? { ...item, verdict: 'duplicate', reasons: ['the same file is already in this batch'] }
+          : item;
+        return rs.map((r, j) => (
+          j === i ? { ...r, ...settled, state: 'done', chosen: settled.verdict === 'ready' } : r
+        ));
+      });
       setProgress({ done: i + 1, total: usable.length });
     }
     setBusy(false);

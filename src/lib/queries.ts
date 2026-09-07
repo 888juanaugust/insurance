@@ -1047,18 +1047,27 @@ export function attachDocumentToPolicy(docId: string, policyId: string, orgId: s
  * The same file uploaded twice is a common and expensive mistake — it is how
  * one policy ends up on the register as two. Matching on the content hash
  * catches it even when the file has been renamed.
+ *
+ * Only a document that reached a POLICY counts. Every reading writes a row
+ * here, saved or not, so matching on the hash alone told someone who read a
+ * schedule, thought better of it and read it again that their file was
+ * "already on file" — naming a record that does not exist, and refusing the
+ * document in a batch. Reading the same file twice is not a duplicate; it is
+ * the same person having another go, and until one of the readings is saved
+ * there is nothing to be a duplicate of. Unsaved readings are swept up after
+ * seven days (see abandonedUploads).
  */
 export function findDocumentByHash(orgId: string, hash: string, excludeId = '') {
   return getDb()
     .prepare(
       `SELECT d.id, d.filename, d.uploaded_at, d.policy_id, p.policy_no
          FROM policy_document d
-         LEFT JOIN policy p ON p.id = d.policy_id
+         JOIN policy p ON p.id = d.policy_id
         WHERE d.org_id = ? AND d.sha256 = ? AND d.id != ?
         ORDER BY d.uploaded_at LIMIT 1`,
     )
     .get(orgId, hash, excludeId) as
-    | { id: string; filename: string; uploaded_at: string; policy_id: string | null; policy_no: string | null }
+    | { id: string; filename: string; uploaded_at: string; policy_id: string; policy_no: string | null }
     | undefined;
 }
 

@@ -47,6 +47,8 @@ export type BatchItem = {
   fieldCount?: number;
   /** Set when the same policy number, or the same file, is already on record. */
   existingPolicyId?: string | null;
+  /** The file's content hash: how the batch spots the same file chosen twice. */
+  sha256?: string;
 };
 
 /** Everything a policy cannot be created without. */
@@ -155,6 +157,7 @@ export async function readForBatchAction(fd: FormData): Promise<BatchItem> {
     found,
     fieldCount: Object.keys(r.fields).length,
     existingPolicyId: state.duplicateOf?.id ?? null,
+    sha256: state.sha256,
   };
 }
 
@@ -203,17 +206,17 @@ export async function saveBatchAction(_prev: unknown, fd: FormData): Promise<Bat
       const policyNo = String(val('policy_no') ?? '');
       const duplicateOf = policyNo ? findPolicyByNumber(user.org_id, policyNo) : undefined;
       /*
-       * The same file counts against this reading only once it is on a policy.
-       * Two copies of one schedule in the same batch would otherwise refuse
-       * each other — the first, judged clean when it was read, would be
-       * turned away at save time for matching the second. Whichever copy is
-       * saved first, the other then fails on the policy number, which is the
-       * refusal that means something.
+       * Only a file already on a policy counts (findDocumentByHash). Two
+       * copies of one schedule in the same batch would otherwise refuse each
+       * other — the first, judged clean when it was read, turned away at save
+       * time for matching the second. Whichever copy is saved first, the other
+       * then fails on the policy number, which is the refusal that means
+       * something.
        */
       const sameFile = doc.sha256 ? findDocumentByHash(user.org_id, doc.sha256, doc.id) : undefined;
       const verdict = judge(reading, {
         duplicateOf,
-        sameFileAs: sameFile && sameFile.policy_id
+        sameFileAs: sameFile
           ? { filename: sameFile.filename, uploaded_at: sameFile.uploaded_at, policy_no: sameFile.policy_no }
           : null,
       });
