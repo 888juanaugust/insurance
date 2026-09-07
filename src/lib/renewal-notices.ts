@@ -3,8 +3,9 @@ import {
   listRenewalSettingsFull, getOrg, latestFollowUps,
 } from './queries';
 import {
-  render, deliver, isChannel, DEFAULT_TEMPLATES, type Channel, type MergeFields,
+  render, isChannel, DEFAULT_TEMPLATES, type Channel, type MergeFields,
 } from './messaging';
+import { deliver } from './delivery';
 import { money, longDate, today } from './format';
 
 export type GenerateResult = {

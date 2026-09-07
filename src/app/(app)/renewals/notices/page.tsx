@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/session';
 import { listMessages, messageCounts } from '@/lib/queries';
 import { generateNoticesAction, sendQueuedAction } from '@/lib/notice-actions';
-import { configuredChannels, CHANNEL_LABEL, type Channel } from '@/lib/messaging';
+import { CHANNEL_LABEL, type Channel } from '@/lib/messaging';
+import { configuredChannels, providerNames } from '@/lib/delivery';
 import { Crumb, PageHeader, Help } from '@/components/ui';
 import FilterSelect from '@/components/FilterSelect';
 import OutboxRow from '@/components/OutboxRow';
@@ -26,6 +27,7 @@ export default async function NoticesPage({
   });
   const counts = messageCounts(user.org_id);
   const configured = configuredChannels();
+  const providers = providerNames();
   const anyProvider = Object.values(configured).some(Boolean);
 
   return (
@@ -59,8 +61,19 @@ export default async function NoticesPage({
           <p className="mt-4 rounded border border-warn-line bg-warn-wash px-4 py-3 text-[12.5px] text-warn">
             No delivery provider is configured, so notices are prepared and left here for you to send.
             Open one, copy the text into WhatsApp, then mark it sent. To have Insurhelp send them,
-            set <code>IH_WHATSAPP_URL</code> (or <code>IH_EMAIL_URL</code>, <code>IH_SMS_URL</code>) —
+            whoever runs the server sets <code>IH_SMTP_HOST</code> for email or
+            <code>IH_WHATSAPP_PHONE_ID</code> for WhatsApp —
             see <Link href="/user-guide" className="underline">the guide</Link>.
+          </p>
+        )}
+        {anyProvider && (
+          <p className="mt-4 text-[12.5px] text-muted">
+            Sending through{' '}
+            {(['whatsapp', 'email', 'sms'] as Channel[])
+              .filter((c) => providers[c])
+              .map((c) => `${CHANNEL_LABEL[c]} (${providers[c]})`)
+              .join(', ')}
+            . Channels without a provider stay here to be sent by hand.
           </p>
         )}
 

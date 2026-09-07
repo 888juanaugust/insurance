@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { clientIp, secureSignInProblem } from './request';
-import { requestAgency, NO_AGENCY } from './tenant';
+import { requestAgency, NO_AGENCY, SUSPENDED_MESSAGE } from './tenant';
 import { hashPassword, verifyPassword } from './auth';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
 import { createPortalSession, destroyPortalSession, currentPortalClient, revokePortalSessions } from './portal-session';
@@ -31,6 +31,7 @@ export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<
   if (!identification || !code) return { error: 'Enter your NRIC or company registration number and your access code.' };
 
   const tenant = await requestAgency();
+  if (!tenant.ok && tenant.reason === 'suspended') return { error: SUSPENDED_MESSAGE };
   if (!tenant.ok && tenant.reason !== 'single-tenant') return { error: NO_AGENCY };
 
   const ip = (await clientIp()) ?? 'unknown';

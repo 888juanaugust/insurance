@@ -2,7 +2,7 @@
   "name": "insurhelp",
   "version": "1.0.0",
   "private": true,
-  "description": "Insurhelp \u2014 policy, collection and commission management for insurance agencies",
+  "description": "Insurhelp — policy, collection and commission management for insurance agencies",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
@@ -17,8 +17,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "@types/nodemailer": "^8.0.1",
     "better-sqlite3": "^11.8.1",
     "next": "15.5.25",
+    "nodemailer": "^10.0.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "unpdf": "^0.12.1",
@@ -30,9 +32,11 @@
     "@types/node": "22.10.7",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
+    "@types/smtp-server": "^3.5.13",
     "postcss": "8.5.1",
+    "smtp-server": "^3.19.8",
     "tailwindcss": "^4.3.3",
-    "typescript": "5.7.3",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "5.7.3"
   }
 }

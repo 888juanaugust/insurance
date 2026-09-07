@@ -151,6 +151,29 @@ Without `IH_CRON_SECRET` the route returns 503 and does nothing — an endpoint
 that messages clients is not left open by default. `GET` on the same path says
 whether it is configured, without running.
 
+### Sending the notices for real
+
+Without any of this, notices are still built and queued — they wait in the
+outbox for someone to copy and send by hand, and say so. Fill in a mailbox and
+Insurhelp sends the emails itself; fill in a WhatsApp Cloud API number and it
+sends the WhatsApp ones. All of it goes in `.env.production`, documented line
+by line in `.env.example`:
+
+| Channel | Variables |
+| --- | --- |
+| Email over SMTP | `IH_SMTP_HOST`, `IH_SMTP_PORT`, `IH_SMTP_USER`, `IH_SMTP_PASS`, `IH_SMTP_FROM` — any mailbox: Hostinger's own (`smtp.hostinger.com`, port 587), Gmail with an app password, a transactional service's relay. |
+| WhatsApp, Meta Cloud API | `IH_WHATSAPP_PHONE_ID`, `IH_WHATSAPP_TOKEN`, and `IH_WHATSAPP_TEMPLATE` naming an approved template whose body is the single parameter `{{1}}` — a message the business starts is delivered only as a template. `IH_WHATSAPP_COUNTRY_CODE` (60) completes numbers written the Malaysian way. |
+| A provider you already pay | `IH_WHATSAPP_URL`, `IH_EMAIL_URL`, `IH_SMS_URL` with `IH_*_TOKEN`: Insurhelp POSTs `{to, subject, text}` with the token as a bearer. |
+
+A real provider takes precedence over the hook for its channel. The notices
+screen says which channels are wired and through what, and a failed send is
+recorded on the message with the provider's reason rather than marked sent.
+The settings are read at start, so `pm2 restart` after changing them.
+
+On a server with several agencies these are the landlord's — one mailbox, one
+WhatsApp number, every agency's notices going out through them as part of the
+service — and the one `.env.production` serves every process.
+
 ### 4. Build and start
 
 ```bash
@@ -267,6 +290,13 @@ Set `IH_TENANTS_DIR=/var/lib/insurhelp/tenants` in `.env.production` and each
 agency gets its own database, its own documents, its own port and its own
 process. Skip this section for a single agency.
 
+This is the shape for renting Insurhelp out: each agency at its own subdomain,
+you at the base domain. It needs a domain of your own — `bs.insurhelp.my` is
+the agency `bs` under `insurhelp.my` — and the hostname Hostinger gives a VPS
+(`srv…….hstgr.cloud`) is not one you can put subdomains under, so point a
+domain at the server first. Nothing done for a single agency has to be undone:
+the single-agency database is simply not one of the tenants.
+
 ```bash
 mkdir -p /var/lib/insurhelp/tenants
 chown -R insurhelp:insurhelp /var/lib/insurhelp
@@ -292,6 +322,46 @@ nginx set has one server block per agency and answers anything else with 444 —
 an unknown subdomain must not land on somebody's book. The `tenant` command
 reads `.env.production` itself, so nothing has to be exported in the shell
 first; a value exported anyway wins.
+
+**The landlord console.** You, the one renting the service out, sign in at the
+base domain itself — `https://insurhelp.my/landlord` — and see every agency on
+the server: policies, clients, users, documents, disk, when anyone there last
+signed in, and whether it is live, with Suspend and Resume beside each. Create
+the landlord's login once, as the app user; its process and its address come
+along with the next `pm2 start ecosystem.config.cjs` and `tenant -- nginx`:
+
+```bash
+npm run tenant -- landlord --email you@yourdomain.my --password 'a real one' --name "Your name"
+```
+
+Running it again with a new password resets the landlord's password; there is
+no other way to. The landlord's process has no agency book in it at all —
+every agency route there leads to the console — and an agency's process has
+no `/landlord`. The base domain and `www.` are the landlord's; nothing else
+answers there.
+
+**Suspending, resuming, removing.** Suspending is a marker file
+(`<tenants>/<agency>/suspended`), written by the console's Suspend button or
+the shell. From that moment everyone at the agency is refused at sign-in, an
+open session is thrown out, the daily run leaves the agency out, and its
+address says the service is suspended. Nothing in their book is touched.
+Resume is the reverse. Removing is a shell command only, and takes a final
+copy first:
+
+```bash
+npm run tenant -- suspend bs
+npm run tenant -- resume bs
+npm run tenant -- remove bs --yes      # copies the database and documents to
+                                       # <tenants>/.removed/bs-<stamp>/, then deletes
+npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
+```
+
+Each of these stops, starts or deletes the agency's PM2 process when `pm2` is
+on the path, and prints the command when it is not. Regenerate nginx after any
+of them: a suspended agency then gets its page from nginx (a 503) with no
+process behind it, and a removed one's address goes back to 444. To bring a
+removed agency back, move its directory out of `.removed/`, write a port into
+its `port` file, and `pm2 start` again.
 
 **The daily reminder run, for every agency.** Each agency is its own process,
 and the scheduled route serves the agency of the process it lands on — one
@@ -440,6 +510,9 @@ pm2 restart insurhelp
 tail -f /var/log/nginx/error.log   # proxy errors
 ```
 
+On a server with several agencies the processes are `insurhelp-<agency>` and
+`insurhelp-landlord`; `pm2 ls` names them.
+
 | Symptom | Cause |
 | --- | --- |
 | Home appears after sign-in, then every click returns to the sign-in page | You are on plain `http://`. The browser refused the `Secure` cookie; the page rendered once from inside the sign-in response. Newer builds refuse the sign-in and say so. Run certbot, use `https://`. |
@@ -449,3 +522,6 @@ tail -f /var/log/nginx/error.log   # proxy errors
 | `413` when uploading a PDF | `client_max_body_size` is missing from the Nginx config. |
 | Upload hangs, no error | The Server Action body limit. It is set to 16 MB in `next.config.mjs`; do not lower it below the 15 MB the upload form advertises. |
 | `invalid ELF header` from better-sqlite3 | `node_modules` was copied from another machine. Delete it and `npm ci` on the server. |
+| An agency's address, or its sign-in, says access is suspended | The marker file `<tenants>/<agency>/suspended` exists. `npm run tenant -- resume <agency>`, then regenerate nginx if it was serving the page. |
+| Notices stay queued, "no provider" | Nothing in the delivery section of `.env.production` is filled in. Set `IH_SMTP_*` or `IH_WHATSAPP_*`, then `pm2 restart`. |
+| The base domain shows an agency's sign-in, not the landlord's | The nginx set was generated before `tenant -- landlord` ran. Regenerate it, and `pm2 start ecosystem.config.cjs` so the landlord process exists. |

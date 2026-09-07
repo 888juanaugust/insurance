@@ -4,13 +4,21 @@
  *   npm run tenant -- list
  *   npm run tenant -- create --slug bs --name "BS Agency Sdn Bhd" \
  *                            --admin "Boon Seng" --email owner@bs.my --password 'Sturdy-pass-77'
+ *   npm run tenant -- suspend bs        # refuse the agency, keep its data
+ *   npm run tenant -- resume bs
+ *   npm run tenant -- remove bs --yes   # final copy under .removed/, then gone
+ *   npm run tenant -- landlord --email you@yourdomain.my --password '...'
+ *   npm run tenant -- nginx             # the whole nginx server set
+ *   npm run tenant -- cron              # the daily reminder run, every agency
  *
  * Creating an agency is deliberately not something a web request can do: an
  * unknown subdomain must be a 404, not an invitation to make a new agency. It
- * happens here, on the server, by someone with a shell.
+ * happens here, on the server, by someone with a shell. Suspending and
+ * resuming can also be done from the landlord console.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { loadEnvFile } from '../src/lib/env-file';
 
 // The same settings the application reads — IH_TENANTS_DIR, IH_BASE_DOMAIN,
@@ -18,11 +26,14 @@ import { loadEnvFile } from '../src/lib/env-file';
 // documented. A value already in the shell wins.
 loadEnvFile(path.join(process.cwd(), '.env.production'));
 
+import Database from 'better-sqlite3';
 import { openTenantDb } from '../src/lib/db';
 import { seedTenant } from '../src/lib/seed-tenant';
+import { hashPasswordSync } from '../src/lib/auth';
 import { passwordProblem } from '../src/lib/passwords';
 import {
-  listTenants, multiTenant, nextFreePort, slugProblem, tenantExists, tenantPaths,
+  LANDLORD, isSuspended, landlordExists, landlordPaths, landlordPort, landlordPortFile,
+  listTenants, multiTenant, nextFreePort, slugProblem, suspendedFile, tenantExists, tenantPaths,
   tenantPort, tenantPortFile, tenantsRoot,
 } from '../src/lib/tenant';
 
@@ -31,10 +42,40 @@ function arg(name: string): string {
   return i > -1 ? (process.argv[i + 1] ?? '').trim() : '';
 }
 
+function flag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 function die(message: string): never {
   console.error(`\n  ${message}\n`);
   process.exit(1);
 }
+
+const base = () => process.env.IH_BASE_DOMAIN || '<your base domain>';
+
+/** The named agency, or an explanation. */
+function existing(slug: string): string {
+  const bad = slugProblem(slug);
+  if (bad) die(bad);
+  if (!tenantExists(slug)) die(`There is no agency "${slug}" in ${tenantsRoot()}. See: npm run tenant -- list`);
+  return slug;
+}
+
+/**
+ * PM2 is asked directly when it is here — the tenant processes belong to the
+ * same user this runs as — and the command is printed when it is not, so the
+ * data change never waits on the process change.
+ */
+function pm2(args: string[]): boolean {
+  try {
+    execFileSync('pm2', args, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* ---------------------------------------------------------------- create */
 
 function create(): void {
   const slug = arg('slug').toLowerCase();
@@ -65,12 +106,11 @@ function create(): void {
   const port = nextFreePort();
   fs.writeFileSync(tenantPortFile(slug), `${port}\n`);
 
-  const base = process.env.IH_BASE_DOMAIN || '<your base domain>';
   console.log(`
   Agency created.
 
     Name       ${name}
-    Address    https://${slug}.${base}
+    Address    https://${slug}.${base()}
     Database   ${paths.dbPath}
     Documents  ${paths.filesDir}
     Port       ${port}
@@ -81,7 +121,7 @@ function create(): void {
     pm2 start ecosystem.config.cjs && pm2 save
     npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
 
-  Then point ${slug}.${base} at this server (a wildcard A record covers every
+  Then point ${slug}.${base()} at this server (a wildcard A record covers every
   agency at once) and run certbot for it.
 
   Its register is empty and its rate card is at each insurer's default —
@@ -89,8 +129,15 @@ function create(): void {
 `);
 }
 
+/* ------------------------------------------------------------------ list */
+
 function list(): void {
   const slugs = listTenants();
+  if (landlordExists()) {
+    console.log(`\n  Landlord console  https://${base()}  port ${landlordPort() ?? '—'}`);
+  } else {
+    console.log('\n  No landlord console yet: npm run tenant -- landlord --email <you> --password <...>');
+  }
   if (!slugs.length) {
     console.log(`\n  No agencies yet in ${tenantsRoot()}. Create one with: npm run tenant -- create --slug ...\n`);
     return;
@@ -108,40 +155,145 @@ function list(): void {
     const port = tenantPort(slug);
     console.log(
       `    ${slug.padEnd(20)} port ${String(port ?? '—').padEnd(6)} ${(bytes / 1024 / 1024).toFixed(1)} MB   ` +
-        `${documents} document${documents === 1 ? '' : 's'}`,
+        `${documents} document${documents === 1 ? '' : 's'}${isSuspended(slug) ? '   SUSPENDED' : ''}`,
     );
   }
   console.log('');
 }
 
-/** The whole nginx server set, one block per agency, ready to install. */
-function nginx(): void {
-  const base = process.env.IH_BASE_DOMAIN || 'example.com';
-  const slugs = listTenants();
-  if (!slugs.length) die('No agencies yet, so there is nothing to serve.');
+/* ------------------------------------------------------ suspend / resume */
 
-  const blocks = slugs.map((slug) => {
-    const port = tenantPort(slug);
-    if (!port) die(`The agency "${slug}" has no port recorded. Write one into ${tenantPortFile(slug)}.`);
-    return `
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${slug}.${base};
-    return 301 https://$host$request_uri;
+function suspend(): void {
+  const slug = existing((process.argv[3] ?? '').toLowerCase());
+  if (isSuspended(slug)) die(`"${slug}" is already suspended.`);
+  fs.writeFileSync(suspendedFile(slug), `${new Date().toISOString()}\n`);
+  const stopped = pm2(['stop', `insurhelp-${slug}`]);
+  console.log(`
+  ${slug} is suspended. Its address now says so, its data is untouched, and
+  the daily run leaves it out.
+
+    ${stopped ? `Its process is stopped (pm2 stop insurhelp-${slug}).` : `To free its memory:  pm2 stop insurhelp-${slug}`}
+    To serve the suspended page from nginx rather than the app (as root):
+      npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
+
+  Resume with:  npm run tenant -- resume ${slug}
+`);
 }
 
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name ${slug}.${base};
+function resume(): void {
+  const slug = existing((process.argv[3] ?? '').toLowerCase());
+  if (!isSuspended(slug)) die(`"${slug}" is not suspended.`);
+  fs.rmSync(suspendedFile(slug), { force: true });
+  const started = pm2(['start', 'ecosystem.config.cjs', '--only', `insurhelp-${slug}`]);
+  console.log(`
+  ${slug} is back.
 
-    # certbot fills these in:
-    # ssl_certificate     /etc/letsencrypt/live/${base}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/${base}/privkey.pem;
+    ${started ? `Its process is running again.` : `Start its process:  pm2 start ecosystem.config.cjs --only insurhelp-${slug}`}
+    If nginx was serving the suspended page (as root):
+      npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
+`);
+}
 
-    client_max_body_size 20m;
+/* ---------------------------------------------------------------- remove */
 
+/**
+ * Gone, but not without a copy. The database is copied with SQLite's own
+ * backup (consistent even if something still holds it open) and the documents
+ * directory with it, into .removed/ beside the agencies — a directory the
+ * listing ignores — and only then is the agency's directory deleted. A
+ * customer removed by mistake is a directory moved back.
+ */
+async function remove(): Promise<void> {
+  const slug = existing((process.argv[3] ?? '').toLowerCase());
+  if (!flag('yes')) {
+    die(`This deletes the agency "${slug}" — its register, its documents, its accounts — after taking a final copy.\n  Run it again with --yes to confirm.`);
+  }
+  const paths = tenantPaths(slug);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const keep = path.join(tenantsRoot(), '.removed', `${slug}-${stamp}`);
+  fs.mkdirSync(keep, { recursive: true });
+
+  const db = new Database(paths.dbPath, { readonly: true });
+  await db.backup(path.join(keep, 'insurhelp.db'));
+  db.close();
+  if (fs.existsSync(paths.filesDir)) fs.cpSync(paths.filesDir, path.join(keep, 'documents'), { recursive: true });
+
+  const deleted = pm2(['delete', `insurhelp-${slug}`]);
+  fs.rmSync(path.dirname(paths.dbPath), { recursive: true, force: true });
+
+  console.log(`
+  ${slug} is removed.
+
+    Final copy   ${keep}
+    ${deleted ? `Its process is gone (pm2 delete insurhelp-${slug}).` : `Remove its process:  pm2 delete insurhelp-${slug} && pm2 save`}
+    Take its address out of nginx (as root):
+      npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
+
+  To bring it back: move ${keep} to ${path.dirname(paths.dbPath)},
+  write a port into ${tenantPortFile(slug)}, and pm2 start ecosystem.config.cjs.
+`);
+}
+
+/* -------------------------------------------------------------- landlord */
+
+/**
+ * The landlord's console: a database of its own under the tenants directory,
+ * signed into with the same screen as everything else, served at the base
+ * domain. Running it again with a password resets the landlord's password —
+ * there is no other way to, and a landlord locked out is a service nobody can
+ * manage.
+ */
+function landlord(): void {
+  const email = arg('email').toLowerCase();
+  const password = arg('password');
+  const name = arg('name') || 'Landlord';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) die('Give the landlord a login: --email you@yourdomain.my');
+  const bad = passwordProblem(password);
+  if (bad) die(bad);
+
+  const paths = landlordPaths();
+  const fresh = !fs.existsSync(paths.dbPath);
+  fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
+  fs.mkdirSync(paths.filesDir, { recursive: true });
+
+  const db = openTenantDb(paths.dbPath, (created) => {
+    seedTenant(created, { slug: LANDLORD, name: 'Insurhelp — landlord', admin: { name, email, password } });
+  });
+  if (!fresh) {
+    const hash = hashPasswordSync(password);
+    const changed = db.prepare('UPDATE app_user SET password_hash = ?, status = ? WHERE lower(email) = ?').run(hash, 'active', email).changes;
+    if (!changed) {
+      const org = db.prepare('SELECT id FROM organisation ORDER BY rowid LIMIT 1').get() as { id: string };
+      db.prepare(
+        `INSERT INTO app_user (id, org_id, email, password_hash, name, role, agent_code, phone, status)
+         VALUES (?, ?, ?, ?, ?, 'admin', NULL, NULL, 'active')`,
+      ).run(`usr-landlord-${Date.now()}`, org.id, email, hash, name);
+    }
+  }
+  db.close();
+
+  if (!fs.existsSync(landlordPortFile())) fs.writeFileSync(landlordPortFile(), `${nextFreePort()}\n`);
+
+  console.log(`
+  Landlord console ${fresh ? 'created' : 'updated'}.
+
+    Address    https://${base()}/landlord
+    Sign in as ${email}
+    Database   ${paths.dbPath}
+    Port       ${landlordPort()}
+
+  To put it on the air:
+
+    pm2 start ecosystem.config.cjs && pm2 save
+    npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx
+
+  The base domain (${base()}, and www.) points at it; every agency is a subdomain.
+`);
+}
+
+/* ----------------------------------------------------------------- nginx */
+
+const ACME = `
     # Certbot's HTTP-01 challenge, before the proxy below claims it. Without
     # this, certbot --webroot hands the challenge to the application, which
     # knows nothing about it, and the certificate is refused. The nginx plugin
@@ -152,7 +304,28 @@ server {
         default_type "text/plain";
         access_log off;
     }
+`;
 
+function proxyBlock(names: string, port: number): string {
+  return `
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${names};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${names};
+
+    # certbot fills these in:
+    # ssl_certificate     /etc/letsencrypt/live/${base()}/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/${base()}/privkey.pem;
+
+    client_max_body_size 20m;
+${ACME}
     location / {
         proxy_pass         http://127.0.0.1:${port};
         proxy_http_version 1.1;
@@ -163,12 +336,68 @@ server {
         proxy_read_timeout 300s;
     }
 }`;
-  });
+}
+
+/** A suspended agency's address: the same certificate, and a page that says so. */
+function suspendedBlock(names: string): string {
+  const page =
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Insurhelp</title>' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
+    '<body style="font-family: system-ui, sans-serif; max-width: 34rem; margin: 6rem auto; padding: 0 1.5rem; color: #111827">' +
+    '<h1 style="font-size: 1.25rem">This agency&#39;s access is suspended</h1>' +
+    '<p>Please contact whoever provides your Insurhelp service.</p></body></html>';
+  return `
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${names};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${names};
+
+    # certbot fills these in:
+    # ssl_certificate     /etc/letsencrypt/live/${base()}/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/${base()}/privkey.pem;
+${ACME}
+    # Suspended: nothing reaches the application.
+    location / {
+        default_type text/html;
+        return 503 '${page}';
+    }
+}`;
+}
+
+/** The whole nginx server set, one block per agency, ready to install. */
+function nginx(): void {
+  const slugs = listTenants();
+  if (!slugs.length && !landlordExists()) die('No agencies yet, so there is nothing to serve.');
+
+  const blocks: string[] = [];
+  if (landlordExists()) {
+    const port = landlordPort();
+    if (!port) die(`The landlord has no port recorded. Write one into ${landlordPortFile()}.`);
+    blocks.push(proxyBlock(`${base()} www.${base()}`, port));
+  }
+  for (const slug of slugs) {
+    const names = `${slug}.${base()}`;
+    if (isSuspended(slug)) {
+      blocks.push(suspendedBlock(names));
+      continue;
+    }
+    const port = tenantPort(slug);
+    if (!port) die(`The agency "${slug}" has no port recorded. Write one into ${tenantPortFile(slug)}.`);
+    blocks.push(proxyBlock(names, port));
+  }
 
   console.log(`# Insurhelp — generated by: npm run tenant -- nginx
-# One server block per agency, each proxying to that agency's own process.
-# Anything not named here gets nothing: an unknown subdomain must not land on
-# some other agency's book.
+# One server block per agency, each proxying to that agency's own process;
+# the base domain to the landlord console; a suspended agency to a page that
+# says so. Anything not named here gets nothing: an unknown subdomain must
+# not land on some other agency's book.
 
 server {
     listen 80 default_server;
@@ -178,6 +407,8 @@ server {
 }
 ${blocks.join('\n')}`);
 }
+
+/* ------------------------------------------------------------------ cron */
 
 /**
  * The daily run, for every agency.
@@ -198,9 +429,12 @@ async function cron(): Promise<void> {
   if (!slugs.length) die('No agencies yet, so there is nothing to run.');
 
   let failed = 0;
+  let ran = 0;
   for (const slug of slugs) {
+    if (isSuspended(slug)) { console.log(`  ${slug.padEnd(20)} suspended — left out`); continue; }
     const port = tenantPort(slug);
     if (!port) { console.log(`  ${slug.padEnd(20)} no port recorded — skipped`); failed++; continue; }
+    ran++;
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/cron/renewal-notices`, {
         method: 'POST',
@@ -224,9 +458,11 @@ async function cron(): Promise<void> {
       failed++;
     }
   }
-  console.log(`\n  ${new Date().toISOString()}  ${slugs.length} agenc${slugs.length === 1 ? 'y' : 'ies'}, ${failed} with a problem`);
+  console.log(`\n  ${new Date().toISOString()}  ${ran} agenc${ran === 1 ? 'y' : 'ies'} run, ${failed} with a problem`);
   if (failed) process.exit(1);
 }
+
+/* ------------------------------------------------------------------ main */
 
 async function main(): Promise<void> {
   if (!multiTenant()) {
@@ -235,9 +471,18 @@ async function main(): Promise<void> {
   const command = process.argv[2];
   if (command === 'create') return create();
   if (command === 'list') return list();
+  if (command === 'suspend') return suspend();
+  if (command === 'resume') return resume();
+  if (command === 'remove') return remove();
+  if (command === 'landlord') return landlord();
   if (command === 'nginx') return nginx();
   if (command === 'cron') return cron();
-  die('Usage: npm run tenant -- list | nginx | cron | create --slug <name> --name "<agency>" --admin "<person>" --email <address> --password <password>');
+  die(
+    'Usage: npm run tenant -- list | nginx | cron\n' +
+    '       npm run tenant -- create --slug <name> --name "<agency>" --admin "<person>" --email <address> --password <password>\n' +
+    '       npm run tenant -- suspend <slug> | resume <slug> | remove <slug> --yes\n' +
+    '       npm run tenant -- landlord --email <address> --password <password> [--name "<person>"]',
+  );
 }
 
 main().catch((error) => die(error instanceof Error ? error.message : String(error)));

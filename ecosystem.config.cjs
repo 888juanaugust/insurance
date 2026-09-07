@@ -54,24 +54,39 @@ function tenantsDir() {
   }
 }
 
+function portIn(dir, who) {
+  const portFile = path.join(dir, 'port');
+  const port = Number(fs.readFileSync(portFile, 'utf8').trim());
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`Insurhelp: ${who} has no usable port in ${portFile}.`);
+  }
+  return port;
+}
+
 function agencies(dir) {
   return fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && SLUG.test(e.name))
+    .filter((e) => e.isDirectory() && SLUG.test(e.name) && e.name !== 'landlord')
     .map((e) => e.name)
     .filter((slug) => fs.existsSync(path.join(dir, slug, 'insurhelp.db')))
+    // A suspended agency has no process: its address is answered by nginx
+    // with a page that says so, and its memory is free for the others.
+    .filter((slug) => !fs.existsSync(path.join(dir, slug, 'suspended')))
     .sort()
-    .map((slug) => {
-      const portFile = path.join(dir, slug, 'port');
-      const port = Number(fs.readFileSync(portFile, 'utf8').trim());
-      if (!Number.isInteger(port) || port <= 0) {
-        throw new Error(`Insurhelp: the agency "${slug}" has no usable port in ${portFile}.`);
-      }
-      return base(`insurhelp-${slug}`, port, { IH_TENANT: slug, IH_TENANTS_DIR: dir });
-    });
+    .map((slug) => base(`insurhelp-${slug}`, portIn(path.join(dir, slug), `the agency "${slug}"`), { IH_TENANT: slug, IH_TENANTS_DIR: dir }));
+}
+
+/*
+ * The landlord's console, when one has been created: the same application,
+ * pinned to the landlord's own database and served at the base domain.
+ */
+function landlord(dir) {
+  const home = path.join(dir, 'landlord');
+  if (!fs.existsSync(path.join(home, 'landlord.db'))) return [];
+  return [base('insurhelp-landlord', portIn(home, 'the landlord console'), { IH_LANDLORD: '1', IH_TENANTS_DIR: dir })];
 }
 
 const dir = tenantsDir();
-const apps = dir && fs.existsSync(dir) ? agencies(dir) : [base('insurhelp', 3000, {})];
+const apps = dir && fs.existsSync(dir) ? [...landlord(dir), ...agencies(dir)] : [base('insurhelp', 3000, {})];
 
 module.exports = { apps };

@@ -1,4 +1,4 @@
-import { requestAgency, NO_AGENCY } from '@/lib/tenant';
+import { requestAgency, NO_AGENCY, SUSPENDED_MESSAGE } from '@/lib/tenant';
 import { getOrgName } from '@/lib/queries';
 import LoginForm from './LoginForm';
 
@@ -26,5 +26,6 @@ export default async function LoginPage() {
     : resolved.reason === 'single-tenant'
       ? ''
       : null;
-  return <LoginForm agency={agency} noAgencyMessage={NO_AGENCY} />;
+  const message = !resolved.ok && resolved.reason === 'suspended' ? SUSPENDED_MESSAGE : NO_AGENCY;
+  return <LoginForm agency={agency} noAgencyMessage={message} />;
 }

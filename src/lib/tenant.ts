@@ -63,6 +63,7 @@ const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const RESERVED = new Set([
   'www', 'api', 'admin', 'app', 'mail', 'smtp', 'imap', 'ftp', 'ns1', 'ns2',
   'static', 'assets', 'cdn', 'status', 'help', 'support', 'portal', 'billing',
+  'landlord',
 ]);
 
 export function isTenantSlug(value: string): boolean {
@@ -117,7 +118,9 @@ export function tenantPort(slug: string): number | null {
  * from position, so adding or removing an agency never moves another one's.
  */
 export function nextFreePort(base = 3001): number {
-  const used = new Set(listTenants().map(tenantPort).filter((p): p is number => p !== null));
+  const used = new Set(
+    [...listTenants().map(tenantPort), landlordPort()].filter((p): p is number => p !== null),
+  );
   let port = base;
   while (used.has(port)) port++;
   return port;
@@ -130,6 +133,65 @@ export function tenantPaths(slug: string): Tenant {
   const dir = path.join(root, slug);
   return { slug, dbPath: path.join(dir, 'insurhelp.db'), filesDir: path.join(dir, 'documents') };
 }
+
+/* ------------------------------------------------------------ the landlord */
+
+/**
+ * The landlord: whoever runs the server and rents it out. Their console is
+ * the same application, started with IH_LANDLORD=1 and pinned to a database
+ * of its own under the tenants directory — so signing in, sessions and the
+ * audit trail all work unchanged — and served at the BASE domain, where no
+ * agency lives. `landlord` is a reserved name, so no agency can take it.
+ */
+export const LANDLORD = 'landlord';
+
+export function isLandlordProcess(): boolean {
+  return multiTenant() && process.env.IH_LANDLORD === '1';
+}
+
+export function landlordPaths(): Tenant {
+  const root = tenantsRoot();
+  if (!root) throw new Error('IH_TENANTS_DIR is not set, so there is no landlord.');
+  const dir = path.join(root, LANDLORD);
+  return { slug: LANDLORD, dbPath: path.join(dir, 'landlord.db'), filesDir: path.join(dir, 'documents') };
+}
+
+export function landlordExists(): boolean {
+  return multiTenant() && fs.existsSync(landlordPaths().dbPath);
+}
+
+export function landlordPortFile(): string {
+  return path.join(tenantsRoot(), LANDLORD, 'port');
+}
+
+export function landlordPort(): number | null {
+  try {
+    const n = Number(fs.readFileSync(landlordPortFile(), 'utf8').trim());
+    return Number.isInteger(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------- suspension */
+
+/**
+ * A suspended agency is a marker file in its directory. The application
+ * refuses every request for it on sight, PM2 does not start its process, and
+ * the generated nginx serves a page saying so. Removing the file is all that
+ * resuming takes; nothing about the agency's data is touched either way.
+ */
+export function suspendedFile(slug: string): string {
+  return path.join(tenantsRoot(), slug, 'suspended');
+}
+
+export function isSuspended(slug: string): boolean {
+  return Boolean(tenantsRoot()) && isTenantSlug(slug) && fs.existsSync(suspendedFile(slug));
+}
+
+/** What a person is told at a suspended agency's address. */
+export const SUSPENDED_MESSAGE =
+  'This agency\'s access to Insurhelp is suspended. Please contact whoever provides your Insurhelp service.';
 
 /** An agency exists when its database file does. Nothing is created by looking. */
 export function tenantExists(slug: string): boolean {
@@ -159,6 +221,7 @@ const store = new AsyncLocalStorage<Tenant>();
 /** The agency this process was started for, from the environment. */
 export function pinnedTenant(): Tenant | null {
   if (!multiTenant()) return null;
+  if (isLandlordProcess()) return landlordPaths();
   const slug = (process.env.IH_TENANT ?? '').trim().toLowerCase();
   return slug && isTenantSlug(slug) ? tenantPaths(slug) : null;
 }
@@ -183,7 +246,7 @@ export const NO_AGENCY =
 
 export type TenantResolution =
   | { ok: true; tenant: Tenant }
-  | { ok: false; reason: 'single-tenant' | 'no-agency' | 'wrong-agency'; slug?: string };
+  | { ok: false; reason: 'single-tenant' | 'no-agency' | 'wrong-agency' | 'suspended'; slug?: string };
 
 /**
  * Check that this request belongs where it arrived.
@@ -199,15 +262,21 @@ export function checkRequestAgency(host: string | null): TenantResolution {
 
   const tenant = currentTenant();
   if (!tenant) return { ok: false, reason: 'no-agency' };
-  if (!tenantExists(tenant.slug)) return { ok: false, reason: 'no-agency', slug: tenant.slug };
 
   const base = process.env.IH_BASE_DOMAIN ?? '';
-  if (base) {
-    const asked = slugFromHost(host, base);
-    if (asked && asked !== tenant.slug) {
-      return { ok: false, reason: 'wrong-agency', slug: asked };
-    }
+  const asked = base ? slugFromHost(host, base) : null;
+
+  // The landlord lives at the base domain and nowhere else: a request that
+  // names an agency has reached the wrong process.
+  if (tenant.slug === LANDLORD) {
+    if (!fs.existsSync(tenant.dbPath)) return { ok: false, reason: 'no-agency', slug: LANDLORD };
+    if (asked) return { ok: false, reason: 'wrong-agency', slug: asked };
+    return { ok: true, tenant };
   }
+
+  if (!tenantExists(tenant.slug)) return { ok: false, reason: 'no-agency', slug: tenant.slug };
+  if (isSuspended(tenant.slug)) return { ok: false, reason: 'suspended', slug: tenant.slug };
+  if (asked && asked !== tenant.slug) return { ok: false, reason: 'wrong-agency', slug: asked };
   return { ok: true, tenant };
 }
 

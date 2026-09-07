@@ -248,9 +248,13 @@ two agencies.
 ```bash
 npm run tenant -- create --slug bs --name "BS Agency Sdn Bhd" \
                   --admin "Boon Seng" --email owner@bs.my --password '...'
-npm run tenant -- list      # agencies, their ports, their sizes
-npm run tenant -- nginx     # the whole nginx server set, one block per agency
-npm run tenant -- cron      # the daily reminder run, every agency in turn — what the crontab calls
+npm run tenant -- list      # agencies, their ports, their sizes, which are suspended
+npm run tenant -- suspend bs                # refuse the agency for now, keep everything
+npm run tenant -- resume bs
+npm run tenant -- remove bs --yes           # final copy under .removed/, then gone
+npm run tenant -- landlord --email you@yourdomain.my --password '...'   # the console at the base domain
+npm run tenant -- nginx     # the whole nginx server set: one block per agency, the base domain to the landlord
+npm run tenant -- cron      # the daily reminder run, every live agency in turn — what the crontab calls
 ```
 
 Creating an agency is a shell command, never a web request: an unknown
@@ -264,6 +268,26 @@ the others moves.
 Without `IH_TENANTS_DIR` the application is exactly what it was: one database
 at `IH_DB`. That is what development, the tests and a single-agency install
 use.
+
+### The landlord
+
+Whoever rents the service out is not an agency and does not get an agency's
+screens. A landlord process (`IH_LANDLORD=1`, with a small database of its own
+under the tenants directory) answers at the base domain and serves one screen,
+`/landlord`: every agency on the server with its size, its pulse — when anyone
+there last signed in — and whether it is live, with Suspend and Resume. It
+opens each agency's database read-only for the counts and never renders a row
+of anyone's book; what is in the books is theirs. Adding and removing agencies
+stay shell commands, so that an address which does not exist is never an
+invitation.
+
+Suspension is a marker file beside the agency's database. The agency's process
+refuses sign-in and throws out open sessions the moment it appears, the daily
+run leaves the agency out, PM2 does not start it, and the generated nginx
+answers its address with a page that says so. Suspend and resume are recorded
+on the landlord's own audit trail, not the agency's. Removal copies the
+database (SQLite's own backup, consistent while open) and the documents into
+`.removed/` first, so an agency removed by mistake is a directory moved back.
 
 ### Tenant isolation
 
@@ -557,10 +581,18 @@ what a small Malaysian agency does anyway, and it is the honest default — the
 alternative is a screen full of green ticks for messages nobody received.
 
 Configuring a provider turns the same queue automatic without changing anything
-above it. Set `IH_WHATSAPP_URL` (or `IH_EMAIL_URL`, `IH_SMS_URL`) and Insurhelp
-POSTs `{to, subject, text}` with `IH_*_TOKEN` as a bearer. A provider failure is
-recorded on the message with its reason; waiting for a provider that does not
-exist is not counted as a failed attempt.
+above it. Email goes out over SMTP (`IH_SMTP_HOST`, `_PORT`, `_USER`, `_PASS`,
+`_FROM` — any mailbox), WhatsApp through Meta's Cloud API
+(`IH_WHATSAPP_PHONE_ID`, `_TOKEN`, and an approved `_TEMPLATE` whose body is the
+one parameter `{{1}}`, because a message the business starts is delivered only
+as a template), and any channel can instead be a generic hook — `IH_WHATSAPP_URL`,
+`IH_EMAIL_URL`, `IH_SMS_URL` — to which Insurhelp POSTs `{to, subject, text}`
+with `IH_*_TOKEN` as a bearer. A real provider takes precedence over the hook
+for its channel. The adapters live in `delivery.ts`, server-only, apart from the
+templates the outbox renders in the browser. A provider failure is recorded on
+the message with its reason; waiting for a provider that does not exist is not
+counted as a failed attempt. The notices screen says which channels are wired
+and through what.
 
 Templates are per reminder, with merge fields — `{client_name}`, `{vehicle_no}`,
 `{days_left}`, `{ncd_pct}` and the rest. **An unknown placeholder is rejected when
@@ -921,7 +953,10 @@ The tests cover what is pure and what has bitten: statement reading and
 matching (`statements.ts`), the premium arithmetic every policy goes through
 (`premium.ts` — a typed 0 commission is nil, a blank is worked out), the
 password rule, the address parse, the two throttles' bounds, the CSV formula
-guard, hashing and rehashing, and the extractor's date and amount validators.
+guard, hashing and rehashing, the extractor's date and amount validators, the
+delivery adapters — against a local SMTP server and a stand-in for Meta's
+endpoint, so nothing is sent — and the agency, suspension and landlord rules
+against a temporary tenants directory.
 `.github/workflows/ci.yml` runs typecheck, tests and the build on every push.
 
 The reader's harness needs the real schedules, which carry real names and are
