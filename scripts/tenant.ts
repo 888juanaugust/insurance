@@ -28,6 +28,7 @@ loadEnvFile(path.join(process.cwd(), '.env.production'));
 
 import Database from 'better-sqlite3';
 import { openTenantDb } from '../src/lib/db';
+import { forgetAgencyContributions, sharedLibraryCounts } from '../src/lib/shared-labels';
 import { seedTenant } from '../src/lib/seed-tenant';
 import { hashPasswordSync } from '../src/lib/auth';
 import { passwordProblem } from '../src/lib/passwords';
@@ -138,6 +139,12 @@ function list(): void {
   } else {
     console.log('\n  No landlord console yet: npm run tenant -- landlord --email <you> --password <...>');
   }
+  const library = sharedLibraryCounts();
+  console.log(
+    library.labels
+      ? `  Reader library    ${library.labels} label${library.labels === 1 ? '' : 's'} for ${library.insurers} insurer${library.insurers === 1 ? '' : 's'}, ${library.trusted} trusted — https://${base()}/landlord/labels`
+      : '  Reader library    empty — it fills as agencies save policies from schedules',
+  );
   if (!slugs.length) {
     console.log(`\n  No agencies yet in ${tenantsRoot()}. Create one with: npm run tenant -- create --slug ...\n`);
     return;
@@ -220,11 +227,13 @@ async function remove(): Promise<void> {
 
   const deleted = pm2(['delete', `insurhelp-${slug}`]);
   fs.rmSync(path.dirname(paths.dbPath), { recursive: true, force: true });
+  // What it taught the shared reader library goes with it; a label only it taught is gone.
+  const forgotten = forgetAgencyContributions(slug);
 
   console.log(`
   ${slug} is removed.
 
-    Final copy   ${keep}
+    Final copy   ${keep}${forgotten ? `\n    Its ${forgotten} label${forgotten === 1 ? '' : 's'} in the reader library ${forgotten === 1 ? 'is' : 'are'} forgotten.` : ''}
     ${deleted ? `Its process is gone (pm2 delete insurhelp-${slug}).` : `Remove its process:  pm2 delete insurhelp-${slug} && pm2 save`}
     Take its address out of nginx (as root):
       npm run tenant -- nginx > /etc/nginx/sites-available/insurhelp && nginx -t && systemctl reload nginx

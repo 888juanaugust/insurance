@@ -26,6 +26,10 @@ export default async function LandlordLayout({ children }: { children: React.Rea
           <span className="text-[16px] font-bold text-ink">Insurhelp</span>
           <span className="text-[13px] font-semibold text-muted">· landlord console</span>
         </Link>
+        <nav className="ml-6 hidden items-center gap-4 text-[13px] font-medium text-ink-soft sm:flex">
+          <Link href="/landlord" className="hover:text-ink">Agencies</Link>
+          <Link href="/landlord/labels" className="hover:text-ink">Reader library</Link>
+        </nav>
         <div className="ml-auto flex items-center gap-3 text-[13px] text-ink-soft">
           <span className="hidden sm:inline">{user.name}</span>
           <form action={logoutAction}>

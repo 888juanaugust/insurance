@@ -124,6 +124,20 @@ the model still checks the next document of that insurer, and only when the two 
 the label become trusted and the model stop being called. The review screen says when
 learned labels were used and when the model was not needed.
 
+**On a server with several agencies, the learning is pooled.** Every label an agency teaches
+also goes into a library beside the agencies (`shared-labels.db`, `lib/shared-labels.ts`),
+under that agency's name, and every agency's reader is handed its own labels with the
+library's behind them. A new agency reads the insurers the others already taught from its
+first upload. A label is only *labels* — the words printed beside a value — so nothing of any
+agency's book crosses over. Trust across agencies is by agency, not by document: two of an
+agency's own documents confirm a label to that agency, but to everyone else it stays a
+suggestion — used, with the model still checking — until a **second agency** has taught the
+same pairing from its own documents, so one agency's wrong correction is never read as a
+fact by another. The review screen says when the labels came from other agencies' documents.
+The landlord's console lists the library and can remove a label, which takes it out of the
+pool for good — teaching it again does not bring it back, restoring it does — and touches no
+agency's own table. An agency that is removed from the server is forgotten by the library.
+
 ### What it has been measured against
 
 The four real policy documents in the seed — Liberty `WQK100` and `NCF9240`, Lonpac
@@ -288,6 +302,11 @@ answers its address with a page that says so. Suspend and resume are recorded
 on the landlord's own audit trail, not the agency's. Removal copies the
 database (SQLite's own backup, consistent while open) and the documents into
 `.removed/` first, so an agency removed by mistake is a directory moved back.
+
+The console's second screen, `/landlord/labels`, is the shared reader library
+(see "The reader learns"): every label the agencies have taught, by insurer,
+with who taught it and whether it is trusted, and a Remove that is audited and
+reversible.
 
 ### Tenant isolation
 

@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { authorise } from './guard';
 import { audit } from './audit';
 import { isLandlordProcess, isSuspended, isTenantSlug, suspendedFile, tenantExists } from './tenant';
+import { removeSharedLabel, restoreSharedLabel, type LibraryEntry } from './shared-labels';
+import { fieldName } from './extract/field-names';
 
 /**
  * What the landlord can do to an agency from the console: suspend it, and
@@ -57,4 +59,50 @@ export async function resumeAgencyAction(fd: FormData): Promise<LandlordState> {
     ok: true,
     message: `${slug} is back. If its process was stopped, run on the server: pm2 start ecosystem.config.cjs --only insurhelp-${slug}`,
   };
+}
+
+/* ------------------------------------------------------- the reader library */
+
+/**
+ * The shared label library is the landlord's to curate: a label that reads
+ * the wrong thing at every agency is removed here, and stays removed however
+ * often an agency teaches it again. Nothing in any agency's own table moves —
+ * what an agency taught itself is its own.
+ */
+async function librarian(action: string, id: string) {
+  if (!isLandlordProcess()) return { error: 'This is not the landlord console.' } as const;
+  if (!id) return { error: 'Which label?' } as const;
+  const guard = await authorise({ action, entity: 'label', entityId: id });
+  if (!guard.ok) return { error: guard.message } as const;
+  return { user: guard.user } as const;
+}
+
+const describe = (l: LibraryEntry) => `"${l.label}" as ${fieldName(l.key)} on ${l.insurer} schedules`;
+
+export async function removeSharedLabelAction(fd: FormData): Promise<LandlordState> {
+  const id = String(fd.get('id') ?? '').trim();
+  const gate = await librarian('label.remove', id);
+  if ('error' in gate) return { error: gate.error };
+  const was = removeSharedLabel(id, gate.user.name);
+  if (!was) return { error: 'That label is not in the library.' };
+  await audit(gate.user, {
+    action: 'label.remove', entity: 'label', entityId: id, entityLabel: `${was.insurer} · ${was.key} · ${was.label}`,
+    summary: `Removed ${describe(was)} from the shared reader library; it had been taught by ${was.agencies.join(', ')}.`,
+  });
+  revalidatePath('/landlord/labels');
+  return { ok: true, message: `${describe(was)} is no longer read anywhere on this server. Agencies' own learning is untouched.` };
+}
+
+export async function restoreSharedLabelAction(fd: FormData): Promise<LandlordState> {
+  const id = String(fd.get('id') ?? '').trim();
+  const gate = await librarian('label.restore', id);
+  if ('error' in gate) return { error: gate.error };
+  const was = restoreSharedLabel(id);
+  if (!was) return { error: 'That label is not in the library.' };
+  await audit(gate.user, {
+    action: 'label.restore', entity: 'label', entityId: id, entityLabel: `${was.insurer} · ${was.key} · ${was.label}`,
+    summary: `Restored ${describe(was)} to the shared reader library.`,
+  });
+  revalidatePath('/landlord/labels');
+  return { ok: true, message: `${describe(was)} is read again.` };
 }

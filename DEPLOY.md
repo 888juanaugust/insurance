@@ -355,6 +355,14 @@ every agency route there leads to the console — and an agency's process has
 no `/landlord`. The base domain and `www.` are the landlord's; nothing else
 answers there.
 
+The console's second screen, **Reader library**, is what the document reader
+has learned from every agency, pooled: the labels each insurer prints beside
+each value, who taught them, and whether two agencies agree. It fills itself
+as agencies save policies from schedules, lives in `shared-labels.db` beside
+the agencies (back it up with them — `deploy/backup.sh` does), and a label
+you remove there stays removed until you restore it. Nothing in it is from
+anyone's book; it is labels only.
+
 **Suspending, resuming, removing.** Suspending is a marker file
 (`<tenants>/<agency>/suspended`), written by the console's Suspend button or
 the shell. From that moment everyone at the agency is refused at sign-in, an

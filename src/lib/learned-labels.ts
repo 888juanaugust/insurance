@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { getDb } from './db';
-import { TRUST_AFTER, type LearnedLabel, type NewLabel } from './extract/learned';
+import { currentTenant, LANDLORD } from './tenant';
+import { contributeSharedLabels, listSharedLabels } from './shared-labels';
+import { mergeLabels, TRUST_AFTER, type LearnedLabel, type NewLabel } from './extract/learned';
 
 /**
  * Where learned labels live: one row per agency, insurer, field and label.
@@ -9,6 +11,12 @@ import { TRUST_AFTER, type LearnedLabel, type NewLabel } from './extract/learned
  * taught. Learning the same pairing again does not add a row — it counts
  * the document, and that count is what promotes a label from provisional
  * to trusted (see extract/learned.ts).
+ *
+ * On a server with several agencies there is a library behind this table
+ * (shared-labels.ts): every agency's teaching goes into it as well, and the
+ * reader is handed the agency's own labels with the library's behind them.
+ * The agency's own table stays the record of what IT taught, and is what
+ * the reader has on a single-agency install, where there is no library.
  */
 const UNKNOWN = 'UNKNOWN';
 
@@ -23,9 +31,16 @@ export function listLearnedLabels(orgId: string, insurer: string | null): Learne
         WHERE org_id = ? AND insurer = ? ORDER BY seen DESC, last_seen DESC`,
     )
     .all(orgId, insurer ?? UNKNOWN) as Row[];
-  return rows.map((r) => ({
+  const own = rows.map((r) => ({
     insurer: r.insurer, key: r.field_key as LearnedLabel['key'], label: r.label, placement: r.placement, seen: r.seen,
   }));
+  return mergeLabels(own, listSharedLabels(insurer));
+}
+
+/** The agency whose name goes on a contribution to the library — none on a single-agency install, and never the landlord. */
+function contributingAgency(): string | null {
+  const slug = currentTenant()?.slug ?? null;
+  return slug && slug !== LANDLORD ? slug : null;
 }
 
 /** Learn (or confirm) what one saved document taught. */
@@ -57,6 +72,20 @@ export function recordLearnedLabels(
     }
   });
   run();
+
+  // The library is a bonus, never a condition: what the agency learned is
+  // saved above whatever happens here.
+  const agency = contributingAgency();
+  if (agency) {
+    try {
+      contributeSharedLabels(agency, insurer, labels);
+    } catch (error) {
+      console.error(JSON.stringify({
+        at: now, level: 'warn', job: 'shared-labels', agency,
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
   return { added, confirmed };
 }
 

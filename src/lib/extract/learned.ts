@@ -35,6 +35,8 @@ export type LearnedLabel = {
   placement: Placement;
   /** Documents this pairing has been learned from. */
   seen: number;
+  /** Taught by another agency on the server, not by this one's own documents. */
+  shared?: boolean;
 };
 
 export type NewLabel = Pick<LearnedLabel, 'key' | 'label' | 'placement'>;
@@ -45,6 +47,44 @@ export const TRUST_AFTER = 2;
 /** Below the gate's bar until confirmed, so the model still checks it once. */
 export function learnedConfidence(l: Pick<LearnedLabel, 'seen'>): number {
   return l.seen >= TRUST_AFTER ? 0.88 : 0.75;
+}
+
+/* --------------------------------------------------- the shared library */
+
+/** A label from the server-wide library: what every agency's saving has taught, pooled. */
+export type SharedLabel = LearnedLabel & {
+  /** How many different agencies have taught this pairing. */
+  agencies: number;
+};
+
+/**
+ * Trusted across agencies once this many DIFFERENT agencies have taught the
+ * same pairing. Two documents at one agency confirm a label to that agency;
+ * to everyone else it stays a suggestion — used, with the model still checking
+ * — until a second agency, reading its own documents, agrees.
+ */
+export const TRUST_ACROSS = 2;
+
+/**
+ * An agency's own labels with the library's behind them, as one list for the
+ * reader. Its own come first and keep their own count; a library label the
+ * agency also learned itself raises that count when the library trusts it,
+ * and a library label it never learned joins the list marked as shared, with
+ * a count that says whether the library trusts it. Trusted labels lead, so
+ * the reader — which takes the first label that matches for a field — tries
+ * the surest first.
+ */
+export function mergeLabels(own: LearnedLabel[], shared: SharedLabel[]): LearnedLabel[] {
+  const at = (l: Pick<LearnedLabel, 'key' | 'label' | 'placement'>) => `${l.key}\u0000${l.label.toUpperCase()}\u0000${l.placement}`;
+  const merged = new Map<string, LearnedLabel>(own.map((l) => [at(l), { ...l }]));
+  for (const s of shared) {
+    const seen = s.agencies >= TRUST_ACROSS ? TRUST_AFTER : 1;
+    const mine = merged.get(at(s));
+    if (mine) mine.seen = Math.max(mine.seen, seen);
+    else merged.set(at(s), { insurer: s.insurer, key: s.key, label: s.label, placement: s.placement, seen, shared: true });
+  }
+  // Stable: trusted before provisional, and at the same count the agency's own before the library's.
+  return [...merged.values()].sort((a, b) => (b.seen >= TRUST_AFTER ? 1 : 0) - (a.seen >= TRUST_AFTER ? 1 : 0));
 }
 
 /* ------------------------------------------------------------ the shapes */

@@ -407,7 +407,8 @@ export function extractWithRules(
    * not; after the profile, which was scored against a real document.
    */
   const learned = learnedFor ? learnedFor(insurer?.short ?? null) : [];
-  let learnedUsed = 0;
+  let ownUsed = 0;
+  let sharedUsed = 0;
   for (const l of learned) {
     if (fields[l.key].value !== null) continue;
     const hit = labelled(lines, learnedPattern(l), valueShapeFor(l.key), l.placement === 'same');
@@ -416,15 +417,21 @@ export function extractWithRules(
     if (value === null || value === '' || !isValid(l.key, value)) continue;
     fields[l.key] = {
       value, confidence: learnedConfidence(l), source: 'rule',
-      evidence: `${hit.evidence} — label learned from an earlier ${l.insurer} document`,
+      evidence: `${hit.evidence} — label learned from ${l.shared ? "another agency's" : 'an earlier'} ${l.insurer} document`,
     };
-    learnedUsed++;
+    if (l.shared) sharedUsed++;
+    else ownUsed++;
   }
-  if (learnedUsed) {
-    notes.push(
-      `${learnedUsed} field${learnedUsed === 1 ? '' : 's'} read with labels learned from your earlier ` +
-        `${insurer?.short ?? ''} documents.`.replace('  ', ' '),
-    );
+  if (ownUsed + sharedUsed) {
+    const n = ownUsed + sharedUsed;
+    const who = insurer?.short ?? '';
+    // Honest about whose documents did the teaching: this agency's, other agencies', or both.
+    const from = ownUsed && sharedUsed
+      ? `your earlier ${who} documents and other agencies'`
+      : sharedUsed
+        ? `other agencies' ${who} documents`
+        : `your earlier ${who} documents`;
+    notes.push(`${n} field${n === 1 ? '' : 's'} read with labels learned from ${from}.`.replace(/\s{2,}/g, ' '));
   }
 
   for (const [key, matchers] of Object.entries(MATCHERS) as [FieldKey, Matcher[]][]) {

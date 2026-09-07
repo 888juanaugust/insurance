@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { agencySummaries } from '@/lib/landlord';
+import { sharedLibraryCounts } from '@/lib/shared-labels';
 import { suspendAgencyAction, resumeAgencyAction } from '@/lib/landlord-actions';
 import { PageHeader } from '@/components/ui';
 import ConfirmSubmit from '@/components/Confirm';
@@ -38,6 +40,7 @@ export default async function LandlordPage({
   const bad = params.bad === '1';
 
   const agencies = agencySummaries();
+  const library = sharedLibraryCounts();
   const live = agencies.filter((a) => !a.suspended).length;
   const policies = agencies.reduce((n, a) => n + a.policies, 0);
   const bytes = agencies.reduce((n, a) => n + a.bytes, 0);
@@ -48,7 +51,8 @@ export default async function LandlordPage({
         <PageHeader
           title="Agencies on this server"
           subtitle="Each one has its own database, its own documents and its own process. What is in their books is theirs; this shows the size and the pulse of each tenancy."
-          meta={`${agencies.length} agenc${agencies.length === 1 ? 'y' : 'ies'} · ${live} live · ${policies} polic${policies === 1 ? 'y' : 'ies'} in all · ${mb(bytes)} on disk`}
+          meta={`${agencies.length} agenc${agencies.length === 1 ? 'y' : 'ies'} · ${live} live · ${policies} polic${policies === 1 ? 'y' : 'ies'} in all · ${mb(bytes)} on disk · ${library.labels} shared label${library.labels === 1 ? '' : 's'} for ${library.insurers} insurer${library.insurers === 1 ? '' : 's'}`}
+          actions={<Link href="/landlord/labels" className="btn btn-ghost">Reader library</Link>}
         />
 
         {note && (
