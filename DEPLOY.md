@@ -139,7 +139,8 @@ run removes each agency's uploads read but never saved (after seven days) and
 sessions past their expiry.
 
 Renewal notices are built and sent by a scheduled call. Add to the app user's
-crontab, after setting `IH_CRON_SECRET` in `.env.production`:
+crontab, after setting `IH_CRON_SECRET` in `.env.production` (on a server with
+several agencies, use `npm run tenant -- cron` instead — see that section):
 
 ```cron
 0 9 * * *  curl -fsS -X POST -H "authorization: Bearer $IH_CRON_SECRET" \
@@ -288,7 +289,20 @@ nginx -t && systemctl reload nginx
 `ecosystem.config.cjs` reads the tenants directory, so adding an agency and
 running `pm2 start` again picks it up without moving the others. The generated
 nginx set has one server block per agency and answers anything else with 444 —
-an unknown subdomain must not land on somebody's book.
+an unknown subdomain must not land on somebody's book. The `tenant` command
+reads `.env.production` itself, so nothing has to be exported in the shell
+first; a value exported anyway wins.
+
+**The daily reminder run, for every agency.** Each agency is its own process,
+and the scheduled route serves the agency of the process it lands on — one
+`curl` reaches one book. On a multi-agency server the crontab calls this
+instead, which visits every agency's process in turn and reports per agency:
+
+```cron
+0 9 * * *  cd /var/www/insurhelp && npm run tenant -- cron >> /var/log/insurhelp/cron.log 2>&1
+```
+
+It needs `IH_CRON_SECRET` in `.env.production`, the same as the route.
 
 **DNS and the certificate.** A wildcard `A` record (`*.insurhelp.my`) covers
 every agency at once. A wildcard certificate needs a DNS-01 challenge:

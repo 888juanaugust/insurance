@@ -250,6 +250,7 @@ npm run tenant -- create --slug bs --name "BS Agency Sdn Bhd" \
                   --admin "Boon Seng" --email owner@bs.my --password '...'
 npm run tenant -- list      # agencies, their ports, their sizes
 npm run tenant -- nginx     # the whole nginx server set, one block per agency
+npm run tenant -- cron      # the daily reminder run, every agency in turn — what the crontab calls
 ```
 
 Creating an agency is a shell command, never a web request: an unknown

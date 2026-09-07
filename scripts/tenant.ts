@@ -11,6 +11,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadEnvFile } from '../src/lib/env-file';
+
+// The same settings the application reads — IH_TENANTS_DIR, IH_BASE_DOMAIN,
+// IH_CRON_SECRET — from the same file, so the documented flow works as
+// documented. A value already in the shell wins.
+loadEnvFile(path.join(process.cwd(), '.env.production'));
+
 import { openTenantDb } from '../src/lib/db';
 import { seedTenant } from '../src/lib/seed-tenant';
 import { passwordProblem } from '../src/lib/passwords';
@@ -172,7 +179,56 @@ server {
 ${blocks.join('\n')}`);
 }
 
-function main(): void {
+/**
+ * The daily run, for every agency.
+ *
+ * Each agency is its own process, and the scheduled route serves the agency
+ * of the process it lands on — so one call reaches one book. A reminder
+ * service with ten tenants and one cron line would remind one of them. This
+ * visits each agency's process on its own port, with the same bearer the
+ * route demands, and says per agency what went out. It is what the crontab
+ * should call on a multi-agency server:
+ *
+ *   0 9 * * *  cd /var/www/insurhelp && npm run tenant -- cron >> /var/log/insurhelp/cron.log 2>&1
+ */
+async function cron(): Promise<void> {
+  const secret = process.env.IH_CRON_SECRET ?? '';
+  if (secret.length < 16) die('IH_CRON_SECRET is not set (or is shorter than 16 characters), so the scheduled run is disabled. Set it in .env.production.');
+  const slugs = listTenants();
+  if (!slugs.length) die('No agencies yet, so there is nothing to run.');
+
+  let failed = 0;
+  for (const slug of slugs) {
+    const port = tenantPort(slug);
+    if (!port) { console.log(`  ${slug.padEnd(20)} no port recorded — skipped`); failed++; continue; }
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/cron/renewal-notices`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(5 * 60 * 1000),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        runs?: Array<{ queued?: number; sent?: number; waiting?: number; failed?: number; swept?: number }>;
+        expiredSessionsRemoved?: number; error?: string;
+      };
+      if (!res.ok) { console.log(`  ${slug.padEnd(20)} HTTP ${res.status}${body.error ? ` — ${body.error}` : ''}`); failed++; continue; }
+      const sum = (k: 'queued' | 'sent' | 'waiting' | 'failed' | 'swept') => (body.runs ?? []).reduce((n, r) => n + (r[k] ?? 0), 0);
+      console.log(
+        `  ${slug.padEnd(20)} ${sum('queued')} built, ${sum('sent')} sent, ${sum('waiting')} waiting, ` +
+          `${sum('failed')} failed; ${sum('swept')} abandoned upload${sum('swept') === 1 ? '' : 's'} removed, ` +
+          `${body.expiredSessionsRemoved ?? 0} expired session${body.expiredSessionsRemoved === 1 ? '' : 's'}`,
+      );
+      if (sum('failed') > 0) failed++;
+    } catch (error) {
+      console.log(`  ${slug.padEnd(20)} could not be reached on port ${port}: ${error instanceof Error ? error.message : String(error)}`);
+      failed++;
+    }
+  }
+  console.log(`\n  ${new Date().toISOString()}  ${slugs.length} agenc${slugs.length === 1 ? 'y' : 'ies'}, ${failed} with a problem`);
+  if (failed) process.exit(1);
+}
+
+async function main(): Promise<void> {
   if (!multiTenant()) {
     die('IH_TENANTS_DIR is not set, so this install has one shared database. See DEPLOY.md.');
   }
@@ -180,7 +236,8 @@ function main(): void {
   if (command === 'create') return create();
   if (command === 'list') return list();
   if (command === 'nginx') return nginx();
-  die('Usage: npm run tenant -- list | nginx | create --slug <name> --name "<agency>" --admin "<person>" --email <address> --password <password>');
+  if (command === 'cron') return cron();
+  die('Usage: npm run tenant -- list | nginx | cron | create --slug <name> --name "<agency>" --admin "<person>" --email <address> --password <password>');
 }
 
-main();
+main().catch((error) => die(error instanceof Error ? error.message : String(error)));
