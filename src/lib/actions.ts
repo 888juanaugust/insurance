@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getDb } from './db';
 import { verifyPassword, hashPassword, needsRehash } from './auth';
-import { clientIp, safeBack } from './request';
+import { clientIp, secureSignInProblem, safeBack } from './request';
 import { requestAgency, NO_AGENCY } from './tenant';
 import { createSession, destroySession, currentUser } from './session';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
@@ -20,6 +20,12 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   const password = String(formData.get('password') ?? '');
 
   if (!email || !password) return { error: 'Please enter your email address and password.' };
+
+  // A sign-in over plain http would be accepted and then silently lost — the
+  // browser will not keep the Secure cookie — so it is refused with the
+  // address that works, before any credential is looked at.
+  const insecure = await secureSignInProblem('/login');
+  if (insecure) return { error: insecure };
 
   // Which agency's book this is. Nothing can be looked up until it is known.
   const tenant = await requestAgency();
@@ -143,7 +149,7 @@ export async function markNotificationsReadAction() {
   // Reading your own notifications changes nothing anyone would audit, and
   // needs no permission — everyone who can sign in has notifications.
   getDb().prepare('UPDATE notification SET read_flag = 1 WHERE org_id = ?').run(user.org_id);
-  revalidatePath('/setting/notifications');
+  revalidatePath('/settings/notifications');
 }
 
 /**

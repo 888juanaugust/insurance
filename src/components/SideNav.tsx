@@ -45,8 +45,10 @@ function activeChild(pathname: string, children: { href: string }[]): string | n
  * and their notifications live in the top bar, where the design puts them,
  * so the rail is only ever a list of places to go.
  *
- * On small screens the shell renders this same component inside a drawer;
- * `drawer` and `onCloseDrawer` are how the shell drives that.
+ * On small screens the shell renders this same component inside a drawer.
+ * Closing that drawer on navigation is the SHELL's job, not this component's:
+ * an effect here keyed on the pathname also fires when the drawer copy first
+ * mounts — which is the moment it opens — and shut it in the same tick.
  */
 export default function SideNav({
   counts,
@@ -54,14 +56,12 @@ export default function SideNav({
   orgName,
   logout,
   drawer = false,
-  onCloseDrawer,
 }: {
   counts: NavCounts;
   user: SessionUser;
   orgName: string;
   logout: () => Promise<void>;
   drawer?: boolean;
-  onCloseDrawer?: () => void;
 }) {
   const pathname = usePathname();
   const active = sectionFor(pathname);
@@ -90,12 +90,6 @@ export default function SideNav({
       return next;
     });
   }
-
-  useEffect(() => {
-    onCloseDrawer?.();
-    // The shell owns the drawer; this only asks it to shut on navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
 
   /** Expanded when explicitly opened, or when it holds the current page. */
   const isOpen = (s: NavSection) => open[s.key] ?? active?.key === s.key;

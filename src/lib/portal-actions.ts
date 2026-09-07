@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { clientIp } from './request';
+import { clientIp, secureSignInProblem } from './request';
 import { requestAgency, NO_AGENCY } from './tenant';
 import { hashPassword, verifyPassword } from './auth';
 import { checkRate, recordFailure, clearFailures } from './rate-limit';
@@ -23,6 +23,9 @@ export type PortalSignInState = { error?: string };
  * stranger's NRIC and be told whether it is on file.
  */
 export async function portalSignInAction(_prev: unknown, fd: FormData): Promise<PortalSignInState> {
+  const insecure = await secureSignInProblem('/portal/login');
+  if (insecure) return { error: insecure };
+
   const identification = String(fd.get('identification') ?? '').trim();
   const code = String(fd.get('code') ?? '').trim();
   if (!identification || !code) return { error: 'Enter your NRIC or company registration number and your access code.' };

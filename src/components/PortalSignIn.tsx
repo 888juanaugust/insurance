@@ -2,12 +2,14 @@
 
 import { useActionState } from 'react';
 import { portalSignInAction, type PortalSignInState } from '@/lib/portal-actions';
+import InsecureNotice from './InsecureNotice';
 
 export default function PortalSignIn() {
   const [state, action, pending] = useActionState(portalSignInAction, null as PortalSignInState | null);
 
   return (
     <form action={action} className="mt-6 space-y-4">
+      <InsecureNotice />
       <div>
         <label htmlFor="identification" className="mb-1 block text-[12px] font-semibold text-ink-soft">
           NRIC or company registration number

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { loginAction } from '@/lib/actions';
 import { Logo } from '@/components/icons';
+import InsecureNotice from '@/components/InsecureNotice';
 
 export default function LoginForm({
   agency, noAgencyMessage,
@@ -26,6 +27,8 @@ export default function LoginForm({
           <p className="mt-1 mb-6 text-[13px] text-muted">
             {agency ? <>{agency} · use the login ID your agency registered.</> : 'Use the login ID registered under your agency subscription.'}
           </p>
+
+          <InsecureNotice />
 
           <form action={action} className="space-y-4">
             <div>

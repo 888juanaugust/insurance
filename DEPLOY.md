@@ -96,11 +96,18 @@ Three of these decide whether the first start works at all:
 | `IH_SECRET` | The app throws on start-up in production without it, rather than fall back to the development value, which is in this repository. |
 | `IH_ADMIN_EMAIL` | Your login ID. |
 | `IH_ADMIN_PASSWORD` | Your password — 10+ characters with a letter and a number. |
+| `IH_AGENCY_NAME` | Optional. The agency's name, shown in the top bar; "My agency" if left blank. Change it later under Team and agency → Company profile. |
 
-The last two create the one administrator when the database is created, and
+The admin pair create the one administrator when the database is created, and
 are read only then. **Without them the app refuses to create a database**, so
 the first page load fails rather than seeding the demo accounts whose password
 is in this repository. Delete both lines once you have signed in.
+
+What that first database holds is **an empty register**: the Malaysian
+insurers with their default commission rates, the four renewal reminders, one
+organisation named from `IH_AGENCY_NAME`, and your administrator. Not the demo
+book — the hundred policies under two invented agencies are development data,
+and a demo policy in a real register is indistinguishable from a mistake.
 
 Leave `IH_TENANTS_DIR` commented out. It is the switch for one database per
 agency, and setting it means this process serves no agency at all until
@@ -193,11 +200,15 @@ defaults to 1 MB, which rejects a typical policy PDF before the app sees it.
 
 **You cannot sign in until the certificate is in place.** In production the
 session cookie is `Secure` with the `__Host-` prefix, and a browser will not
-store such a cookie from a plain `http://` origin — so signing in over
-`http://<the VPS address>` appears to do nothing: the credentials are accepted
-and the next page bounces you back to the sign-in screen. That is the cookie
-being refused, not the password. Get the domain resolving and certbot run
-first, then sign in over `https://`.
+store such a cookie from a plain `http://` origin. What that looked like was
+worse than "nothing": the sign-in action renders the next page inside its own
+response, where the just-set cookie is still visible, so **Home appeared once
+with every tab and the bell — and the next click landed on the sign-in page**,
+with no error anywhere. The app now refuses a sign-in that arrives over plain
+http (from the proxy's `X-Forwarded-Proto`, or the browser's `Origin` when
+there is no proxy) and names the `https://` address to use; the sign-in page
+shows the same warning before anything is typed. Get the domain resolving and
+certbot run first, then sign in over `https://`.
 
 ### 6. Lock the box down
 
@@ -397,6 +408,8 @@ tail -f /var/log/nginx/error.log   # proxy errors
 
 | Symptom | Cause |
 | --- | --- |
+| Home appears after sign-in, then every click returns to the sign-in page | You are on plain `http://`. The browser refused the `Secure` cookie; the page rendered once from inside the sign-in response. Newer builds refuse the sign-in and say so. Run certbot, use `https://`. |
+| "Invalid Server Actions request" on every sign-in | The proxy rewrote `Host` without its port (nginx `$host` on a non-443 port). The shipped config uses `$http_host`. |
 | Exits immediately, `IH_SECRET is not set` | `.env.production` missing or not read. Check `env_file` in `ecosystem.config.cjs`. |
 | `SQLITE_CANTOPEN` | `data/` does not exist or is not writable by `insurhelp`. |
 | `413` when uploading a PDF | `client_max_body_size` is missing from the Nginx config. |

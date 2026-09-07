@@ -32,6 +32,9 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
+  // The drawer shuts when the page changes — here, and only here. The rail
+  // inside it must not do the same: an effect on the pathname runs on mount
+  // too, and for the drawer copy "mount" is the moment it opens.
   useEffect(() => {
     setDrawer(false);
   }, [pathname]);
@@ -51,7 +54,6 @@ export default function AppShell({
               orgName={orgName}
               logout={logout}
               drawer
-              onCloseDrawer={() => setDrawer(false)}
             />
           </div>
           <button

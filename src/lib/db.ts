@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { seed } from './seed';
+import { seedTenant } from './seed-tenant';
 import { currentTenant, multiTenant } from './tenant';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -755,8 +756,23 @@ function seedFirstInstall(db: Database.Database): void {
         'first start, or IH_SEED_DEMO=1 to seed the demo accounts whose password is public. See DEPLOY.md.',
     );
   }
+  if (production && !demoWanted) {
+    /*
+     * A real agency starts with an empty register: the insurers and their
+     * default rates, the four reminders, one organisation, one administrator.
+     * The demo book — a hundred policies under two invented agencies — is for
+     * development; a demo policy in a real register is indistinguishable from
+     * a mistake, and was being shipped to every production first start.
+     */
+    seedTenant(db, {
+      slug: 'agency',
+      name: (process.env.IH_AGENCY_NAME ?? '').trim() || 'My agency',
+      admin: { name: 'Administrator', email: adminEmail, password: adminPassword },
+    });
+    return;
+  }
   seed(db, {
-    demoUsers: !production || demoWanted,
+    demoUsers: true,
     admin: adminEmail && adminPassword ? { email: adminEmail, password: adminPassword } : null,
   });
 }
