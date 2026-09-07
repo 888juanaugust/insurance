@@ -188,6 +188,22 @@ apt install -y certbot python3-certbot-nginx
 certbot --nginx -d insurhelp.example.com
 ```
 
+If certbot answers **"The requested nginx plugin does not appear to be
+installed"**, `python3-certbot-nginx` is missing or certbot came from snap,
+which the apt plugin cannot reach (`which -a certbot` says which). Install the
+plugin, or drop to the webroot method, which needs no plugin — the shipped
+config serves the challenge from `/var/www/certbot` for exactly this case:
+
+```bash
+mkdir -p /var/www/certbot
+certbot certonly --webroot -w /var/www/certbot -d insurhelp.example.com
+```
+
+That writes the certificate but does not touch nginx, so add the TLS block by
+hand: copy the port 80 server block, change `listen 80` to `listen 443 ssl`,
+add the two `ssl_certificate` lines certbot printed, and leave a port 80 block
+that keeps the acme-challenge location and redirects everything else.
+
 **The supplied config has no TLS block, on purpose.** `listen 443 ssl` without
 a certificate is a fatal error rather than a warning, so a file that ships the
 HTTPS half fails `nginx -t` before certbot can run — and `certbot --nginx`

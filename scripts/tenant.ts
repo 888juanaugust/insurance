@@ -135,6 +135,17 @@ server {
 
     client_max_body_size 20m;
 
+    # Certbot's HTTP-01 challenge, before the proxy below claims it. Without
+    # this, certbot --webroot hands the challenge to the application, which
+    # knows nothing about it, and the certificate is refused. The nginx plugin
+    # does not need this; the fallback when that plugin is unavailable does.
+    # The ^~ makes it win over the "location /" prefix match.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type "text/plain";
+        access_log off;
+    }
+
     location / {
         proxy_pass         http://127.0.0.1:${port};
         proxy_http_version 1.1;
