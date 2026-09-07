@@ -30,9 +30,13 @@ export default function ErrorPage({
         <h1 className="mt-2 text-[22px] font-semibold tracking-tight text-ink">This screen could not be shown</h1>
         <p className="mt-3 text-[13.5px] leading-relaxed text-ink-soft">
           Nothing you did caused it, and nothing has been lost that was already saved. Try the
-          screen again; if it keeps happening, tell whoever runs the server and quote the reference
-          below.
+          screen again; if it keeps happening, tell whoever runs the server
+          {error.digest ? ' and quote the reference below.' : '. The server log has the detail.'}
         </p>
+        {/* Next only attaches a digest to errors it caught on the server. The
+            sentence above used to promise a reference whether or not one
+            existed, which sends a person looking for something that is not on
+            the page. */}
         {error.digest && (
           <p className="mt-3 font-mono text-[12px] text-muted">Reference {error.digest}</p>
         )}
