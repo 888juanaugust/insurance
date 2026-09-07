@@ -268,7 +268,22 @@ cd /var/www/insurhelp
 
 The build runs on the server on purpose. `better-sqlite3` compiles against the
 Node version and CPU architecture it will run on, so a bundle built on your
-laptop will not load on the VPS.
+laptop will not load on the VPS. The script installs every dependency, not
+only the runtime ones: Tailwind, PostCSS and TypeScript are what the build
+itself is made of, and `npm run tenant` runs through `tsx`.
+
+`.env.production` is not in the repository, so an update never touches your
+settings. New settings arrive as commented lines in `.env.example` — read that
+against your own file after an update that adds a feature. The database
+upgrades itself on the next start: new tables and columns are added when the
+file is opened, and nothing already in it is rewritten. On a server with
+several agencies, `pm2 reload` reloads every agency's process, and each
+database is upgraded as its process comes back.
+
+A page left open during the build may show an error until the reload finishes,
+because the build replaces the files the running process is serving from.
+Refreshing after `==> done` clears it. Take a backup before an update that
+worries you: `deploy/backup.sh` is the same script the nightly cron runs.
 
 ## Backups
 

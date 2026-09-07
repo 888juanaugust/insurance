@@ -12,7 +12,10 @@ echo "==> fetching"
 git pull --ff-only
 
 echo "==> installing"
-npm ci --omit=dev --ignore-scripts=false
+# All of them, not --omit=dev: the build itself needs Tailwind, PostCSS and
+# TypeScript, and `npm run tenant` runs through tsx. Omitting them removes the
+# tools this next line depends on.
+npm ci --ignore-scripts=false
 
 echo "==> building"
 npm run build
